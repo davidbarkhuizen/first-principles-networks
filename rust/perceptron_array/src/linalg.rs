@@ -1,7 +1,21 @@
+use std::sync::OnceLock;
+
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
 
 use crate::array::{RustArray, Shape};
+
+/// `std::thread::available_parallelism()` itself measured at ~50us/call (not cached by the
+/// standard library) - queried once, lazily, and cached for the process's lifetime, since the
+/// machine's core count doesn't change at runtime.
+fn available_parallelism_cached() -> usize {
+    static CACHED: OnceLock<usize> = OnceLock::new();
+    *CACHED.get_or_init(|| {
+        std::thread::available_parallelism()
+            .map(|n| n.get())
+            .unwrap_or(1)
+    })
+}
 
 /// The three matmul shape combinations `ArrayLayer`'s own formulas actually use - matrix @
 /// vector (`self.W @ x`), vector @ matrix (the interface subset's own "1D x 2D" case, not
@@ -44,68 +58,142 @@ pub(crate) fn matmul(a: &RustArray, b: &RustArray) -> PyResult<RustArray> {
             if c1 != r2 {
                 return Err(shape_error(a.shape, b.shape));
             }
-            // `row -> k -> col`, not `row -> col -> k` (phase 0a): accumulates into a whole
-            // output row at a time, reading both `a` and `b` row-contiguously.
-            //
-            // Blocked over `row` and `k` when `b` is big enough for it to matter
-            // (docs/rust-production-cutover.md's follow-on optimization work): without blocking,
-            // every output row re-streams the *entire* `b` matrix once (`k` ranges over all of
-            // `c1`), so if `b` doesn't fit in cache, `b` gets re-fetched from memory `r1` times
-            // over. Blocking caps how much of `b` needs to stay resident at once (one
-            // `K_BLOCK`-row slab) and reuses it across `ROW_BLOCK` output rows before moving on.
-            // Measured, not assumed: blocking unconditionally was a *regression* at this
-            // codebase's actual small layer sizes (e.g. `dimension=784, hidden=16` - `b` is only
-            // ~100KB, already cache-resident, so the extra block-boundary bookkeeping was pure
-            // overhead - 14% slower), but a genuine 1.3x-2.1x win once `b` exceeds a few hundred
-            // KB (this codebase's own larger matmuls, e.g. `accumulate_gradient_batch`'s
-            // `delta_batch.T @ input_activation_batch` at `batch_size=512`, and more so at sizes
-            // well beyond anything this codebase currently trains). `BLOCKING_THRESHOLD_BYTES`
-            // is set comfortably below a typical machine's L2 cache size, so blocking only
-            // engages once there's real cache pressure for it to relieve. Either path produces
-            // the same summation order per output row (k_block sweeps 0..c1 in increasing order,
-            // and k sweeps increasing within each block, same as the unblocked loop), so results
-            // are bit-identical, not just float64-close, regardless of which path runs.
-            const ROW_BLOCK: usize = 64;
-            const K_BLOCK: usize = 64;
-            const BLOCKING_THRESHOLD_BYTES: usize = 256 * 1024;
-            let b_size_bytes = c1 * c2 * std::mem::size_of::<f64>();
             let mut out = vec![0.0; r1 * c2];
-            if b_size_bytes <= BLOCKING_THRESHOLD_BYTES {
-                for row in 0..r1 {
-                    let out_row = &mut out[row * c2..(row + 1) * c2];
-                    for k in 0..c1 {
-                        let a_value = a.data[row * c1 + k];
-                        let b_row = &b.data[k * c2..(k + 1) * c2];
-                        for col in 0..c2 {
-                            out_row[col] += a_value * b_row[col];
-                        }
-                    }
-                }
-                return Ok(RustArray::from_matrix(out, r1, c2));
-            }
-            let mut row_block_start = 0;
-            while row_block_start < r1 {
-                let row_block_end = (row_block_start + ROW_BLOCK).min(r1);
-                let mut k_block_start = 0;
-                while k_block_start < c1 {
-                    let k_block_end = (k_block_start + K_BLOCK).min(c1);
-                    for row in row_block_start..row_block_end {
-                        let out_row = &mut out[row * c2..(row + 1) * c2];
-                        for k in k_block_start..k_block_end {
-                            let a_value = a.data[row * c1 + k];
-                            let b_row = &b.data[k * c2..(k + 1) * c2];
-                            for col in 0..c2 {
-                                out_row[col] += a_value * b_row[col];
-                            }
-                        }
-                    }
-                    k_block_start = k_block_end;
-                }
-                row_block_start = row_block_end;
-            }
+            matmul_2d(&a.data, &b.data, &mut out, r1, c1, c2);
             Ok(RustArray::from_matrix(out, r1, c2))
         }
         (a_shape, b_shape) => Err(shape_error(a_shape, b_shape)),
+    }
+}
+
+/// Threaded row-splitting on top of the size-gated blocking below (docs/rust-production-cutover.md's
+/// follow-on optimization work, matmul batch>=32 gap). Splits the output's row range across
+/// `std::thread::scope` workers - safe without `'static` data (each worker borrows `a_data`/
+/// `b_data` read-only and writes into its own disjoint slice of `out`, via `split_at_mut`) - only
+/// once there's enough total work to plausibly amortize thread spawn overhead.
+/// `THREADING_THRESHOLD_FLOPS` is a coarse, deliberately conservative floor (a fraction of a
+/// millisecond's worth of naive-loop work), not a tuned constant - measured directly against this
+/// codebase's own matmul shapes before being trusted (see research-and-analysis.md). Splitting by
+/// row (not by `k` or `col`) needs no cross-thread reduction: each worker owns complete output
+/// rows end to end, so results are bit-identical to the single-threaded path regardless of thread
+/// count or scheduling - summation order per output row is unaffected by which thread computes it.
+///
+/// The flops check runs *before* anything else, including reading `available_parallelism_cached()`
+/// - measured directly, `std::thread::available_parallelism()` itself costs ~50us per call (not
+/// cached by the standard library, presumably a cgroup/proc filesystem read), which would have
+/// silently dominated every one of this codebase's actual small per-call matmuls (already
+/// measured in the tens of microseconds) if queried unconditionally on every dispatch. Cached
+/// once behind a `OnceLock` and read only when there's already enough work to justify the
+/// question.
+fn matmul_2d(a_data: &[f64], b_data: &[f64], out: &mut [f64], r1: usize, c1: usize, c2: usize) {
+    const THREADING_THRESHOLD_FLOPS: usize = 4_000_000;
+    const MAX_THREADS: usize = 8;
+    // A rows-per-thread floor (e.g. requiring >=32 rows/thread) looked like the right refinement
+    // after an isolated microbenchmark of one small-`r1` shape (`(10,512)@(512,784)`) showed
+    // unrestricted threading as a slight regression there - but measured against this codebase's
+    // actual target metric (a full mini-batch training step, not one matmul in isolation), that
+    // "fix" made the real number *worse* (batch_size=512's ratio went from a 0.98x-1.25x range
+    // back up to 1.24x-1.79x), reproducibly across multiple runs. Not adopted - a lesson in this
+    // codebase's own "measure, don't assume" standard applying to a refinement of a previous
+    // measurement too, not just the first cut: the isolated shape's own regression turned out not
+    // to generalize to the composite workload it's actually part of.
+
+    let total_flops = r1 * c1 * c2;
+    if total_flops < THREADING_THRESHOLD_FLOPS {
+        matmul_2d_row_range(a_data, b_data, out, 0, r1, c1, c2);
+        return;
+    }
+
+    let thread_count = available_parallelism_cached().min(MAX_THREADS).min(r1);
+    if thread_count <= 1 {
+        matmul_2d_row_range(a_data, b_data, out, 0, r1, c1, c2);
+        return;
+    }
+
+    let rows_per_thread = r1.div_ceil(thread_count);
+    std::thread::scope(|scope| {
+        let mut remaining_out = out;
+        let mut row_start = 0;
+        while row_start < r1 {
+            let row_end = (row_start + rows_per_thread).min(r1);
+            let (chunk, rest) = remaining_out.split_at_mut((row_end - row_start) * c2);
+            remaining_out = rest;
+            scope.spawn(move || {
+                matmul_2d_row_range(a_data, b_data, chunk, row_start, row_end, c1, c2);
+            });
+            row_start = row_end;
+        }
+    });
+}
+
+/// Computes output rows `[row_start, row_end)` into `out_chunk` (row `row_start` maps to
+/// `out_chunk[0..c2]`) - the single-threaded and per-thread code path share this, so blocking's
+/// own size-gating logic (below) is written once, not duplicated between them.
+///
+/// `row -> k -> col`, not `row -> col -> k` (phase 0a): accumulates into a whole output row at a
+/// time, reading both `a` and `b` row-contiguously.
+///
+/// Blocked over `row` and `k` when `b` is big enough for it to matter
+/// (docs/rust-production-cutover.md's follow-on optimization work): without blocking, every
+/// output row re-streams the *entire* `b` matrix once (`k` ranges over all of `c1`), so if `b`
+/// doesn't fit in cache, `b` gets re-fetched from memory once per output row. Blocking caps how
+/// much of `b` needs to stay resident at once (one `K_BLOCK`-row slab) and reuses it across
+/// `ROW_BLOCK` output rows before moving on. Measured, not assumed: blocking unconditionally was
+/// a *regression* at this codebase's actual small layer sizes (e.g. `dimension=784, hidden=16` -
+/// `b` is only ~100KB, already cache-resident, so the extra block-boundary bookkeeping was pure
+/// overhead - 14% slower), but a genuine 1.3x-2.1x win once `b` exceeds a few hundred KB.
+/// `BLOCKING_THRESHOLD_BYTES` is set comfortably below a typical machine's L2 cache size, so
+/// blocking only engages once there's real cache pressure for it to relieve. Either path produces
+/// the same summation order per output row (k_block sweeps 0..c1 in increasing order, and k
+/// sweeps increasing within each block, same as the unblocked loop), so results are
+/// bit-identical, not just float64-close, regardless of which path runs.
+fn matmul_2d_row_range(
+    a_data: &[f64],
+    b_data: &[f64],
+    out_chunk: &mut [f64],
+    row_start: usize,
+    row_end: usize,
+    c1: usize,
+    c2: usize,
+) {
+    const ROW_BLOCK: usize = 64;
+    const K_BLOCK: usize = 64;
+    const BLOCKING_THRESHOLD_BYTES: usize = 256 * 1024;
+    let b_size_bytes = c1 * c2 * std::mem::size_of::<f64>();
+
+    if b_size_bytes <= BLOCKING_THRESHOLD_BYTES {
+        for row in row_start..row_end {
+            let out_row = &mut out_chunk[(row - row_start) * c2..(row - row_start + 1) * c2];
+            for k in 0..c1 {
+                let a_value = a_data[row * c1 + k];
+                let b_row = &b_data[k * c2..(k + 1) * c2];
+                for col in 0..c2 {
+                    out_row[col] += a_value * b_row[col];
+                }
+            }
+        }
+        return;
+    }
+
+    let mut row_block_start = row_start;
+    while row_block_start < row_end {
+        let row_block_end = (row_block_start + ROW_BLOCK).min(row_end);
+        let mut k_block_start = 0;
+        while k_block_start < c1 {
+            let k_block_end = (k_block_start + K_BLOCK).min(c1);
+            for row in row_block_start..row_block_end {
+                let out_row = &mut out_chunk[(row - row_start) * c2..(row - row_start + 1) * c2];
+                for k in k_block_start..k_block_end {
+                    let a_value = a_data[row * c1 + k];
+                    let b_row = &b_data[k * c2..(k + 1) * c2];
+                    for col in 0..c2 {
+                        out_row[col] += a_value * b_row[col];
+                    }
+                }
+            }
+            k_block_start = k_block_end;
+        }
+        row_block_start = row_block_end;
     }
 }
 

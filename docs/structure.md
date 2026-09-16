@@ -660,7 +660,13 @@ ordered roughly by how directly each follows from an existing finding here, not 
   `linalg.rs::matmul`'s 2D×2D case now blocks over `row`/`k` once the `b` operand exceeds 256KB
   (below that, blocking was a measured *regression* - the small matmuls this codebase's real
   architecture uses already fit in cache) - a reproducible ~15-25% reduction in the
-  `batch_size=512` gap, `batch_size=1`/`8` unaffected. Still open: multithreading
-  (`std::thread::scope` row-splitting) and explicit SIMD intrinsics (AVX2 is available on this
-  machine) - in that order, per the reasoning in [the production cutover
-  plan](rust-production-cutover.md).
+  `batch_size=512` gap, `batch_size=1`/`8` unaffected. **Threaded matmul: done, a further real
+  win** (2026-09-16, see [research and
+  analysis](research-and-analysis.md#threaded-matmul-a-real-further-win-one-real-bug-caught-one-refinement-rejected)):
+  `std::thread::scope` row-splitting on top of blocking, gated by total flops so tiny matmuls
+  never spawn threads - caught and fixed a real bug along the way (`available_parallelism()`
+  costs ~50us/call uncached, which regressed `batch_size=1` badly before being cached behind a
+  `OnceLock`). Net effect: `batch_size=512`'s gap improved further, from blocking-alone's
+  1.53x-1.74x to 1.19x-1.21x. Still open: explicit SIMD intrinsics (AVX2 is available on this
+  machine) - the last candidate from [the production cutover plan](rust-production-cutover.md)'s
+  reasoning.

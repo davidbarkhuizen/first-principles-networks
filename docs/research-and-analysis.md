@@ -556,3 +556,63 @@ adopted** - both branches verified bit-identical to the previous single-path imp
 existing tests unchanged; blocking only restructures loop order, not summation order), and this is
 a genuine, if modest, step in closing docs/structure.md's tracked follow-on gap, not a full
 resolution of it. Threading and SIMD intrinsics remain open next steps for the rest of that gap.
+
+## threaded matmul: a real further win, one real bug caught, one refinement rejected
+
+Third candidate for the `batch_size >= 32` gap, on top of blocking above: split
+`linalg.rs::matmul`'s 2D×2D case's output rows across `std::thread::scope` workers once there's
+enough total work (`r1 * c1 * c2 >= 4,000,000`, a deliberately conservative floor) to plausibly
+pay for thread spawn overhead. Row-splitting needs no cross-thread reduction (each worker owns
+complete output rows end to end), so results are bit-identical to the single-threaded path
+regardless of thread count - confirmed by all 525 existing tests passing unchanged.
+
+**A real implementation bug caught before it shipped**: the first version called
+`std::thread::available_parallelism()` on every matmul dispatch (to decide the thread count) -
+measured directly at **~50 microseconds per call** (not cached by the standard library,
+presumably a cgroup/proc filesystem read each time). Since this codebase's own actual per-call
+matmul times are themselves in the tens of microseconds, this silently dominated everything:
+`batch_size=1` on the full training-step benchmark went from Rust *beating* numpy (0.38x-0.50x) to
+Rust *losing badly* (2.20x-2.31x) - a regression at the one batch size that mattered most,
+caught only because the full benchmark suite (not just the new matmul's own isolated shapes) was
+re-run before trusting the change. Fixed by caching the result once behind a `OnceLock` -
+`available_parallelism_cached()` - and by checking the (cheap) flops threshold *before* ever
+reading it, so tiny matmuls never pay even the cached read's small remaining cost.
+
+**A refinement that looked right in isolation but wasn't, measured against the real target
+metric**: an isolated raw-matmul-only benchmark at three shapes -
+
+| shape | `b` size | single-threaded (blocked) | + threading |
+|---|---|---|---|
+| `forward_batch`-like: `(512,784)@(784,16)` | ~100KB | 1.94-2.21ms | **0.87-1.07ms - ~2x faster** |
+| `accumulate_gradient_batch`-like: `(10,512)@(512,784)` | ~3.2MB | 0.94-1.09ms | 0.91-1.16ms - no clear change |
+| exaggerated: `(2048,2048)@(2048,2048)` | 32MB | 2.35-2.67s | 2.06-2.68s - no real change |
+
+- showed the small-`r1` shape (`r1=10`) getting no benefit from 8 threads doing barely more than
+one row each, which looked like the natural fix: require a minimum rows-per-thread (32) before
+threading engages at all, so `r1=10` falls back to single-threaded. That change *did* clean up
+the isolated shape's own number - but re-measured against the actual target metric (the full
+mini-batch training-step benchmark, not one matmul shape in isolation), it made
+`batch_size=512`'s real ratio *worse* (1.24x-1.79x, back up from where unrestricted threading had
+it), reproducibly across three separate runs. **Not adopted** - the isolated shape's own
+regression didn't generalize to the composite workload it's actually part of, so the simpler
+`min(available_parallelism, 8, r1)` thread count (no rows-per-thread floor) was kept instead. A
+concrete instance of this codebase's own "measure, don't assume" standard applying recursively -
+even a measurement-driven refinement of an earlier measurement needs checking against the real
+metric, not just the proxy that motivated it.
+
+The exaggerated `2048x2048` shape's lack of improvement from threading was itself directly
+verified as a memory-bandwidth ceiling, not a threading bug: `os.times()`-measured CPU-time-to-
+wall-time ratio was **7.17x** (near-perfect use of 8 cores) while wall-clock stayed flat - the
+matrix (32MB) doesn't fit any per-core cache, so 8 cores contending for the same DRAM bandwidth
+gain little from parallelism regardless of how well the threads themselves are balanced. Not a
+concern for this codebase's actual matrix sizes (`dimension<=784`), included here only because
+it's what surfaced the effect clearly enough to identify it.
+
+**Net result, full training-step benchmark** (`dimension=784, hidden=10`, three runs):
+`batch_size=512`'s ratio improved from blocking-alone's 1.53x-1.74x range to **1.19x-1.21x** - a
+further, real, reproducible ~25-30% reduction on top of blocking's own earlier win.
+`batch_size=1`/`8`/`32` are unaffected (`batch_size=1`'s `learn()` path never reaches the 2D×2D
+matmul case at all; the other two stay below the flops threshold at this architecture).
+**Decision: adopted**, with the rows-per-thread refinement explicitly rejected per the
+measurement above. Explicit SIMD intrinsics remain the one open candidate left for the rest of
+this gap.
