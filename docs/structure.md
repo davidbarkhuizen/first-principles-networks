@@ -646,7 +646,12 @@ ranked.
   than assumed to fare the same way. Not yet started.
 - **A learning-rate schedule** (decay/warmup) - every training loop here uses one fixed
   `learning_rate` for all epochs; untested whether a schedule changes convergence or final
-  accuracy on any of this codebase's targets. Not yet started.
+  accuracy on any of this codebase's targets. Now has a concrete motivating case, not just a
+  general gap: the learning-rate-vs-batch-size sweep (see [research and
+  analysis](research-and-analysis.md#the-learning-rate-vs-batch-size-follow-up-the-confound-was-real-and-momentum-still-doesnt-help))
+  found that naive linear learning-rate scaling diverges completely at `batch_size=128` - a
+  gradual warmup is the standard fix in the literature, and this codebase now has a real, reachable
+  failure case to test it against rather than a hypothetical one. Not yet started.
 - **Dropout** - no regularization beyond L2 exists (L2 itself a measured null - see "backprop
   siblings"); dropout is structurally different (stochastic, applied at the activation, not a
   gradient penalty), so it isn't assumed to land the same way. Not yet started.
@@ -657,10 +662,6 @@ ranked.
 
 ### deepening what's already here
 
-- **A learning-rate-vs-batch-size sweep**, to isolate the momentum re-test's large-batch rescue
-  effect from the untuned-learning-rate confound identified above (scale `learning_rate` with
-  `batch_size`, the standard practice the original sweep didn't apply) - the natural follow-up
-  to actually test the original gradient-noise hypothesis cleanly, not yet run.
 - **A real-MNIST-scale convolutional layers validation**, now that the UCI-digits-scale result
   came back a flat null rather than a clear loss - real MNIST has meaningfully more spatial
   structure (28x28 vs. 8x8) for convolution's own advantages to potentially show up in, but a
