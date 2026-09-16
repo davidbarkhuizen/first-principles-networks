@@ -14,8 +14,9 @@ retrofit - so it can represent targets (like XOR) the discrete model structurall
   deliberately doesn't chase, and how to evaluate a proposed addition
 - [structure](docs/structure.md) — module layout, and how each network composes
 - [setup](docs/setup.md) — requirements, install, and running the tests
-- [dataset sourcing proposal](docs/dataset-sourcing-proposal.md) — a design (not yet built) for
-  fetching real MNIST/UCI digits from dedicated, checksum-verified repos, unblocking CI
+- [dataset sourcing proposal](docs/dataset-sourcing-proposal.md) — fetching real MNIST/UCI digits
+  from dedicated, checksum-verified `indrajala-datasets-*` repos, now built and shipped; unblocked
+  [CI](.github/workflows/ci.yml), which now runs the full test suite on every push/PR
 - [demos](docs/demos.md) — the demo scripts and what each one shows
 - [theory](docs/theory.md) — Rosenblatt's perceptron theory, and reference material
 - [research and analysis](docs/research-and-analysis.md) — investigations behind a design

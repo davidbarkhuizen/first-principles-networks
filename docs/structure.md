@@ -676,18 +676,6 @@ ranked.
 
 ### infrastructure that protects the rigor
 
-- **CI** (e.g. GitHub Actions running `pytest` on push/PR) - the one item here that's pure
-  engineering, not ML content. Nothing currently protects this test suite (845 tests as of this
-  writing - 320 top-level Python plus 525 more running the Rust crate's own parity suite via
-  `python -m pytest rust/perceptron_array/tests tests`, many of both pinned to hand-derived or
-  empirically-measured expected values) from silently regressing. **Blocked on solving where the
-  reference MNIST dataset comes from first**: `test_mnist_data.py`'s tests need the real MNIST
-  parquet/binary files, which are gitignored with no scripted fetch step anywhere in this codebase
-  - supplied locally, by hand, whenever a dev checkout needs them (see [setup](setup.md)).
-  **Proposed resolution** (design stage, not yet built): [dedicated, checksum-verified
-  `indrajala-datasets-*` repos](dataset-sourcing-proposal.md), one per dataset, fetched by a new
-  `./cli` step that only hits the network when a file is missing or its checksum doesn't match -
-  see that document for the full design, delivery stages, and open questions.
 - **A Python package config** (`pyproject.toml`/`setup.py`) - only the Rust crate has real
   packaging today, via `maturin`; the Python side is checkout-and-run only, not installable or
   versioned.
@@ -702,3 +690,9 @@ see [vectorized array-based classes](#vectorized-array-based-classes) above for 
 numbers and [research and
 analysis](research-and-analysis.md#simd-for-the-matvec-production-path-a-bigger-win-than-the-batch32-work-it-followed)
 (and the four entries preceding it) for the full investigation.
+
+CI is no longer on this list either: [`.github/workflows/ci.yml`](../.github/workflows/ci.yml) now
+runs the full test suite (320 top-level Python tests plus 525 more running the Rust crate's own
+parity suite) on every push to `main` and every pull request, unblocked by [the
+`indrajala-datasets-*` dataset sourcing work](dataset-sourcing-proposal.md) - see [setup](setup.md#ci)
+for how it fetches and caches the real MNIST data it needs.
