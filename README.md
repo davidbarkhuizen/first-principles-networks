@@ -16,10 +16,10 @@ retrofit - so it can represent targets (like XOR) the discrete model structurall
 - [theory](docs/theory.md) — Rosenblatt's perceptron theory, and reference material
 - [research and analysis](docs/research-and-analysis.md) — investigations behind a design
   decision, with the measurements that drove it
-- [vectorization](docs/vectorization.md) — overview of a 3-part workplan (new array-based model
-  classes, the numpy interface they need, and a hand-built Rust core implementing it), should
-  this repo ever move away from pure Python
-- [mini-batch gradient descent](docs/mini-batch-gradient-descent.md) — workplan for batching
-  gradient updates, to unblock a re-test of momentum under lower-noise gradients
-- [convolutional layers](docs/convolutional-layers.md) — workplan for a from-scratch conv
-  layer, local receptive fields and weight sharing, on the existing image datasets
+- [vectorization](docs/vectorization.md) — numpy-backed array classes (kept as a permanent
+  benchmarking mirror) and a hand-built Rust array core (the intended production backend, not
+  yet wired in)
+- [mini-batch gradient descent](docs/mini-batch-gradient-descent.md) — batched gradient updates,
+  and the momentum re-test they unblocked
+- [convolutional layers](docs/convolutional-layers.md) — a from-scratch conv layer, local
+  receptive fields and weight sharing, measured against the dense baseline on UCI digits
