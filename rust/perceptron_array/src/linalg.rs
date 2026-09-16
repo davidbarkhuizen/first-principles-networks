@@ -167,9 +167,7 @@ fn matmul_2d_row_range(
             for k in 0..c1 {
                 let a_value = a_data[row * c1 + k];
                 let b_row = &b_data[k * c2..(k + 1) * c2];
-                for col in 0..c2 {
-                    out_row[col] += a_value * b_row[col];
-                }
+                axpy_row(out_row, a_value, b_row);
             }
         }
         return;
@@ -186,14 +184,68 @@ fn matmul_2d_row_range(
                 for k in k_block_start..k_block_end {
                     let a_value = a_data[row * c1 + k];
                     let b_row = &b_data[k * c2..(k + 1) * c2];
-                    for col in 0..c2 {
-                        out_row[col] += a_value * b_row[col];
-                    }
+                    axpy_row(out_row, a_value, b_row);
                 }
             }
             k_block_start = k_block_end;
         }
         row_block_start = row_block_end;
+    }
+}
+
+/// `out_row[i] = a_value * b_row[i] + out_row[i]` for every `i`, the single accumulate step
+/// shared by the blocked and unblocked loops above (and, transitively, by every thread). Fused
+/// multiply-add (one rounding, not two) on *every* path - scalar fallback and AVX2 alike - via
+/// `f64::mul_add`/`_mm256_fmadd_pd`, so this call produces the same bits whether or not the
+/// running machine has AVX2, matching the bit-identical invariant this file's
+/// blocking/threading already hold to (2026-09-16, explicit SIMD intrinsics work: see
+/// docs/research-and-analysis.md). A plain `_mm256_mul_pd` + `_mm256_add_pd` pair would vectorize
+/// fine but round twice per element like the old `+=` loop did, silently reintroducing a
+/// bit-level divergence between this path and any non-AVX2 fallback - FMA is the only way to keep
+/// both the speed and the invariant.
+#[inline]
+fn axpy_row(out_row: &mut [f64], a_value: f64, b_row: &[f64]) {
+    #[cfg(target_arch = "x86_64")]
+    {
+        if std::is_x86_feature_detected!("avx2") && std::is_x86_feature_detected!("fma") {
+            unsafe { axpy_row_avx2_fma(out_row, a_value, b_row) };
+            return;
+        }
+    }
+    axpy_row_scalar(out_row, a_value, b_row);
+}
+
+#[inline]
+fn axpy_row_scalar(out_row: &mut [f64], a_value: f64, b_row: &[f64]) {
+    for col in 0..out_row.len() {
+        out_row[col] = a_value.mul_add(b_row[col], out_row[col]);
+    }
+}
+
+/// AVX2+FMA path: 4 `f64` lanes per instruction. Safety: only ever called after
+/// `axpy_row`'s runtime `is_x86_feature_detected!` check confirms both features are present -
+/// `#[target_feature]` functions are unsafe to call directly because the compiler can't itself
+/// prove that precondition. Uses unaligned loads/stores (`out_row`/`b_row` are arbitrary slices
+/// into a larger buffer, not independently aligned) and a scalar `mul_add` tail for the
+/// `c2 % 4` remainder, so the result matches `axpy_row_scalar` bit for bit regardless of `c2`.
+#[cfg(target_arch = "x86_64")]
+#[target_feature(enable = "avx2,fma")]
+unsafe fn axpy_row_avx2_fma(out_row: &mut [f64], a_value: f64, b_row: &[f64]) {
+    use std::arch::x86_64::{_mm256_fmadd_pd, _mm256_loadu_pd, _mm256_set1_pd, _mm256_storeu_pd};
+
+    let len = out_row.len();
+    let a_vec = _mm256_set1_pd(a_value);
+    let mut col = 0;
+    while col + 4 <= len {
+        let b_vec = _mm256_loadu_pd(b_row.as_ptr().add(col));
+        let acc_vec = _mm256_loadu_pd(out_row.as_ptr().add(col));
+        let result = _mm256_fmadd_pd(a_vec, b_vec, acc_vec);
+        _mm256_storeu_pd(out_row.as_mut_ptr().add(col), result);
+        col += 4;
+    }
+    while col < len {
+        out_row[col] = a_value.mul_add(b_row[col], out_row[col]);
+        col += 1;
     }
 }
 

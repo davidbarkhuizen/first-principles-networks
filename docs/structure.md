@@ -667,6 +667,11 @@ ordered roughly by how directly each follows from an existing finding here, not 
   never spawn threads - caught and fixed a real bug along the way (`available_parallelism()`
   costs ~50us/call uncached, which regressed `batch_size=1` badly before being cached behind a
   `OnceLock`). Net effect: `batch_size=512`'s gap improved further, from blocking-alone's
-  1.53x-1.74x to 1.19x-1.21x. Still open: explicit SIMD intrinsics (AVX2 is available on this
-  machine) - the last candidate from [the production cutover plan](rust-production-cutover.md)'s
-  reasoning.
+  1.53x-1.74x to 1.19x-1.21x. **Explicit SIMD intrinsics: done, gap closed** (2026-09-16, see
+  [research and analysis](research-and-analysis.md#explicit-simd-intrinsics-a-real-further-win-with-fused-multiply-add-kept-consistent-across-every-path)):
+  `matmul_2d_row_range`'s accumulate step now has an AVX2+FMA path (`_mm256_fmadd_pd`, 4 `f64`
+  lanes/instruction), with `f64::mul_add` kept as the scalar fallback's semantics too so every
+  path (scalar, AVX2, blocked, threaded) stays bit-identical - verified directly via exact
+  IEEE-754 bit-pattern comparison across five shapes, not just `pytest.approx`. `batch_size=512`'s
+  Rust/numpy ratio moved to 0.84x-1.04x, matching or beating numpy in most trials. This was the
+  last candidate from [the production cutover plan](rust-production-cutover.md)'s reasoning.
