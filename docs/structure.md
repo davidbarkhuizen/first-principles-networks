@@ -662,20 +662,6 @@ ranked.
 
 ### new model primitives, measured the existing way
 
-- **RMSprop** (Adam minus its momentum-like first-moment term) - flagged in [Adam
-  optimizer](adam-optimizer.md#scope) as a cheap follow-on ablation once Adam's own
-  `AdamBackpropNode` existed, worth doing only if Adam's result said something worth isolating
-  further. Adam itself is now done (see [Adam optimizer](adam-optimizer.md) for the full
-  workplan, [research and analysis](research-adam-optimizer.md) for the measurements): adopted as
-  a real capability, not a default - like every other weight-update-rule sibling here it needs its
-  own retuned `learning_rate` to avoid actively hurting - with a modest win on the tuned-XOR scale
-  and a substantial one under large-batch training (a fixed `learning_rate` keeps Adam robust
-  across `batch_size`, where sigmoid collapses, at both proxy and real-MNIST-ensemble scale) -
-  exactly the positive result that makes RMSprop worth revisiting as an ablation, per the
-  workplan's own flagged condition. Planned as [Adam
-  optimizer](adam-optimizer.md#delivery-stages-each-its-own-pr-per-this-repos-practice)'s stage 7 -
-  no new code needed (`AdamBackpropClassifierNetwork(..., beta1=0.0)` already *is* RMSprop), a
-  pure measurement stage. Not yet run.
 - **A learning-rate schedule** (decay/warmup) - every training loop here uses one fixed
   `learning_rate` for all epochs; untested whether a schedule changes convergence or final
   accuracy on any of this codebase's targets. Now has a concrete motivating case, not just a
@@ -692,6 +678,16 @@ ranked.
   in this group once hidden layers get deeper than 1-2, but also the biggest lift of anything
   here (running statistics, a train/eval-mode split - real complexity beyond the existing
   siblings' pattern). Not yet started.
+
+**RMSprop** (Adam minus its momentum-like first-moment term), that used to be listed here, is now
+closed - [Adam optimizer](adam-optimizer.md)'s stage 7: measured (no new code needed,
+`AdamBackpropClassifierNetwork(..., beta1=0.0)` already *is* RMSprop) against Adam and sigmoid on
+a fresh real-MNIST-proxy batch-size sweep. RMSprop tracked Adam within seed-to-seed noise at every
+batch size tested - the second-moment normalization alone accounts for Adam's batch-size-
+robustness win, its first-moment term adding nothing measurable. Not adopted as a separate
+capability; Adam remains the recommended choice. See [research and
+analysis](research-adam-optimizer.md#rmsprop-the-second-moment-term-alone-accounts-for-adams-batch-size-win-stage-7-of-the-adam-optimizer-workplan)
+for the full measurement.
 
 ### deepening what's already here
 
