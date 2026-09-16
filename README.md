@@ -19,9 +19,10 @@ retrofit - so it can represent targets (like XOR) the discrete model structurall
 - [vectorization](docs/vectorization.md) — numpy-backed array classes (kept as a permanent
   benchmarking mirror) and a hand-built Rust array core (the production backend)
 - [Rust production cutover](docs/rust-production-cutover.md) — how the Rust core became primary
-  in production: a debug-build fix, a matmul reorder, fused per-layer calls, and a measured
-  speedup over numpy on real training runs (3.40x/1.31x at first, ~3.6x/~2.6x after later matmul
-  SIMD work - see [research and analysis](docs/research-and-analysis.md))
+  in production: a debug-build fix, a matmul reorder, fused per-layer calls, and matmul SIMD
+  work, landing on a Rust core that's **faster than numpy** on real training runs - currently
+  ~3.6x at UCI digits scale, ~2.6x at real MNIST scale (3.40x/1.31x at first cutover, improved by
+  later matmul SIMD work - see [research and analysis](docs/research-and-analysis.md))
 - [mini-batch gradient descent](docs/mini-batch-gradient-descent.md) — batched gradient updates,
   and the momentum re-test they unblocked
 - [convolutional layers](docs/convolutional-layers.md) — a from-scratch conv layer, local
