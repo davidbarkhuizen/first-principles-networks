@@ -145,6 +145,22 @@ impl RustArray {
         }
     }
 
+    /// The inverse of `Array(nested_list)`/`Array(flat_list)` (see `new` above) - a flat Python
+    /// list for a 1D array, a nested list of same-length lists for a 2D array. `save()`/`load()`
+    /// round-trip weights through exactly this pair for JSON serialization
+    /// (`docs/numpy-interface-subset.md`'s own "Python round-trip" row).
+    fn tolist(&self, py: Python<'_>) -> PyObject {
+        match self.shape {
+            Shape::Vector(_) => self.data.clone().into_py(py),
+            Shape::Matrix(rows, cols) => {
+                let nested: Vec<Vec<f64>> = (0..rows)
+                    .map(|row| self.data[row * cols..(row + 1) * cols].to_vec())
+                    .collect();
+                nested.into_py(py)
+            }
+        }
+    }
+
     /// A no-op on a 1D array (numpy's own `.T` is a no-op there too), a real transpose on 2D -
     /// `#[getter(T)]` keeps the Rust fn name lowercase/snake_case while exposing it to Python as
     /// `.T`, matching `arr.T`'s usage in `ArrayLayer` (`X @ self.W.T`).
