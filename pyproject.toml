@@ -1,0 +1,20 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "perceptron"
+version = "0.1.0"
+description = "A from-scratch, hand-derived implementation of Rosenblatt's perceptron/MADALINE and backprop classifier networks."
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "matplotlib",
+    "pytest",
+    "pyarrow",
+    "numpy",
+]
+
+[tool.setuptools.packages.find]
+include = ["perceptron*"]
+namespaces = true

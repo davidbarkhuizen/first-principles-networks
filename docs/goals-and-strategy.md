@@ -96,8 +96,9 @@ Before starting work on something new, it should be able to answer:
   addition can't be checked against a reference or a baseline, it doesn't fit this project's own
   practice, regardless of how useful it sounds.
 - **Is it solving a problem this project actually has, or a problem "a production system" is
-  assumed to need?** CI solves a real, named problem (nothing protects 845 tests from regressing).
-  A Kubernetes deployment doesn't solve a problem this project has today.
+  assumed to need?** CI solved a real, named problem this way (nothing protected 845 tests from
+  regressing - see [dataset sourcing](dataset-sourcing-proposal.md), now shipped). A Kubernetes
+  deployment doesn't solve a problem this project has today.
 - **Would explaining it in [research and analysis](research-and-analysis.md) actually be
   interesting to read?** If the honest write-up would just be "we added X because other libraries
   have X," that's a signal it doesn't belong here.

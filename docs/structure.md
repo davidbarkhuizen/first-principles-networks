@@ -676,12 +676,8 @@ ranked.
 
 ### infrastructure that protects the rigor
 
-- **A Python package config** (`pyproject.toml`/`setup.py`) - only the Rust crate has real
-  packaging today, via `maturin`; the Python side is checkout-and-run only, not installable or
-  versioned.
-- **Dependency pinning** - `requirements.txt` lists 4 unpinned packages (`matplotlib`, `pytest`,
-  `pyarrow`, `numpy`) and there's no lock file - a reproducibility gap for anyone re-running a
-  measurement from a different checkout and getting a different transitive dependency version.
+No open items in this tier right now - see below for what closed the three that used to be here
+(matmul performance, CI, and the Python packaging/pinning gap).
 
 Matmul performance is no longer on this list: both gaps this codebase's real training paths could
 hit (the `batch_size >= 32` 2D×2D case and the `batch_size=1` `Matrix @ Vector`/`Vector @ Matrix`
@@ -696,3 +692,9 @@ runs the full test suite (320 top-level Python tests plus 525 more running the R
 parity suite) on every push to `main` and every pull request, unblocked by [the
 `indrajala-datasets-*` dataset sourcing work](dataset-sourcing-proposal.md) - see [setup](setup.md#ci)
 for how it fetches and caches the real MNIST data it needs.
+
+Neither is the Python packaging/pinning gap: `pyproject.toml` now makes this package installable
+and versioned (`pip install -e .`), and `requirements.txt` is a real pip-compile-generated lock
+file - every direct and transitive Python dependency pinned to the exact version this codebase's
+test suite is validated against, not left to resolve to whatever's newest on PyPI at install time -
+see [setup](setup.md#dependencies) for the full dependency-bumping procedure.
