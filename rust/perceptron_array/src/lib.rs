@@ -1,6 +1,7 @@
 use pyo3::prelude::*;
 
 mod array;
+mod ops;
 
 use array::RustArray;
 
