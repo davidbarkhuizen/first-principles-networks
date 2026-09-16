@@ -102,9 +102,15 @@ indrajala_ml/
                                    positive region when available), sampling a point and
                                    classifying it with two networks, a permutation-invariant
                                    class-balanced disagreement metric, and series smoothing
-  digits_data.py                  loads/normalizes the bundled 8x8 digits dataset, plus a
-                                   train/test split (a fixed finite dataset, unlike every other
-                                   target here, which is continuously re-sampleable)
+  dataset_utils.py                split_train_test - shuffles and splits a fixed finite dataset
+                                   (unlike every synthetic target here, which is continuously
+                                   re-sampleable), shared by every bundled-dataset loader below
+  digits_data.py                  loads/normalizes the bundled 8x8 digits dataset; re-exports
+                                   dataset_utils.split_train_test for callers' convenience
+  iris_data.py                    loads/normalizes the bundled Fisher's Iris dataset (150 rows,
+                                   4 real-valued measurements, 3 species) - see "linear
+                                   separability on real data" below; re-exports
+                                   dataset_utils.split_train_test the same way digits_data.py does
   multiclass_evaluate.py          confusion_matrix and accuracy against a held-out test set -
                                    evaluate.py's functions are two-class- and geometry-specific
                                    and don't generalize to this
@@ -230,7 +236,15 @@ tests/                           one file per module under test, plus test_train
   test_backprop_training_pipeline.py  proves train_linear_classifier_network drives a
                                        BackpropClassifierNetwork well past the linear ceiling on XOR,
                                        unchanged
-  test_digits_data.py             load_digits_dataset, split_train_test
+  test_dataset_utils.py           split_train_test - sizes/no-overlap, reproducibility under a
+                                   fixed seed, rejects a non-fractional test_fraction (shared by
+                                   every bundled-dataset loader, so tested once here, not per
+                                   dataset)
+  test_digits_data.py             load_digits_dataset (split_train_test itself: see
+                                   test_dataset_utils.py above)
+  test_iris_data.py               load_iris_dataset - full dataset shape/class-balance,
+                                   normalization actually reaching both 0.0 and 1.0 per feature,
+                                   a known-value decode check on the dataset's well-known first row
   test_multiclass_backprop_model.py  MultiClassBackpropClassifierNetwork construction,
                                      hand-computed one-vs-rest forward/backward pass, fan-in
                                      init, snapshot/restore, save()/load()
@@ -347,6 +361,41 @@ tight box is computable - cardinality 1-2 (never bounded), a non-AND `required_a
 classifier that isn't a `LinearClassifierNetwork` at all (both functions accept anything with
 the same `input_bounds`/`classify_state` interface, e.g. `demo_xor_linear_classifier_ceiling.py`'s
 `XORTarget`).
+
+## linear separability on real data
+
+Every `LinearClassifierNetwork` demo up to this point trains against a synthetic 2D geometric
+target (XOR, stripes, a random reference classifier) - `iris_data.py` (Fisher's Iris, 1936: 150
+rows, 4 real-valued measurements, 3 species, class-balanced 50/50/50) is the first real dataset
+it ever trains on (`demo_iris_linear_classifier_ceiling.py`). Iris is famous for one specific
+linear-separability split: setosa is perfectly linearly separable from the other two species (a
+cardinality=1 perceptron reliably converges to 1.000 training accuracy given enough epochs, the
+same convergence guarantee [theory](theory.md)'s single-neuron case has), but versicolor and
+virginica overlap and are genuinely NOT perfectly linearly separable - confirmed directly via a
+one-time linear-programming feasibility check over the exact 4 normalized features (infeasible),
+not assumed from folklore about the dataset. Sweeping cardinality/gate configurations the same
+way `demo_xor_linear_classifier_ceiling.py` does confirms this empirically too: none reach 1.000,
+best seen typically ~0.98-0.99.
+
+This is a structurally different kind of ceiling than XOR's: XOR is a *shape* (two diagonally
+opposite quadrants) no linear gate can express at any accuracy, because `LinearClassifierNetwork`'s
+output layer can only be a monotonically non-decreasing function of how many hidden nodes fire.
+Versicolor-vs-virginica is representable almost perfectly by a single half-plane - it's a handful
+of genuinely ambiguous points, not an inexpressible shape. `demo_iris_backprop_versus_perceptron.py`
+asks whether `BackpropClassifierNetwork`'s extra capacity (trained output layer, see "backprop"
+below) closes this ceiling the way it closes XOR's, and measures a genuine null on training
+accuracy: both plateau at roughly the same ~0.97, since more capacity doesn't help when the
+ceiling's cause is real data ambiguity rather than an inexpressible shape. Repeating an 80/20
+train/test split 10 times does find one real, if modest, difference: backprop's mean held-out
+test accuracy comes out measurably higher than the perceptron's (its smoother, differentiable
+decision boundary generalizes a bit better), even though it doesn't fit the training data any
+better - reported as measured, not rounded up to the more dramatic "backprop wins" story XOR
+tells.
+
+`dataset_utils.split_train_test` (moved out of `digits_data.py`, which now just re-exports it) is
+shared by both bundled-dataset loaders, `digits_data.py` and `iris_data.py`, rather than each
+defining its own copy - the same shuffle-and-split logic neither dataset's own loading has any
+reason to duplicate.
 
 ## backprop
 
