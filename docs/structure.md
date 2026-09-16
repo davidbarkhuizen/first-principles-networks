@@ -681,13 +681,13 @@ ranked.
   writing - 320 top-level Python plus 525 more running the Rust crate's own parity suite via
   `python -m pytest rust/perceptron_array/tests tests`, many of both pinned to hand-derived or
   empirically-measured expected values) from silently regressing. **Blocked on solving where the
-  reference MNIST dataset comes from first**:
-  `test_mnist_data.py`'s tests need the real MNIST parquet/binary files, which are gitignored
-  with no scripted fetch step anywhere in this codebase - supplied locally, by hand, whenever a
-  dev checkout needs them (see [setup](setup.md)). Building CI without first deciding how a
-  fresh checkout gets that data (a public mirror to fetch from? a repo secret + private download
-  step? committing a small stratified subset instead of the full dataset?) means shipping CI
-  that quietly can't protect part of the suite, not a real fix.
+  reference MNIST dataset comes from first**: `test_mnist_data.py`'s tests need the real MNIST
+  parquet/binary files, which are gitignored with no scripted fetch step anywhere in this codebase
+  - supplied locally, by hand, whenever a dev checkout needs them (see [setup](setup.md)).
+  **Proposed resolution** (design stage, not yet built): [dedicated, checksum-verified
+  `indrajala-datasets-*` repos](dataset-sourcing-proposal.md), one per dataset, fetched by a new
+  `./cli` step that only hits the network when a file is missing or its checksum doesn't match -
+  see that document for the full design, delivery stages, and open questions.
 - **A Python package config** (`pyproject.toml`/`setup.py`) - only the Rust crate has real
   packaging today, via `maturin`; the Python side is checkout-and-run only, not installable or
   versioned.
