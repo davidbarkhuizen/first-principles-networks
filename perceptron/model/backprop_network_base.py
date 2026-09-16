@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import math
 import random
+from typing import Any, Sequence
 
 from perceptron.model.backprop_layer import BackpropLayer
 from perceptron.model.bounds import validate_input_bounds
@@ -74,6 +75,22 @@ class BackpropNetworkBase:
             next_layer = self.trainable_layers[layer_index + 1]
             for own_index, node in enumerate(self.hidden_layers[layer_index].nodes):
                 node.compute_hidden_delta(next_layer.nodes, own_index)
+
+    def _learn_batch(self, learning_rate: float, batch: Sequence[tuple[tuple[float, ...], Any]]) -> None:
+        # the batch-shaped analogue of learn(): forward+backward+accumulate once per example,
+        # then a single averaged weight update - batch_size=1 (a one-element batch) is required
+        # to match learn()'s own result exactly, since apply_accumulated_gradient's batch_size=1
+        # case is already proven bit-identical to apply_gradient (see
+        # tests/test_gradient_accumulation.py). Shared by BackpropClassifierNetwork's and
+        # MultiClassBackpropClassifierNetwork's own learn_batch() - identical shape, differing
+        # only in what a "target" is (a float reference value vs. an int category), which
+        # _forward/_backward already abstract over.
+        assert len(batch) >= 1, "batch must not be empty"
+        for state, target in batch:
+            self._forward(state)
+            self._backward(target)
+            self._accumulate_gradients()
+        self._apply_accumulated_gradients(learning_rate, len(batch))
 
     def _apply_gradients(self, learning_rate: float) -> None:
         for layer in self.trainable_layers:

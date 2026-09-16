@@ -3,6 +3,7 @@ from __future__ import annotations
 from typing import Sequence
 
 from perceptron.model.backprop_network_base import BackpropNetworkBase, randomize_fan_in_aware
+from perceptron.model.classification import argmax_first_occurrence
 from perceptron.model.model_io import load_model_json, save_model_json
 
 
@@ -39,8 +40,7 @@ class MultiClassBackpropClassifierNetwork(BackpropNetworkBase):
         return self._forward(state)
 
     def classify_state(self, state: tuple[float, ...]) -> int:
-        probabilities = self.predict_probabilities(state)
-        return max(range(self.class_count), key=lambda i: probabilities[i])
+        return argmax_first_occurrence(self.predict_probabilities(state))
 
     def learn(self, learning_rate: float, state: tuple[float, ...], category: int) -> None:
         self._forward(state)
@@ -48,14 +48,7 @@ class MultiClassBackpropClassifierNetwork(BackpropNetworkBase):
         self._apply_gradients(learning_rate)
 
     def learn_batch(self, learning_rate: float, batch: Sequence[tuple[tuple[float, ...], int]]) -> None:
-        # the batch-shaped analogue of learn() - see BackpropClassifierNetwork.learn_batch's own
-        # docstring-equivalent comment for why batch_size=1 is required to match learn() exactly
-        assert len(batch) >= 1, "batch must not be empty"
-        for state, category in batch:
-            self._forward(state)
-            self._backward(category)
-            self._accumulate_gradients()
-        self._apply_accumulated_gradients(learning_rate, len(batch))
+        self._learn_batch(learning_rate, batch)
 
     def _backward(self, category: int) -> None:
         for i, node in enumerate(self.output_layer.nodes):

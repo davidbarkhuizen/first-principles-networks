@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from perceptron.model.backprop_classifier_network import BackpropClassifierNetwork
+from perceptron.model.classification import argmax_first_occurrence
 from perceptron.model.model_io import load_model_json, save_model_json
 
 
@@ -35,8 +36,7 @@ class EnsembleBackpropClassifierNetwork:
         return [classifier.predict_probability(state) for classifier in self.classifiers]
 
     def classify_state(self, state: tuple[float, ...]) -> int:
-        probabilities = self.predict_probabilities(state)
-        return max(range(self.class_count), key=lambda i: probabilities[i])
+        return argmax_first_occurrence(self.predict_probabilities(state))
 
     def snapshot(self) -> list[list[list[tuple[list[float], float]]]]:
         return [classifier.snapshot() for classifier in self.classifiers]

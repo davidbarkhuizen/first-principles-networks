@@ -1,12 +1,16 @@
 import random
 
-import numpy as np
 import pytest
 
 import perceptron_array as pa
-from perceptron.model.multiclass_backprop_classifier_network import MultiClassBackpropClassifierNetwork
 from perceptron.model.rust_array_multiclass_backprop_classifier_network import (
     RustArrayMultiClassBackpropClassifierNetwork,
+)
+from tests.helpers import (
+    assert_array_network_save_load_round_trip,
+    assert_array_network_snapshot_restore_round_trip,
+    assert_array_network_weights_match,
+    matching_array_backprop_networks,
 )
 
 DIMENSION = 6
@@ -20,37 +24,9 @@ def _matching_networks(rng: random.Random):
     # seed-comparable against Python's random module (see rust-array-core.md's "the RNG
     # exception"). The array-vs-node analogue of
     # tests/test_vectorized_multiclass_backprop_model.py's own _matching_networks.
-    node_network = MultiClassBackpropClassifierNetwork(
-        LAYER_SIZES, DIMENSION, [(-10.0, 10.0)] * DIMENSION, CLASS_COUNT
+    return matching_array_backprop_networks(
+        rng, RustArrayMultiClassBackpropClassifierNetwork, pa.Array, LAYER_SIZES, DIMENSION, CLASS_COUNT
     )
-    rust_network = RustArrayMultiClassBackpropClassifierNetwork(LAYER_SIZES, DIMENSION, CLASS_COUNT)
-
-    previous_size = DIMENSION
-    for layer_index, size in enumerate([*LAYER_SIZES, CLASS_COUNT]):
-        weights = [[rng.uniform(-2.0, 2.0) for _ in range(previous_size)] for _ in range(size)]
-        biases = [rng.uniform(-2.0, 2.0) for _ in range(size)]
-
-        node_layer = node_network.trainable_layers[layer_index]
-        for node, node_weights, bias in zip(node_layer.nodes, weights, biases):
-            node.update_input_weights(node_weights)
-            node.bias = bias
-
-        rust_network.layers[layer_index].W = pa.Array(weights)
-        rust_network.layers[layer_index].b = pa.Array(biases)
-
-        previous_size = size
-
-    return node_network, rust_network
-
-
-def _assert_networks_match(node_network, rust_network, rtol=1e-9, atol=1e-9):
-    for node_layer, rust_layer in zip(node_network.trainable_layers, rust_network.layers):
-        expected_W = np.array([node.input_node_weights for node in node_layer.nodes])
-        expected_b = np.array([node.bias for node in node_layer.nodes])
-        actual_W = np.array(rust_layer.W.tolist())
-        actual_b = np.array(rust_layer.b.tolist())
-        assert np.allclose(actual_W, expected_W, rtol=rtol, atol=atol)
-        assert np.allclose(actual_b, expected_b, rtol=rtol, atol=atol)
 
 
 def test_predict_probabilities_matches_across_a_random_sweep():
@@ -62,7 +38,7 @@ def test_predict_probabilities_matches_across_a_random_sweep():
         state = tuple(rng.uniform(-10.0, 10.0) for _ in range(DIMENSION))
         expected = node_network.predict_probabilities(state)
         actual = rust_network.predict_probabilities(state)
-        assert np.allclose(actual, expected, rtol=1e-9, atol=1e-12)
+        assert actual == pytest.approx(expected, rel=1e-9, abs=1e-12)
 
 
 def test_classify_state_matches_across_a_random_sweep():
@@ -90,7 +66,7 @@ def test_learn_matches_after_every_step_not_just_at_the_end():
         node_network.learn(learning_rate, state, category)
         rust_network.learn(learning_rate, state, category)
 
-        _assert_networks_match(node_network, rust_network)
+        assert_array_network_weights_match(node_network, rust_network)
 
 
 def test_learn_batch_matches_after_every_batch_not_just_at_the_end():
@@ -109,7 +85,7 @@ def test_learn_batch_matches_after_every_batch_not_just_at_the_end():
         node_network.learn_batch(learning_rate, batch)
         rust_network.learn_batch(learning_rate, batch)
 
-        _assert_networks_match(node_network, rust_network)
+        assert_array_network_weights_match(node_network, rust_network)
 
 
 def test_randomized_builds_a_usable_network():
@@ -125,31 +101,23 @@ def test_randomized_builds_a_usable_network():
 
 def test_snapshot_restore_round_trips_weights():
 
-    network = RustArrayMultiClassBackpropClassifierNetwork.randomized(LAYER_SIZES, DIMENSION, CLASS_COUNT)
-    snapshot = network.snapshot()
-
-    other = RustArrayMultiClassBackpropClassifierNetwork(LAYER_SIZES, DIMENSION, CLASS_COUNT)
-    other.restore(snapshot)
-
-    for (W1, b1), (W2, b2) in zip(network.snapshot(), other.snapshot()):
-        assert W1.tolist() == W2.tolist()
-        assert b1.tolist() == b2.tolist()
+    assert_array_network_snapshot_restore_round_trip(
+        RustArrayMultiClassBackpropClassifierNetwork, LAYER_SIZES, DIMENSION, CLASS_COUNT
+    )
 
 
 def test_save_load_round_trips_weights_and_predictions(tmp_path):
 
     network = RustArrayMultiClassBackpropClassifierNetwork.randomized(LAYER_SIZES, DIMENSION, CLASS_COUNT)
-    path = str(tmp_path / "rust_array_model.json")
-    network.save(path)
-
-    loaded = RustArrayMultiClassBackpropClassifierNetwork.load(path)
-
-    assert loaded.layer_sizes == network.layer_sizes
-    assert loaded.dimension == network.dimension
-    assert loaded.class_count == network.class_count
-
     state = tuple(0.1 * i for i in range(DIMENSION))
-    assert loaded.predict_probabilities(state) == pytest.approx(network.predict_probabilities(state))
+
+    assert_array_network_save_load_round_trip(
+        network,
+        RustArrayMultiClassBackpropClassifierNetwork.load,
+        tmp_path,
+        "rust_array_model.json",
+        state,
+    )
 
 
 def test_construction_rejects_invalid_arguments():
