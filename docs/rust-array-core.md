@@ -39,10 +39,17 @@ functions above to ~2-7x for a synthetic forward pass. On this codebase's actual
 exclusively, not `learn_batch`), the fused Rust core measures as a genuine, real-training-run win:
 **3.40x faster at UCI digits scale, 1.31x faster at real MNIST scale** (see [research and
 analysis](research-and-analysis.md#phase-2-tier-2-real-per-example-training-is-a-genuine-win-at-both-scales-measured)),
-with statistically indistinguishable accuracy. The crate's matmul is still a naive triple loop, so
-it still loses to numpy's BLAS at larger mini-batch sizes (`batch_size >= 32`) - tracked as
-follow-on optimization work (SIMD, blocking/tiling, threading), not a blocker for the production
-paths that exist today.
+with statistically indistinguishable accuracy. The `batch_size >= 32` gap this left (matmul's
+2D×2D case losing to numpy's BLAS at larger mini-batch sizes) was tracked as follow-on
+optimization work, not a blocker for the production paths that exist today - and is now
+**closed**: size-gated cache-blocking, threaded row-splitting, and an AVX2+FMA SIMD path (all
+2026-09-16, see [structure](structure.md#possible-next-steps) and [research and
+analysis](research-and-analysis.md#explicit-simd-intrinsics-a-real-further-win-with-fused-multiply-add-kept-consistent-across-every-path))
+moved `batch_size=512`'s Rust/numpy ratio from a widening multi-x loss to **0.84x-1.04x**,
+matching or beating numpy in most trials, bit-identical to the original naive loop's output at
+every stage. The 1D×2D/2D×1D matmul cases (`self.W @ x`-shaped, this codebase's actual
+`batch_size=1` production path) remain an unoptimized triple loop - untouched by this work, since
+they were never the gap it targeted.
 
 ## why not just keep using real NumPy
 
@@ -76,9 +83,10 @@ move the same "adopt vs. hand-build" tension NumPy itself raises down one level,
 
 Fixed `f64` dtype, up to 2D (matrix) + 1D (vector), row-major contiguous storage - exactly
 [the numpy interface subset](numpy-interface-subset.md)'s own table, nothing more. Not targeting
-BLAS-competitive matmul performance (naive triple loop, no SIMD/blocking) - that's decades of
-industry tuning, out of scope regardless of language; the realistic bar is "meaningfully faster
-than pure Python," not matching OpenBLAS.
+literal BLAS-competitive matmul performance (matching OpenBLAS's own decades of tuning is out of
+scope regardless of language) - though the 2D×2D case's own cache-blocking/threading/SIMD tuning
+(see "status" above) closed most of the gap in practice; the realistic bar was always "meaningfully
+faster than pure Python," not literal parity, and that bar is comfortably cleared.
 
 | file | contents |
 |---|---|
@@ -124,7 +132,8 @@ A throwaway numpy benchmark (numpy happens to be installed on this machine; not 
 and not proposed as one here - used purely as a real proxy for "what a compiled, vectorized
 implementation could achieve") at this codebase's actual architecture (`dimension=784, hidden=16,
 output=10`) measured 150.7x forward-pass speedup over pure Python - treated as a ceiling, not a
-target, since this crate's naive (no-SIMD, no-blocking) matmul should land meaningfully below it.
+target: even with the matmul tuning above, per-call FFI overhead and this codebase's own small
+per-layer shapes keep the crate meaningfully below a from-scratch numpy comparison.
 [Vectorization](vectorization.md#expected-effect) records the reasoning for treating
 15-45x as a realistic, still practically significant win, and the real (not extrapolated) 9.00x/
 33.87x numpy measurements this core's own eventual production numbers would be compared against.
@@ -141,9 +150,10 @@ but nothing in the existing pure-Python or numpy-backed classes was touched).
 
 ## what stays explicitly out of scope
 
-- **BLAS-competitive matmul performance.** Naive-but-correct; any tuning (SIMD, blocking/tiling,
-  threading) is separately-measured follow-up work - see
-  [structure](structure.md#possible-next-steps).
+- **Literal BLAS parity.** The 2D×2D matmul case's own cache-blocking/threading/SIMD tuning is
+  **done** (2026-09-16, closed the `batch_size >= 32` gap - see "status" above and
+  [structure](structure.md#possible-next-steps)), but matching OpenBLAS's own decades of tuning
+  exactly was never the goal and stays out of scope.
 - **Any operation outside [the numpy interface subset](numpy-interface-subset.md)'s own table.**
   No axis-parameterized reductions, no `where`/`maximum`/`clip`, no general N-d arrays or
   broadcasting - see that document's own "explicitly not required" for what a future

@@ -313,6 +313,9 @@ path and numpy as the comparison - see [structure](structure.md#vectorized-array
 
 **All nine delivery stages are done as of 2026-09-16.** `RustArrayMultiClassBackpropClassifierNetwork`
 is this codebase's production array-backed network; `VectorizedMultiClassBackpropClassifierNetwork`
-(numpy) remains permanently as the benchmark comparison. Open follow-on work, not part of this
-plan: closing the naive matmul's remaining gap at `batch_size >= 32` (see
-[structure](structure.md#possible-next-steps)).
+(numpy) remains permanently as the benchmark comparison. The follow-on work flagged above -
+closing the naive matmul's remaining gap at `batch_size >= 32` - was never part of this plan, and
+is itself now done too (same day, cache-blocking + threading + explicit SIMD intrinsics, see
+[structure](structure.md#possible-next-steps) and
+[research and analysis](research-and-analysis.md#explicit-simd-intrinsics-a-real-further-win-with-fused-multiply-add-kept-consistent-across-every-path)):
+`batch_size=512`'s Rust/numpy ratio moved from a widening multi-x loss to 0.84x-1.04x.

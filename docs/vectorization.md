@@ -55,11 +55,14 @@ full benchmark. Treated as a ceiling, not a target: a naive, unoptimized Rust co
 well below it, with 15-45x (10-30% of the measured ceiling) still a large, practically
 significant win.
 
-Real, not extrapolated, measurements now exist for the numpy-backed classes (not yet the Rust
-core - that cutover hasn't happened yet, see "decision" above): one full real-MNIST epoch
-(`[30]`-hidden-layer
-architecture, batch-size-1 SGD) measured **33.87x** (32.7s vectorized vs. 18.45 min pure-Python),
-and UCI digits measured **9.00x** (8.57s vs. 77.16s) - both landing inside the 15-45x
-practical-win range, at real, practical batch-size-1 SGD rather than a forward-pass-only
-microbenchmark. See [vectorized array-based classes](vectorized-array-classes.md#measured-results)
-for the full numbers.
+Real, not extrapolated, measurements exist for both. For the numpy-backed classes: one full
+real-MNIST epoch (`[30]`-hidden-layer architecture, batch-size-1 SGD) measured **33.87x** (32.7s
+vectorized vs. 18.45 min pure-Python), and UCI digits measured **9.00x** (8.57s vs. 77.16s) - both
+landing inside the 15-45x practical-win range, at real, practical batch-size-1 SGD rather than a
+forward-pass-only microbenchmark. See [vectorized array-based
+classes](vectorized-array-classes.md#measured-results) for the full numbers. For the Rust core,
+now that [the production cutover](rust-production-cutover.md) is done (see "decision" above): a
+genuine **3.40x** speedup over numpy at UCI digits scale and **1.31x** at real MNIST scale on this
+codebase's actual `learn()`-shaped (`batch_size=1`) training paths - see [the Rust
+core](rust-array-core.md) and [research and
+analysis](research-and-analysis.md#phase-2-tier-2-real-per-example-training-is-a-genuine-win-at-both-scales-measured).

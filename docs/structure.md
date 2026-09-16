@@ -611,10 +611,11 @@ genuine **3.40x** speedup over numpy at UCI digits scale and **1.31x** at real M
 analysis](research-and-analysis.md#phase-2-tier-2-real-per-example-training-is-a-genuine-win-at-both-scales-measured)),
 with statistically indistinguishable accuracy. `demo_rust_vs_vectorized_uci_digit_recognition.py`/
 `demo_rust_vs_vectorized_mnist_recognition.py` run all three (pure-Python, numpy, Rust) side by
-side. The naive matmul this crate still uses does lose to numpy's BLAS at larger mini-batch sizes
-(`batch_size >= 32`) - not yet a problem in practice, since both training paths above use
-`learn()`'s per-example (`batch_size=1`) shape exclusively, but a real, tracked follow-on
-optimization target (SIMD, blocked/tiled matmul, threading), not a hidden gap.
+side. Neither training path above needs `batch_size >= 32` mini-batch matmul performance - both
+use `learn()`'s per-example (`batch_size=1`) shape exclusively - but that gap against numpy's BLAS
+is closed anyway (2026-09-16): cache-blocking, threading, and an AVX2+FMA SIMD path on the crate's
+2D×2D matmul case moved `batch_size=512`'s Rust/numpy ratio to 0.84x-1.04x, matching or beating
+numpy in most trials (see "possible next steps" below for the full writeup).
 
 ## possible next steps
 
