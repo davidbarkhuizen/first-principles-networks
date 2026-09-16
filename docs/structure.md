@@ -613,8 +613,11 @@ with statistically indistinguishable accuracy. `demo_rust_vs_vectorized_uci_digi
 `demo_rust_vs_vectorized_mnist_recognition.py` run all three (pure-Python, numpy, Rust) side by
 side.
 
-Two further SIMD optimization passes (both 2026-09-16, see "possible next steps" below for the
-full writeup) moved that number since. Neither training path above needs `batch_size >= 32`
+Two further SIMD optimization passes (both 2026-09-16, see [research and
+analysis](research-and-analysis.md#explicit-simd-intrinsics-a-real-further-win-with-fused-multiply-add-kept-consistent-across-every-path)
+and
+[research and analysis](research-and-analysis.md#simd-for-the-matvec-production-path-a-bigger-win-than-the-batch32-work-it-followed)
+for the full writeups) moved that number since. Neither training path above needs `batch_size >= 32`
 mini-batch matmul performance - both use `learn()`'s per-example (`batch_size=1`) shape
 exclusively - but that gap against numpy's BLAS was closed anyway: cache-blocking, threading, and
 an AVX2+FMA SIMD path on the crate's 2D×2D matmul case moved `batch_size=512`'s Rust/numpy ratio
@@ -652,55 +655,11 @@ ordered roughly by how directly each follows from an existing finding here, not 
   fresh checkout gets that data (a public mirror to fetch from? a repo secret + private download
   step? committing a small stratified subset instead of the full dataset?) means shipping CI
   that quietly can't protect part of the suite, not a real fix.
-- **Closing the naive matmul's remaining gap at larger batch sizes.** [The production cutover
-  plan](rust-production-cutover.md) is done through phase 2: `RustArrayMultiClassBackpropClassifierNetwork`
-  is built, parity-checked, and measured as a genuine 3.40x (UCI digits)/1.31x (real MNIST) win
-  over numpy on this codebase's actual `learn()`-shaped (`batch_size=1`) training paths. What's
-  left is optimizing the crate's still-naive triple-loop matmul, which currently still loses to
-  numpy's BLAS at `batch_size >= 32` - not a problem for either existing production path today,
-  but the thing that would need fixing before a `learn_batch`-shaped mini-batch training path
-  could adopt the Rust core with the same confidence. **Build-flag tuning measured as a null**
-  (2026-09-16, see [research and
-  analysis](research-and-analysis.md#build-flag-tuning-measured-as-a-null)): neither `lto=true`+
-  `codegen-units=1` nor `RUSTFLAGS="-C target-cpu=native"` moved the needle beyond normal
-  run-to-run noise. **Cache-blocked matmul: done, a real but partial win** (2026-09-16, see
-  [research and
-  analysis](research-and-analysis.md#cache-blocked-matmul-a-real-shape-dependent-win-gated-by-size)):
-  `linalg.rs::matmul`'s 2D×2D case now blocks over `row`/`k` once the `b` operand exceeds 256KB
-  (below that, blocking was a measured *regression* - the small matmuls this codebase's real
-  architecture uses already fit in cache) - a reproducible ~15-25% reduction in the
-  `batch_size=512` gap, `batch_size=1`/`8` unaffected. **Threaded matmul: done, a further real
-  win** (2026-09-16, see [research and
-  analysis](research-and-analysis.md#threaded-matmul-a-real-further-win-one-real-bug-caught-one-refinement-rejected)):
-  `std::thread::scope` row-splitting on top of blocking, gated by total flops so tiny matmuls
-  never spawn threads - caught and fixed a real bug along the way (`available_parallelism()`
-  costs ~50us/call uncached, which regressed `batch_size=1` badly before being cached behind a
-  `OnceLock`). Net effect: `batch_size=512`'s gap improved further, from blocking-alone's
-  1.53x-1.74x to 1.19x-1.21x. **Explicit SIMD intrinsics: done, gap closed** (2026-09-16, see
-  [research and analysis](research-and-analysis.md#explicit-simd-intrinsics-a-real-further-win-with-fused-multiply-add-kept-consistent-across-every-path)):
-  `matmul_2d_row_range`'s accumulate step now has an AVX2+FMA path (`_mm256_fmadd_pd`, 4 `f64`
-  lanes/instruction), with `f64::mul_add` kept as the scalar fallback's semantics too so every
-  path (scalar, AVX2, blocked, threaded) stays bit-identical - verified directly via exact
-  IEEE-754 bit-pattern comparison across five shapes, not just `pytest.approx`. `batch_size=512`'s
-  Rust/numpy ratio moved to 0.84x-1.04x, matching or beating numpy in most trials. This was the
-  last candidate from [the production cutover plan](rust-production-cutover.md)'s reasoning.
-  **AVX-512 checked and ruled out**: this machine's CPU (AMD Ryzen 7 3700U, Zen+) has no
-  `avx512*` flags at all - AMD didn't add AVX-512 until Zen 4 (2022) - so AVX2's 4-lane `f64`
-  width is this hardware's actual ceiling, not a further optimization candidate here.
-- **The matmul `Matrix @ Vector`/`Vector @ Matrix` cases: done, a bigger real win than the
-  `batch_size >= 32` work above** (2026-09-16, see [research and
-  analysis](research-and-analysis.md#simd-for-the-matvec-production-path-a-bigger-win-than-the-batch32-work-it-followed)).
-  Unlike the 2D×2D case, `self.W @ x` (`Matrix @ Vector`) *is* this codebase's actual
-  `batch_size=1` production shape - a stage-0 measurement found it costing ~10.2us at the real
-  `16x784` shape, ~97% of a fused `layer_forward` call and ~3.5x slower than numpy, overturning
-  an earlier, unverified assumption in `linalg.rs`'s own doc comment that this case "never
-  exercised... at a size where it would matter." Fixed with an AVX2+FMA dot-product path
-  (`dot_product`/`dot_product_avx2_fma` in `linalg.rs`) using a canonical 4-lane interleaved
-  summation order shared by the scalar fallback and the AVX2 path (bit-identical between the two,
-  verified the same way as the 2D×2D SIMD work - though not to the old naive-sequential-sum
-  baseline, a deliberate, documented summation-order change). `Vector @ Matrix` needed no new
-  code at all - it turned out to be structurally identical to `axpy_row`'s own row-scaling
-  accumulate, so it was wired straight through that existing function. Net effect: the real
-  per-example training-run win moved from 3.40x/1.31x to **~3.6x/~2.6x** (UCI digits/real MNIST),
-  with real MNIST's ratio nearly doubling - `dimension=784, hidden=30` is exactly the shape where
-  this matvec dominates most.
+
+Matmul performance is no longer on this list: both gaps this codebase's real training paths could
+hit (the `batch_size >= 32` 2D×2D case and the `batch_size=1` `Matrix @ Vector`/`Vector @ Matrix`
+cases actually used in production) were closed via cache-blocking, threading, and AVX2+FMA SIMD -
+see [vectorized array-based classes](#vectorized-array-based-classes) above for the current
+numbers and [research and
+analysis](research-and-analysis.md#simd-for-the-matvec-production-path-a-bigger-win-than-the-batch32-work-it-followed)
+(and the four entries preceding it) for the full investigation.
