@@ -21,9 +21,11 @@ fn available_parallelism_cached() -> usize {
 /// vector (`self.W @ x`), vector @ matrix (the interface subset's own "1D x 2D" case, not
 /// exercised by the current class design but part of its documented contract), and matrix @
 /// matrix (`X @ self.W.T`, `next_layer.delta_batch @ next_layer.W`,
-/// `self.delta_batch.T @ input_activation_batch`). A naive triple loop, not a BLAS-competitive
-/// routine - see docs/rust-array-core.md's own "expected performance" for why that gap is
-/// expected and accepted at this stage.
+/// `self.delta_batch.T @ input_activation_batch`). The 1D cases stay a naive triple loop - this
+/// codebase's actual `batch_size=1` production path never exercises them at a size where it would
+/// matter. The 2D×2D case (`matmul_2d` below) is where `batch_size >= 32` mini-batch training
+/// actually spends its time, and has size-gated cache-blocking, threaded row-splitting, and an
+/// AVX2+FMA SIMD path - see docs/rust-array-core.md's own "status" for the measured result.
 pub(crate) fn matmul(a: &RustArray, b: &RustArray) -> PyResult<RustArray> {
     match (a.shape, b.shape) {
         (Shape::Matrix(rows, cols), Shape::Vector(n)) => {
