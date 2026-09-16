@@ -664,8 +664,13 @@ ranked.
   the existing SGD/momentum baseline the same way every other backprop sibling was (see "backprop
   siblings" above). Momentum itself measured as a null on every scenario tried; a per-parameter
   adaptive learning rate is a different enough mechanism to be worth its own measurement rather
-  than assumed to fare the same way. See [Adam optimizer](adam-optimizer.md) for the design and
-  measurement plan. Not yet started.
+  than assumed to fare the same way. See [Adam optimizer](adam-optimizer.md) for the design,
+  measurement plan, and current stage-by-stage status. In progress: `AdamBackpropClassifierNetwork`
+  is built (stage 2); the tuned-XOR measurement (stage 3) found it needs its own retuned learning
+  rate the same way ReLU/cross-entropy do, then modestly beats the sigmoid baseline once retuned;
+  the real-MNIST-proxy batch-size sweep (stage 4) found a much bigger, cleaner win - at a fixed
+  learning rate Adam stays robust across batch sizes where sigmoid collapses, and (the reverse of
+  SGD/momentum's own linear scaling rule) scaling Adam's rate with batch size actively hurts it.
 - **A learning-rate schedule** (decay/warmup) - every training loop here uses one fixed
   `learning_rate` for all epochs; untested whether a schedule changes convergence or final
   accuracy on any of this codebase's targets. Now has a concrete motivating case, not just a
@@ -696,6 +701,16 @@ ranked.
   with multi-channel input and `'same'` padding - the current design needs no
   backprop-through-convolution since nothing before its one layer is ever trained; stacking would
   change that. Not yet started.
+- **An array-based (Rust-matmul-backed) Adam sibling** - `AdamBackpropClassifierNetwork` (see
+  [Adam optimizer](adam-optimizer.md)) is still built on the per-node `BackpropNode` object graph,
+  not `VectorizedMultiClassBackpropClassifierNetwork`'s own `ArrayLayer`/batched-matmul design
+  (`forward_batch`/`compute_hidden_delta_batch`/`accumulate_gradient_batch`, backed by the Rust
+  `indrajala_ml_array` crate's AVX2 matmul kernels - see "vectorized array-based classes" above).
+  Extending that existing pattern to Adam - an `ArrayLayer` variant holding `m`/`v` state as
+  arrays, with the bias-corrected update expressed as one vectorized op per layer instead of a
+  per-node loop - looks feasible without any new numeric-kernel work, since the matmul/SIMD
+  infrastructure is already proven; the real cost is the same correctness-parity validation every
+  array-based sibling here has paid against its per-node reference. Not yet started.
 
 ### infrastructure that protects the rigor
 
