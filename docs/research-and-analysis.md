@@ -732,3 +732,65 @@ is the more striking one: `dimension=784, hidden=30` is exactly the shape where 
 dominates most, and the Rust/numpy ratio nearly doubled. **Decision: adopted.** Unlike the
 `batch_size >= 32` work above (which targeted a shape no production path uses), this closes a gap
 in the shape *every* production training step actually runs.
+
+## Iris: two different reasons a linear classifier can hit a ceiling
+
+**Question:** every existing `LinearClassifierNetwork` ceiling demo uses a synthetic target
+(XOR's two diagonally opposite quadrants) chosen specifically to be inexpressible by any
+`required_active`/cardinality combination. Does a *real* dataset's linear-separability ceiling
+behave the same way, and does `BackpropClassifierNetwork` clear it the same way it clears XOR's?
+
+**Setup.** Fisher's Iris (1936, `iris_data.py`, bundled as `data/iris/iris.csv` the same way UCI
+digits is) - 150 rows, 4 real-valued measurements (sepal/petal length/width, min-max normalized
+to `[0.0, 1.0]` against the dataset's own known min/max), 3 species, class-balanced 50/50/50.
+Iris is famous for exactly one linear-separability split: setosa vs. the other two species is
+perfectly separable; versicolor vs. virginica is not. **Verified directly, not taken on
+folklore**: a one-time linear-programming feasibility check (`scipy.optimize.linprog`, checking
+whether `label * (w·x + b) >= 1` has *any* feasible `(w, b)` over the 100 versicolor+virginica
+rows) reported the versicolor-vs-virginica separating-hyperplane problem **infeasible** - a
+mathematical certainty, not an approximation. (A hard-margin SVM check run alongside this landed
+on 97% training accuracy as its best hyperplane, but that's an artifact of a numerically stiff
+QP near infeasibility, not the true best-possible-by-any-hyperplane figure - the LP feasibility
+check is the authoritative one; the perceptron itself, below, found runs beating 97%.)
+
+**Setosa-vs-rest: converges, as the theorem promises.** A cardinality=1 perceptron reliably
+reaches 1.000 training accuracy given enough epochs - verified across 5 random seeds at 100
+epochs, all 5 converged (best epoch anywhere from 6 to 42) - the same convergence guarantee
+[theory](theory.md)'s single-neuron case has for linearly separable data.
+
+**Versicolor-vs-virginica: a real, confirmed ceiling, structurally different from XOR's.**
+Sweeping cardinality 1-3 across AND/OR/majority gates (`demo_iris_linear_classifier_ceiling.py`,
+300 epochs each) never reaches 1.000 - best seen typically ~0.98-0.99, consistent with the LP
+result above. But this is not XOR's kind of ceiling: XOR is a *shape* (two diagonally opposite
+quadrants) that literally no monotonic combination of half-planes can express, at any accuracy.
+Versicolor-vs-virginica is representable almost perfectly by a single half-plane - the ceiling
+here is caused by a handful of genuinely ambiguous points (real biological measurement overlap
+between the two species), not a representational gap.
+
+**Does backprop close it, the way it closes XOR's? Measured: mostly no.**
+`demo_iris_backprop_versus_perceptron.py` trained both a cardinality=1 perceptron and a
+`BackpropClassifierNetwork([4])` on the same versicolor-vs-virginica split, repeated across 10
+different 80/20 train/test splits (a single 20-example test set is too small and noisy to trust
+alone) and averaged:
+
+| measurement | perceptron | backprop |
+|---|---|---|
+| mean training accuracy | ~0.97 | ~0.97 |
+| mean held-out test accuracy | ~0.92 | ~0.95 |
+
+Training accuracy is a **genuine null** - both plateau at essentially the same ceiling, across
+architectures up to `[8, 4]` and learning rates from 0.5 to 2.0 tried during investigation, none
+moving the needle. This makes sense once the cause is understood: backprop's extra capacity
+helps when the target has a *shape* no linear gate can express (XOR); it doesn't help when the
+ceiling is caused by real ambiguity in the data itself; there's no cleaner boundary hiding in the
+same 4 features for a more expressive model to find. Where backprop *does* show a real, if
+modest, difference is held-out generalization - its smoother, differentiable decision boundary
+generalizes a bit better across repeated splits, even though it fits the training data no better.
+**Decision: report both results as measured** - a smaller, more honest finding than "backprop
+wins," and a useful contrast against the XOR case for exactly why that dramatic result doesn't
+generalize to every ceiling a linear classifier can hit.
+
+Along the way, `dataset_utils.py` was split out of `digits_data.py` (which now re-exports
+`split_train_test` unchanged for every existing caller) so `iris_data.py` could reuse the same
+shuffle-and-split logic instead of duplicating it - the DRY violation the project's own earlier
+audit (PR #200) was written to catch, avoided here before it happened rather than fixed after.

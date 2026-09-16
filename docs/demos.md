@@ -112,7 +112,8 @@ mismatch visually.
 Select **XOR: backprop convergence** from the menu it prints.
 
 Runs `indrajala_ml/demos/demo_xor_backprop_convergence.py` - the direct counterpart to the demo above, using
-the exact same `XORTarget` (imported from `demo_xor_linear_classifier_ceiling.py`, not reimplemented)
+the same `XORTarget` shape as `demo_xor_linear_classifier_ceiling.py`'s (an independent copy, not
+imported - each demo script stays independently readable/runnable without tracing into another one)
 and the exact same `random_alternating_training_data`/`train_linear_classifier_network` calls,
 but training a `BackpropClassifierNetwork` (see [structure](structure.md#backprop)) instead of a
 `LinearClassifierNetwork`. Where every configuration in the previous demo plateaus well short of
@@ -122,6 +123,39 @@ monotonically increase how likely it is to fire. Prints the same kind of `.diagn
 as every other training demo, then plots the training data over a probability heatmap
 (`chart.plot_classifier_probability_heatmap`) instead of decision lines, since the learned
 region isn't a union of half-planes a line can represent.
+
+## demo: Iris linear-classifier ceiling
+
+    . cli demo
+
+Select **Iris: linear-classifier ceiling** from the menu it prints.
+
+Headless, console-only. Runs `indrajala_ml/demos/demo_iris_linear_classifier_ceiling.py` - the
+first demo in this repo to train a `LinearClassifierNetwork` on real data (`iris_data.py`,
+Fisher's Iris) instead of a synthetic 2D geometric target. Trains a cardinality=1 perceptron on
+setosa-vs-rest (converges to 1.000, since that split is genuinely linearly separable - the same
+convergence guarantee [theory](theory.md)'s single-neuron case has), then sweeps
+cardinality/gate configurations on versicolor-vs-virginica the same way the XOR ceiling demo
+does. None reach 1.000 there - confirmed via a one-time linear-programming feasibility check
+that the true separating-hyperplane problem is infeasible on that split, not assumed - a
+different kind of ceiling than XOR's inexpressible shape: this one is caused by genuine
+feature-space overlap between the two species, representable almost perfectly, just not exactly.
+
+## demo: Iris backprop vs. perceptron on a real ceiling
+
+    . cli demo
+
+Select **Iris: backprop vs. perceptron on a real ceiling** from the menu it prints.
+
+Headless, console-only. Runs `indrajala_ml/demos/demo_iris_backprop_versus_perceptron.py` - the
+direct counterpart to the Iris ceiling demo above, asking whether `BackpropClassifierNetwork`'s
+trained output layer closes that ceiling the way it closes XOR's. Repeats an 80/20 train/test
+split 10 times (a single 20-example test set is too small and noisy to trust alone) and averages
+perceptron vs. backprop training and held-out accuracy. Measures a genuine null on training
+accuracy - both plateau at roughly the same ~0.97, since extra capacity doesn't help when the
+ceiling's cause is real data ambiguity rather than an inexpressible shape - but backprop's mean
+held-out test accuracy comes out measurably higher, a smaller and more honest result than "backprop
+wins" reported as measured rather than rounded up to match the more dramatic XOR story.
 
 ## demo: backprop stripes architecture sweep
 
