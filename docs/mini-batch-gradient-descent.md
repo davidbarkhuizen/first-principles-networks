@@ -60,7 +60,7 @@ purpose was purely to unblock the momentum retest below, and to lay groundwork t
 prerequisite for (but independent of) [the vectorized classes](structure.md#vectorized-array-based-classes)'
 own batched design.
 
-## the momentum retest: suggestive, but confounded
+## the momentum retest: settled, not just suggestive
 
 `MomentumBackpropClassifierNetwork` exists and is tested, but was measured
 (see [research and analysis](research-and-analysis.md#momentum-measured-not-worth-adopting)) to
@@ -72,14 +72,18 @@ momentum's own literature is validated against, so accumulating velocity across 
 steps amplifies noise instead of smoothing signal. This mini-batch infrastructure exists to
 re-test that hypothesis under lower-noise batch gradients.
 
-The retest (momentum coefficients 0.0-0.9 crossed with batch sizes 1/8/32/128, 10 seeds each, 200
-runs on the same real-MNIST proxy the original investigation used) came back inconclusive, not a
-clean win: `batch_size=1`/`8` (closest to the original per-example regime) still shows no clear
-momentum benefit, matching the original finding; `batch_size=32`/`128` shows a striking rescue
-effect from higher momentum, but it's confounded with `learning_rate=0.5` never being scaled up
-for larger batches (the standard mini-batch SGD practice this sweep didn't apply), not clean
-evidence for the original gradient-noise hypothesis. See
-[research and analysis](research-and-analysis.md#momentum-under-mini-batch-gradients) for the
-full numbers. `MomentumBackpropClassifierNetwork` remains not adopted as a default. A follow-up
-sweep that scales `learning_rate` with `batch_size` could still change that, but hasn't been run
-- see [structure](structure.md#possible-next-steps).
+The first retest (momentum coefficients 0.0-0.9 crossed with batch sizes 1/8/32/128, 10 seeds
+each, 200 runs on the same real-MNIST proxy the original investigation used) came back
+inconclusive: `batch_size=1`/`8` still showed no clear momentum benefit, but `batch_size=32`/`128`
+showed a striking rescue effect from higher momentum, confounded with `learning_rate=0.5` never
+being scaled up for larger batches (the standard mini-batch SGD practice that sweep didn't apply).
+
+A follow-up sweep scaling `learning_rate` with `batch_size` (the linear scaling rule) resolved the
+confound cleanly: at `batch_size=32` with a properly-scaled rate, `momentum=0.0` alone matches
+`batch_size=1`'s own baseline accuracy - the earlier "rescue" was the untuned learning rate, not
+momentum. With the confound removed, momentum is flat-to-actively-harmful (lower mean, much higher
+variance) at every batch size that trains stably. See
+[research and analysis](research-and-analysis.md#the-learning-rate-vs-batch-size-follow-up-the-confound-was-real-and-momentum-still-doesnt-help)
+for the full numbers, including the separate finding that naive linear learning-rate scaling
+diverges entirely at `batch_size=128` regardless of momentum. `MomentumBackpropClassifierNetwork`
+remains not adopted as a default - this question is now considered settled rather than open.

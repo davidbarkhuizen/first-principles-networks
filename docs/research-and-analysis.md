@@ -333,6 +333,58 @@ isolate. **Decision:** not a clean confirmation or reversal - `MomentumBackpropC
 remains not adopted as a default. A follow-up sweep scaling `learning_rate` with `batch_size`
 would be needed to isolate the effect cleanly; not yet run.
 
+## the learning-rate-vs-batch-size follow-up: the confound was real, and momentum still doesn't help
+
+The follow-up flagged above, run to isolate the previous entry's large-batch momentum "rescue"
+from the untuned-learning-rate confound it identified. Identical setup (same 320-example
+real-MNIST digit-3 proxy, fan-in-aware init, `[16]` hidden, 5 epochs, momentum 0.0-0.9 crossed
+with batch sizes 1/8/32/128, 10 seeds each, 200 runs, parallelized the same fork-based way, ~25.3
+minutes wall-clock) with one change: `learning_rate` now scales with `batch_size` via the
+standard mini-batch "linear scaling rule" (`learning_rate = 0.5 * batch_size` - 0.5/4.0/16.0/64.0)
+instead of a fixed 0.5.
+
+| momentum | batch_size=1 (lr=0.5) | batch_size=8 (lr=4.0) | batch_size=32 (lr=16.0) | batch_size=128 (lr=64.0) |
+|---|---|---|---|---|
+| 0.0 | 92.33% ± 0.38% | 92.39% ± 0.71% | **92.20% ± 1.00%** | 56.10% ± 11.48% |
+| 0.3 | 91.99% ± 0.41% | 91.67% ± 0.49% | 92.28% ± 0.62% | 58.05% ± 11.15% |
+| 0.5 | 91.71% ± 0.46% | 91.60% ± 1.10% | 91.62% ± 0.75% | 58.46% ± 16.53% |
+| 0.7 | 91.98% ± 0.78% | 91.96% ± 0.82% | 91.77% ± 0.81% | 57.47% ± 14.70% |
+| 0.9 | 88.58% ± 1.76% | 86.30% ± 10.97% | 87.47% ± 6.00% | 54.50% ± 12.51% |
+
+Two clean results, in opposite directions:
+
+- **The confound hypothesis is confirmed at `batch_size=32`.** With `learning_rate` properly
+  scaled, `momentum=0.0` alone reaches 92.20% ± 1.00% - matching `batch_size=1`'s own baseline
+  (92.33%) and *exceeding* the previous entry's own momentum=0.9-assisted "rescue" figure at this
+  batch size (91.64%) - with no momentum contribution at all. The previous sweep's rescue effect
+  was exactly what it was flagged as being: an artifact of the untuned learning rate, not evidence
+  that momentum helps under lower-noise mini-batch gradients. Once the confound is removed,
+  momentum has nothing left to rescue.
+- **Momentum still doesn't help, and the picture against it gets stronger, not weaker.** At every
+  batch size where training is stable (1, 8, 32), `momentum=0.9` is now both lower-mean and
+  higher-variance than `momentum=0.0` - most strikingly at `batch_size=8`, where it drops to
+  86.30% with a 10.97-point stdev (individual seeds visibly diverging), compared to `momentum=0.0`'s
+  tight 92.39% ± 0.71%. Under a properly-scaled learning rate, momentum is actively
+  destabilizing, not neutral-to-harmful the way the original per-example finding suggested - the
+  clearest evidence yet against adopting it.
+- **`batch_size=128`'s `lr=64.0` diverges completely, independent of momentum.** Every momentum
+  value collapses to a coin-flip 54-58% with double-digit stdevs - a real training-instability
+  regime, not a null result to read anything into. A 128x learning-rate multiplier from a single
+  update step is a large first move in weight-space regardless of what comes after; this matches
+  real large-batch-training practice (e.g. Goyal et al. 2017's own linear-scaling-rule paper pairs
+  it with a *gradual warmup*, specifically because applying the full scaled rate from step one is
+  unstable) - this codebase's version of that same finding, hit directly rather than assumed.
+
+**Decision:** the original momentum-under-mini-batch-gradients question (does momentum help more
+once gradients are less noisy) is now cleanly answered: **no** - once the learning-rate confound
+is removed, momentum is flat-to-harmful at every batch size that trains stably, and the earlier
+"rescue" at `batch_size=32`/`128` fully explained by the untuned rate rather than by momentum
+itself. `MomentumBackpropClassifierNetwork` remains not adopted as a default, on stronger evidence
+than before. The `batch_size=128` divergence is a separate, real finding of its own (naive linear
+LR scaling needs warmup to be usable at large batch multipliers) - not investigated further here,
+since it answers "is scaling alone sufficient" (no) rather than the momentum question this sweep
+was designed around.
+
 ## convolutional layers on UCI digits
 
 [Convolutional layers](convolutional-layers.md)'s `ConvMultiClassBackpropClassifierNetwork` was
