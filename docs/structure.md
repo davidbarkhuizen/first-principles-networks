@@ -631,8 +631,31 @@ accuracy.
 ## possible next steps
 
 What's next for this codebase, given the architecture and measured results described above (see
-[research and analysis](research-and-analysis.md) for the investigations behind each decision),
-ordered roughly by how directly each follows from an existing finding here, not by priority.
+[research and analysis](research-and-analysis.md) for the investigations behind each decision).
+Grouped by [goals and strategy](goals-and-strategy.md)'s own three-tier priority order (new
+measured primitives, then deepening existing work, then rigor-protecting infrastructure) - see
+that document for the reasoning behind the ordering itself; within a tier, items aren't otherwise
+ranked.
+
+### new model primitives, measured the existing way
+
+- **An optimizer beyond plain SGD/momentum** (Adam, RMSprop) - hand-derived and checked against
+  the existing SGD/momentum baseline the same way every other backprop sibling was (see "backprop
+  siblings" above). Momentum itself measured as a null on every scenario tried; a per-parameter
+  adaptive learning rate is a different enough mechanism to be worth its own measurement rather
+  than assumed to fare the same way. Not yet started.
+- **A learning-rate schedule** (decay/warmup) - every training loop here uses one fixed
+  `learning_rate` for all epochs; untested whether a schedule changes convergence or final
+  accuracy on any of this codebase's targets. Not yet started.
+- **Dropout** - no regularization beyond L2 exists (L2 itself a measured null - see "backprop
+  siblings"); dropout is structurally different (stochastic, applied at the activation, not a
+  gradient penalty), so it isn't assumed to land the same way. Not yet started.
+- **Batch or layer normalization** - no normalization exists at all; likely the highest-value item
+  in this group once hidden layers get deeper than 1-2, but also the biggest lift of anything
+  here (running statistics, a train/eval-mode split - real complexity beyond the existing
+  siblings' pattern). Not yet started.
+
+### deepening what's already here
 
 - **A learning-rate-vs-batch-size sweep**, to isolate the momentum re-test's large-batch rescue
   effect from the untuned-learning-rate confound identified above (scale `learning_rate` with
@@ -645,16 +668,32 @@ ordered roughly by how directly each follows from an existing finding here, not 
   [research and analysis](research-and-analysis.md#the-ensemblereal-mnist-investigation)), a
   real wall-clock cost this UCI-digits result alone doesn't settle is worth spending. Not yet
   run.
+- **Stacking conv layers, and pooling** - `conv_layer.py`'s own docs (see "convolutional layer"
+  above) name both as explicitly out of scope for the current single-conv-layer design, along
+  with multi-channel input and `'same'` padding - the current design needs no
+  backprop-through-convolution since nothing before its one layer is ever trained; stacking would
+  change that. Not yet started.
+
+### infrastructure that protects the rigor
+
 - **CI** (e.g. GitHub Actions running `pytest` on push/PR) - the one item here that's pure
-  engineering, not ML content. Nothing currently protects this test suite (320 tests as of this
-  writing, many pinned to hand-derived or empirically-measured expected values) from silently
-  regressing. **Blocked on solving where the reference MNIST dataset comes from first**:
+  engineering, not ML content. Nothing currently protects this test suite (845 tests as of this
+  writing - 320 top-level Python plus 525 more running the Rust crate's own parity suite via
+  `python -m pytest rust/perceptron_array/tests tests`, many of both pinned to hand-derived or
+  empirically-measured expected values) from silently regressing. **Blocked on solving where the
+  reference MNIST dataset comes from first**:
   `test_mnist_data.py`'s tests need the real MNIST parquet/binary files, which are gitignored
   with no scripted fetch step anywhere in this codebase - supplied locally, by hand, whenever a
   dev checkout needs them (see [setup](setup.md)). Building CI without first deciding how a
   fresh checkout gets that data (a public mirror to fetch from? a repo secret + private download
   step? committing a small stratified subset instead of the full dataset?) means shipping CI
   that quietly can't protect part of the suite, not a real fix.
+- **A Python package config** (`pyproject.toml`/`setup.py`) - only the Rust crate has real
+  packaging today, via `maturin`; the Python side is checkout-and-run only, not installable or
+  versioned.
+- **Dependency pinning** - `requirements.txt` lists 4 unpinned packages (`matplotlib`, `pytest`,
+  `pyarrow`, `numpy`) and there's no lock file - a reproducibility gap for anyone re-running a
+  measurement from a different checkout and getting a different transitive dependency version.
 
 Matmul performance is no longer on this list: both gaps this codebase's real training paths could
 hit (the `batch_size >= 32` 2D×2D case and the `batch_size=1` `Matrix @ Vector`/`Vector @ Matrix`

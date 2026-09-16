@@ -52,18 +52,19 @@ a better model than what already exists off the shelf.
 Work that deepens the first-principles rigor this project already has, in roughly this order of
 fit:
 
-1. **New model primitives built and measured the existing way** - an optimizer (Adam/RMSprop), a
-   learning-rate schedule, dropout, batch normalization - each as a hand-derived sibling, checked
-   against a reference the way every existing sibling was, with the measurement (does it actually
-   help, on what, by how much) written up regardless of outcome.
-2. **Deepening what's already here** - stacking conv layers, pooling, a real learning-rate-vs-
-   batch-size sweep (already identified as an open question in
-   [structure](structure.md#possible-next-steps)), a real-MNIST-scale conv validation.
-3. **Infrastructure that removes friction from doing (1) and (2) honestly** - CI, so a change
-   can't silently break the numbers a decision was based on; a Python package config, so the
-   project is easy to actually check out and use; dependency pinning, so a measurement is
-   reproducible. These are worth doing because they protect the rigor, not because they make the
-   project look more like a product.
+1. **New model primitives built and measured the existing way** - each as a hand-derived sibling,
+   checked against a reference the way every existing sibling was, with the measurement (does it
+   actually help, on what, by how much) written up regardless of outcome.
+2. **Deepening what's already here** - extending an existing mechanism (the conv layer, an
+   open measurement question already on record) rather than adding a structurally new one.
+3. **Infrastructure that removes friction from doing (1) and (2) honestly** - protects the rigor
+   (a change can't silently break the numbers a decision was based on, a measurement stays
+   reproducible from a fresh checkout) - worth doing for that reason, not to make the project look
+   more like a product.
+
+See [structure](structure.md#possible-next-steps) for the concrete, current candidates in each
+tier - kept there, alongside the architecture they'd extend, rather than duplicated here where the
+two lists could drift out of sync with each other.
 
 ## anti-goals: what this project does not chase
 
