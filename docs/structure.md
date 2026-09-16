@@ -63,6 +63,13 @@ indrajala_ml/
                                      weight update, bias excluded (see "backprop siblings")
     l2_regularized_backprop_classifier_network.py  L2-regularized sibling of
                                      backprop_classifier_network.py (see "backprop siblings")
+    adam_layer.py                   make_adam_node_cls/make_adam_layer_cls — factory functions
+                                     giving every trainable layer's weight update a per-parameter
+                                     adaptive learning rate (Kingma & Ba, 2014) - bias-corrected
+                                     running mean/variance estimates per weight, not momentum's
+                                     single shared velocity term (see "backprop siblings")
+    adam_backprop_classifier_network.py  Adam sibling of backprop_classifier_network.py (see
+                                     "backprop siblings", docs/adam-optimizer.md)
     conv_kernel.py                  ConvKernel — one output channel's shared, trainable
                                      kernel weights/bias, with its own accumulate_gradient/
                                      apply_accumulated_gradient pair (see "convolutional layer")
@@ -257,7 +264,8 @@ tests/                           one file per module under test, plus test_train
   test_softmax_multiclass_training_pipeline.py, test_fan_in_aware_backprop_model.py,
   test_binary_cross_entropy_backprop_model.py, test_relu_layer.py, test_relu_backprop_model.py,
   test_momentum_layer.py, test_momentum_backprop_model.py, test_l2_regularization_layer.py,
-  test_l2_regularized_backprop_model.py       one file per backprop sibling class and its underlying
+  test_l2_regularized_backprop_model.py, test_adam_layer.py, test_adam_backprop_model.py
+                                   one file per backprop sibling class and its underlying
                                    node/layer machinery (see "backprop siblings"), each with the same
                                    hand-computed-forward/backward-pass pattern as test_backprop_model.py
   test_backprop_layer.py, test_backprop_constructor_validation.py  shared BackpropLayer behavior
@@ -381,10 +389,11 @@ the training loop only ever treats the snapshot as opaque, so this is invisible 
 
 ## backprop siblings
 
-Five additive siblings of `BackpropClassifierNetwork` exist alongside it - each isolating one
+Six additive siblings of `BackpropClassifierNetwork` exist alongside it - each isolating one
 axis of variation (init scheme, hidden-layer activation, output loss, optimizer, regularization),
-none replacing it or changing any existing demo, and each backed by a real measurement in
-[research and analysis](research-and-analysis.md) rather than assumed to help:
+none replacing it or changing any existing demo, and each (except the newest, not yet measured -
+see below) backed by a real measurement in [research and analysis](research-and-analysis.md)
+rather than assumed to help:
 
 - **`FanInAwareBackpropClassifierNetwork`** swaps in the same fan-in-aware `randomize()` scheme
   `MultiClassBackpropClassifierNetwork` already uses (below) instead of
@@ -418,15 +427,27 @@ none replacing it or changing any existing demo, and each backed by a real measu
   held-out accuracy above the unregularized baseline, though the mechanism itself was confirmed
   directly (a strong enough penalty collapses the network to a constant prediction, weights
   decayed to near-zero - see "L2 weight regularization").
+- **`AdamBackpropClassifierNetwork`** sets both hooks the same way too - a per-parameter
+  adaptive learning rate (Kingma & Ba, 2014), driven by bias-corrected running estimates of each
+  weight's own gradient mean and variance, rather than momentum's single shared velocity term.
+  Unlike `Momentum...`/`L2Regularized...`, its `beta1`/`beta2`/`epsilon` default to Kingma & Ba's
+  own published values rather than requiring an explicit value - see `adam_layer.py`'s own
+  docstring for why (they're closer to fixed algorithmic constants in real-world Adam usage than
+  a knob this codebase's measurements have an opinion on, unlike momentum's coefficient).
+  **Built and correctness-tested (hand-derived regression fixtures, the same convention as every
+  sibling above) but not yet measured against the SGD/momentum baseline** - see
+  [Adam optimizer](adam-optimizer.md) for the measurement plan.
 
-Of these five, two (`FanInAware...`, `ReLU...`) are genuine, measured improvements over the
+Of these six, two (`FanInAware...`, `ReLU...`) are genuine, measured improvements over the
 plain sigmoid/quadratic-loss/no-momentum/no-regularization baseline; one
 (`BinaryCrossEntropy...`) matches it once retuned; two (`Momentum...`, `L2Regularized...`) are
 kept as real, tested capabilities despite measuring as nulls on the scenarios tested, not
-because either is recommended for use today. `demo_backprop_variant_comparison.py` reproduces
-three of these comparisons (one-vs-rest vs softmax, quadratic vs binary cross-entropy,
-fan-in-aware vs Xavier/Glorot init - see [demos](demos.md#demo-backprop-variant-comparison)) live
-and re-runnably, rather than leaving the documented numbers only readable.
+because either is recommended for use today; `Adam...` is a real, correctness-tested capability
+whose own measurement is still open (see [Adam optimizer](adam-optimizer.md)).
+`demo_backprop_variant_comparison.py` reproduces three of these comparisons (one-vs-rest vs
+softmax, quadratic vs binary cross-entropy, fan-in-aware vs Xavier/Glorot init - see
+[demos](demos.md#demo-backprop-variant-comparison)) live and re-runnably, rather than leaving the
+documented numbers only readable.
 
 ## multi-class
 
