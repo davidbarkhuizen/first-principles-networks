@@ -1,6 +1,11 @@
+import random
+from typing import Callable
+
+import numpy as np
 import pytest
 
 from perceptron.model.linear_classifier_network import LinearClassifierNetwork
+from perceptron.model.multiclass_backprop_classifier_network import MultiClassBackpropClassifierNetwork
 
 
 def assert_save_and_load_round_trip(network, load_fn, tmp_path, filename: str, states):
@@ -67,6 +72,102 @@ def wire_fixed_single_hidden_node(network) -> None:
     hidden_node.bias = 0.1
     output_node.update_input_weights([0.8])
     output_node.bias = -0.2
+
+
+def matching_array_backprop_networks(
+    rng: random.Random,
+    array_network_cls,
+    wrap: Callable,
+    layer_sizes: list[int],
+    dimension: int,
+    class_count: int,
+    bounds: float = 10.0,
+):
+    """
+    Shared by test_vectorized_multiclass_backprop_model.py's and
+    test_rust_array_multiclass_backprop_model.py's own _matching_networks: builds a
+    MultiClassBackpropClassifierNetwork and an array-backed sibling
+    (VectorizedMultiClassBackpropClassifierNetwork / RustArrayMultiClassBackpropClassifierNetwork,
+    passed as array_network_cls) with identical injected weights. Neither array backend's RNG
+    stream is meaningfully comparable to Python's random module (see docs/rust-array-core.md's
+    "the RNG exception"), so initial weights are always forced identical explicitly here instead
+    of via each network's own randomize(). `wrap` converts a nested Python list of weights (or a
+    flat list of biases) into the array backend's own array type - np.array for the numpy
+    sibling, pa.Array for the Rust one.
+    """
+    node_network = MultiClassBackpropClassifierNetwork(
+        layer_sizes, dimension, [(-bounds, bounds)] * dimension, class_count
+    )
+    array_network = array_network_cls(layer_sizes, dimension, class_count)
+
+    previous_size = dimension
+    for layer_index, size in enumerate([*layer_sizes, class_count]):
+        weights = [[rng.uniform(-2.0, 2.0) for _ in range(previous_size)] for _ in range(size)]
+        biases = [rng.uniform(-2.0, 2.0) for _ in range(size)]
+
+        node_layer = node_network.trainable_layers[layer_index]
+        for node, node_weights, bias in zip(node_layer.nodes, weights, biases):
+            node.update_input_weights(node_weights)
+            node.bias = bias
+
+        array_network.layers[layer_index].W = wrap(weights)
+        array_network.layers[layer_index].b = wrap(biases)
+
+        previous_size = size
+
+    return node_network, array_network
+
+
+def assert_array_network_weights_match(node_network, array_network, rtol=1e-9, atol=1e-9) -> None:
+    """
+    Shared by both array-backed siblings' own _assert_networks_match: both numpy ndarrays and
+    pa.Array support .tolist(), so the same comparison works against either backend without
+    needing a backend-specific read path.
+    """
+    for node_layer, array_layer in zip(node_network.trainable_layers, array_network.layers):
+        expected_W = np.array([node.input_node_weights for node in node_layer.nodes])
+        expected_b = np.array([node.bias for node in node_layer.nodes])
+        assert np.allclose(array_layer.W.tolist(), expected_W, rtol=rtol, atol=atol)
+        assert np.allclose(array_layer.b.tolist(), expected_b, rtol=rtol, atol=atol)
+
+
+def assert_array_network_snapshot_restore_round_trip(
+    array_network_cls, layer_sizes: list[int], dimension: int, class_count: int
+) -> None:
+    """
+    Shared by both array-backed siblings' own test_snapshot_restore_round_trips_weights - same
+    .tolist()-based equality reasoning as assert_array_network_weights_match above.
+    """
+    network = array_network_cls.randomized(layer_sizes, dimension, class_count)
+    snapshot = network.snapshot()
+
+    other = array_network_cls(layer_sizes, dimension, class_count)
+    other.restore(snapshot)
+
+    for (W1, b1), (W2, b2) in zip(network.snapshot(), other.snapshot()):
+        assert W1.tolist() == W2.tolist()
+        assert b1.tolist() == b2.tolist()
+
+
+def assert_array_network_save_load_round_trip(network, load_fn, tmp_path, filename: str, state):
+    """
+    Array-backed analogue of assert_save_and_load_round_trip above: a numpy/pa.Array snapshot
+    element doesn't support a plain == equality check the way a node network's snapshot() does
+    (it's elementwise, not a single bool), so this checks the JSON envelope's scalar fields plus
+    predict_probabilities via pytest.approx instead of snapshot() equality. Shared by both
+    test_vectorized_multiclass_backprop_model.py's and
+    test_rust_array_multiclass_backprop_model.py's own test_save_load_round_trips_weights_and_predictions.
+    """
+    path = str(tmp_path / filename)
+    network.save(path)
+    loaded = load_fn(path)
+
+    assert loaded.layer_sizes == network.layer_sizes
+    assert loaded.dimension == network.dimension
+    assert loaded.class_count == network.class_count
+    assert loaded.predict_probabilities(state) == pytest.approx(network.predict_probabilities(state))
+
+    return loaded
 
 
 def classifier_with_bounded_square_region(bounds: list[tuple[float, float]]) -> LinearClassifierNetwork:

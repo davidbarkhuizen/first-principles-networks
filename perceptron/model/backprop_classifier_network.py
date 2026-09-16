@@ -43,17 +43,7 @@ class BackpropClassifierNetwork(BackpropNetworkBase):
         self._apply_gradients(learning_rate)
 
     def learn_batch(self, learning_rate: float, batch: Sequence[tuple[tuple[float, ...], float]]) -> None:
-        # the batch-shaped analogue of learn(): forward+backward+accumulate once per example,
-        # then a single averaged weight update - batch_size=1 (a one-element batch) is required
-        # to match learn()'s own result exactly, since apply_accumulated_gradient's batch_size=1
-        # case is already proven bit-identical to apply_gradient (see
-        # tests/test_gradient_accumulation.py)
-        assert len(batch) >= 1, "batch must not be empty"
-        for state, category in batch:
-            self._forward(state)
-            self._backward(category)
-            self._accumulate_gradients()
-        self._apply_accumulated_gradients(learning_rate, len(batch))
+        self._learn_batch(learning_rate, batch)
 
     def _backward(self, reference_value: float) -> None:
         self.output_layer.nodes[0].compute_output_delta(reference_value)
