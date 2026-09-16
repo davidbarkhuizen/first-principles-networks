@@ -659,3 +659,13 @@ most trials, versus the 1.19x-1.21x (Rust slower) recorded after threading alone
 adopted** - this was the last candidate docs/rust-production-cutover.md identified for closing
 the `batch_size >= 32` gap, and unlike blocking/threading it closes it in Rust's favor rather than
 just narrowing it.
+
+**AVX-512 checked and ruled out - not a further candidate on this machine**: `/proc/cpuinfo`/
+`lscpu`'s flags list `avx`/`avx2` but no `avx512*` variant. This machine's CPU (AMD Ryzen 7 3700U,
+Zen+/"Picasso", a 2019 mobile part) predates AMD's AVX-512 support entirely - that arrived with
+Zen 4 in 2022. AVX2's 256-bit registers (4 `f64` lanes/instruction) are this hardware's actual
+ceiling, so `axpy_row_avx2_fma` is already using the widest vector width available here; there is
+no `_mm512_fmadd_pd` upside to chase on this machine. (Would need re-checking on different
+hardware - `axpy_row`'s runtime `is_x86_feature_detected!` gate means a future AVX-512-capable
+machine falls back to the AVX2 path today, not a crash, but also not the extra width until an
+AVX-512 path is added.)
