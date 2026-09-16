@@ -41,3 +41,28 @@ pub fn sum_axis0(arr: &RustArray) -> PyResult<RustArray> {
         )),
     }
 }
+
+/// The index of the largest element in a 1D array - `classify_state`'s own
+/// `np.argmax(self.predict_probabilities(state))`. Strict `>` (not `>=`) when scanning left to
+/// right keeps the first occurrence on a tie, matching numpy's own `np.argmax` tie-breaking rule
+/// - a real behavioral detail to match, not assume (see docs/rust-array-core.md's own "PR 6").
+#[pyfunction]
+pub fn argmax(arr: &RustArray) -> PyResult<usize> {
+    match arr.shape {
+        Shape::Vector(n) => {
+            if n == 0 {
+                return Err(PyValueError::new_err("argmax of an empty array"));
+            }
+            let mut best_index = 0;
+            let mut best_value = arr.data[0];
+            for i in 1..n {
+                if arr.data[i] > best_value {
+                    best_value = arr.data[i];
+                    best_index = i;
+                }
+            }
+            Ok(best_index)
+        }
+        Shape::Matrix(_, _) => Err(PyValueError::new_err("argmax requires a 1D array")),
+    }
+}
