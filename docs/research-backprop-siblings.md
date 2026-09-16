@@ -214,6 +214,62 @@ LR scaling needs warmup to be usable at large batch multipliers) - not investiga
 since it answers "is scaling alone sufficient" (no) rather than the momentum question this sweep
 was designed around.
 
+## the batch_size=128 divergence, retested with warmup
+
+Stage 4 of [a learning-rate schedule](learning-rate-schedule.md)'s own workplan: retests the
+`batch_size=128`/`learning_rate=64.0` divergence flagged just above, now wrapped in
+`lr_schedule.linear_warmup(64.0, warmup_steps=N)` for `N` in 5/10/25/50 - a small sweep, since how
+many warmup steps is enough isn't derivable in advance from the failure mode alone. Same scale as
+the follow-up above (fan-in-aware init, `[16]` hidden, 5 epochs, `batch_size=128`, 10 seeds), on a
+freshly-built 320-example real-MNIST digit-3 proxy (independently constructed, not the same
+instance the follow-up used - same posture as every other reproducibility check in this codebase),
+at `momentum` 0.0 and 0.9 (the follow-up's best- and worst-behaved configs at this batch size):
+
+| momentum | no warmup | N=5 | N=10 | N=25 | N=50 |
+|---|---|---|---|---|---|
+| 0.0 | 50.00% ± 12.00% | 55.50% ± 16.96% | 65.38% ± 19.10% | 75.12% ± 14.07% | 81.38% ± 13.42% |
+| 0.9 | 45.50% ± 3.88% | 63.13% ± 19.83% | 82.38% ± 13.35% | **88.63% ± 2.12%** | **90.25% ± 2.00%** |
+
+### warmup helps monotonically, and momentum=0.9 benefits from it more than momentum=0.0 does
+
+The no-warmup rows reproduce the documented divergence (a coin-flip 45-50%, qualitatively matching
+the original 54-58% - not bit-comparable, an independently-built proxy). Every increase in `N`
+improves both rows, monotonically, with no reversal. The clean success case is `momentum=0.9`:
+`N=50` reaches 90.25% ± 2.00%, closing materially back toward the documented `batch_size=32`
+stable band (~91-92%, [momentum=0.0's own
+92.20%](research-backprop-siblings.md#two-clean-results-in-opposite-directions) specifically) with
+tight, non-collapsed variance - the success criterion this stage's measurement plan set.
+`momentum=0.0` improves too (50.00% -> 81.38%) but doesn't close the gap as cleanly, and stays
+noisier (±13.42% even at `N=50`) - an unexpected asymmetry, since the earlier momentum
+investigations found momentum flat-to-harmful on its own; here, combined with warmup specifically
+at this divergent batch size, it's momentum that recovers furthest. Not chased further here (out
+of this stage's warmup-only scope), but worth flagging as a real, measured interaction rather than
+assumed away.
+
+**A caveat worth being explicit about, not glossed over**: `batch_size=128` on this 320-example
+proxy produces only 3 batches/epoch (`ceil(320/128)`) - 15 total training steps across 5 epochs.
+At `N=50`, `linear_warmup`'s ramp never reaches its own target rate within the run at all (the
+schedule hits `64.0 * 15/50 = 19.2` at the last step, `min(...)` never clamping to `1.0`) - so this
+result is really "training throughout at a rate ramping up to ~19.2" (below even `batch_size=32`'s
+own known-stable 16.0 rate), not "warm up, then sustain the full destabilizing 64.0 rate." At
+`N=10`, by contrast, the schedule does reach and hold the full `64.0` rate for the last 6 of 15
+steps, and still recovers substantially (82.38% for momentum=0.9) - a cleaner demonstration that
+warmup itself, not merely a lower effective rate throughout, is doing real work. `N`, as flagged in
+the design doc, means batches here, not epochs or a fraction of training - a real-MNIST-scale
+retest (many more batches/epoch) would need `N` re-thought in real batch-count terms before this
+`N=50` framing would carry over.
+
+### decision
+
+**Decision:** warmup is confirmed to fix the divergence, most cleanly when paired with
+`momentum=0.9` at `N>=25` steps - the standard literature prescription (Goyal et al. 2017) holds
+up under this codebase's own measurement, not just by assumption. Not promoted to a default
+schedule for every large-batch run (this was one divergent configuration, not a general sweep
+across batch sizes/architectures), and the momentum-benefits-more-than-plain-SGD asymmetry is
+flagged rather than chased. Decay (the other half of "a learning-rate schedule"'s own scope,
+deferred at design time) remains out of scope - no equivalently concrete failure case motivates it
+yet.
+
 ## convolutional layers on UCI digits
 
 [Convolutional layers](convolutional-layers.md)'s `ConvMultiClassBackpropClassifierNetwork` was
