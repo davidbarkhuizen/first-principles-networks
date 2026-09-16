@@ -190,7 +190,9 @@ instead of per-layer), a separate, later piece of work from phase 1 itself, reco
 
 ## phase 1: `RustArrayLayer` / `RustArrayMultiClassBackpropClassifierNetwork`
 
-Only started once phase 0 clears its gate. Mirrors `ArrayLayer`/
+**Done** (`perceptron/model/rust_array_layer.py`, `perceptron/model/rust_array_multiclass_backprop_classifier_network.py`),
+built unconditionally per the 2026-09-16 clarification above, not gated on phase 0's benchmark
+split. Mirrors `ArrayLayer`/
 `VectorizedMultiClassBackpropClassifierNetwork`'s design exactly (same method names, same
 external contract: `learn`, `learn_batch`, `randomize`/`randomized`, `classify_state`,
 `predict_probabilities`, `snapshot`/`restore`, `save`/`load`), but every method body is a single
@@ -289,7 +291,11 @@ built-and-shipped plan in this codebase has been folded into `structure.md`.
    a split result (faster at `batch_size=1`, slower and widening from `batch_size=32` up).
    Per the 2026-09-16 clarification above, adoption is unconditional, so this data is a progress
    record, not a gate phase 1 had to clear.
-5. `RustArrayLayer`/`RustArrayMultiClassBackpropClassifierNetwork` + tier-1 exact parity tests.
+5. **Done.** `RustArrayLayer`/`RustArrayMultiClassBackpropClassifierNetwork` + tier-1 exact
+   parity tests (`tests/test_rust_array_multiclass_backprop_model.py`) - bit-close (`rtol=1e-9`)
+   against `MultiClassBackpropClassifierNetwork`'s pure-Python reference after every single-example
+   `learn()` step (100 steps) and every `learn_batch()` call (20 batches of 8), not just at the
+   end.
 6. Tier-2 statistical parity + accuracy validation (UCI digits first, then real MNIST).
 7. The benchmark demo(s) (phase 3).
 8. `structure.md`/`vectorization.md` updated to describe the shipped result.
