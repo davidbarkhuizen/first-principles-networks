@@ -670,7 +670,10 @@ ranked.
   and a substantial one under large-batch training (a fixed `learning_rate` keeps Adam robust
   across `batch_size`, where sigmoid collapses, at both proxy and real-MNIST-ensemble scale) -
   exactly the positive result that makes RMSprop worth revisiting as an ablation, per the
-  workplan's own flagged condition. Not yet started.
+  workplan's own flagged condition. Planned as [Adam
+  optimizer](adam-optimizer.md#delivery-stages-each-its-own-pr-per-this-repos-practice)'s stage 7 -
+  no new code needed (`AdamBackpropClassifierNetwork(..., beta1=0.0)` already *is* RMSprop), a
+  pure measurement stage. Not yet run.
 - **A learning-rate schedule** (decay/warmup) - every training loop here uses one fixed
   `learning_rate` for all epochs; untested whether a schedule changes convergence or final
   accuracy on any of this codebase's targets. Now has a concrete motivating case, not just a
@@ -678,7 +681,8 @@ ranked.
   analysis](research-backprop-siblings.md#the-learning-rate-vs-batch-size-follow-up-the-confound-was-real-and-momentum-still-doesnt-help))
   found that naive linear learning-rate scaling diverges completely at `batch_size=128` - a
   gradual warmup is the standard fix in the literature, and this codebase now has a real, reachable
-  failure case to test it against rather than a hypothetical one. Not yet started.
+  failure case to test it against rather than a hypothetical one. See [a learning-rate
+  schedule](learning-rate-schedule.md) for the design/measurement plan. Not yet started.
 - **Dropout** - no regularization beyond L2 exists (L2 itself a measured null - see "backprop
   siblings"); dropout is structurally different (stochastic, applied at the activation, not a
   gradient penalty), so it isn't assumed to land the same way. Not yet started.
@@ -710,7 +714,8 @@ ranked.
   arrays, with the bias-corrected update expressed as one vectorized op per layer instead of a
   per-node loop - looks feasible without any new numeric-kernel work, since the matmul/SIMD
   infrastructure is already proven; the real cost is the same correctness-parity validation every
-  array-based sibling here has paid against its per-node reference. Not yet started.
+  array-based sibling here has paid against its per-node reference. See [an array-based Adam
+  sibling](adam-array-layer.md) for the design/measurement plan. Not yet started.
 
 ### infrastructure that protects the rigor
 

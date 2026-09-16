@@ -2,13 +2,13 @@
 
 [← back to README](../README.md)
 
-**Status: done.** All six delivery stages complete - built (stage 2), then measured at three
-scales (tuned-XOR, real-MNIST proxy, real-MNIST-ensemble). Adopted, kept as a real capability
-alongside momentum/L2 rather than a default: needs its own retuned `learning_rate` to avoid
-actively hurting (like every other sibling here), but once retuned it's a modest win on the
-tuned-XOR scale and a substantial one under large-batch training, at both proxy and real scale -
-see the delivery-stages list below for the numbers, and [research and
-analysis](research-adam-optimizer.md) for the full write-ups. Originally written up front as a
+**Status: core workplan (stages 1-6) done; stage 7 (RMSprop ablation) planned, not yet run.**
+Built (stage 2), then measured at three scales (tuned-XOR, real-MNIST proxy, real-MNIST-ensemble).
+Adopted, kept as a real capability alongside momentum/L2 rather than a default: needs its own
+retuned `learning_rate` to avoid actively hurting (like every other sibling here), but once
+retuned it's a modest win on the tuned-XOR scale and a substantial one under large-batch training,
+at both proxy and real scale - see the delivery-stages list below for the numbers, and [research
+and analysis](research-adam-optimizer.md) for the full write-ups. Originally written up front as a
 design/measurement plan before any of it existed, per this repo's own practice of writing a plan
 down before implementation (see [dataset sourcing](dataset-sourcing-proposal.md), [the Rust
 production cutover plan](rust-production-cutover.md) for precedent).
@@ -138,8 +138,9 @@ used) - a real added step, not assumed away.
   linear-scaling-rule divergence** - resolved during stage 4: yes, and the interaction is that the
   linear scaling rule actively hurts Adam rather than merely being unneeded - see [research and
   analysis](research-adam-optimizer.md#adam-under-batch-size-a-much-bigger-cleaner-win-stage-4-of-the-adam-optimizer-workplan).
-- **RMSprop as a follow-on ablation** - out of scope here (see "scope" above), noted so it isn't
-  silently forgotten if Adam's result makes it worth doing.
+- **RMSprop as a follow-on ablation** - out of scope for stages 1-6 (see "scope" above); Adam's
+  own result (a real, not-null win) triggers the condition this was flagged under, so it's now
+  planned as stage 7 below.
 
 ## delivery stages (each its own PR, per this repo's practice)
 
@@ -184,3 +185,11 @@ used) - a real added step, not assumed away.
    wall-clock terms too.
 6. ✅ Docs closeout: `structure.md`'s possible-next-steps entry updated to reflect the actual
    result, the same pattern the momentum re-test's own closeout PRs followed.
+7. Planned: the RMSprop ablation flagged in "scope" and "risks and open questions" above -
+   `AdamBackpropClassifierNetwork(..., beta1=0.0)` already *is* RMSprop (with `beta1=0`,
+   `bias_correction1 = 1 - 0**t = 1` for every `t >= 1`, so `m_hat = m = g` - no momentum term,
+   no bias-correction effect on it, exactly RMSprop's per-parameter-normalized-by-second-moment
+   update with none of Adam's own first-moment smoothing). No new code needed - a pure
+   measurement stage: repeat stage 4's real-MNIST-proxy batch-size sweep (the decisive win) with
+   an added `beta1=0.0` row, to isolate whether that win comes from the second-moment
+   normalization alone or needs Adam's first-moment term too. Not yet run.
