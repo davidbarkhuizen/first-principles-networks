@@ -1,0 +1,16 @@
+{
+  "filename": "mnist-test.parquet",
+  "split": "test",
+  "format": "parquet",
+  "size_bytes": 2595890,
+  "sha256": "d49fcf556ce25b002b302e318ce4a11098bbfe5d4499c3f35d7c72297c52374b",
+  "record_count": 10000,
+  "schema": {
+    "columns": [
+      "image: struct<bytes: binary, path: string> - bytes holds an 8-bit grayscale PNG (28x28), path is unused/empty in this file",
+      "label: int64, 0-9"
+    ],
+    "note": "the proposal's original template guessed a raw uint8 pixel array; the actual schema (checked directly via pyarrow) is HuggingFace's standard image-dataset layout, with each image PNG-encoded rather than stored as raw pixels - perceptron/mnist_data.py's _decode_grayscale_png already accounts for this"
+  },
+  "notes": "Standard MNIST test-set split, 10000 rows."
+}
