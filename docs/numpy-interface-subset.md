@@ -24,17 +24,14 @@ operation traceable to a specific method in the class design that actually needs
 follow-on covering a specific variant (say, a vectorized ReLU sibling) would extend this list
 with exactly what *that* variant needs (`np.maximum`, `np.where`), not before.
 
-## re-checked against the built implementation, not just the design doc
-
-This table was originally derived from [vectorized array-based model classes](vectorized-array-classes.md)'s
-own design tables before that document's classes were built. Now that `array_layer.py` and
-`vectorized_multiclass_backprop_classifier_network.py` exist, re-checking this table against the
-real, committed code (not re-deriving it from the design doc's prose a second time) surfaced two
-operations the original derivation missed: `.sum(axis=0)` (`accumulate_gradient_batch`'s batched
-bias gradient) and the 2D tuple-index write `target_batch[row, category] = 1.0`
-(`learn_batch`'s batched one-hot target) - a different index shape than the single-example
-`target[category] = 1.0` case already documented. Both are folded into the table below rather
-than left as a stale gap between what got built and what this document claims it needs.
+This table is derived directly from the real, committed code in `array_layer.py` and
+`vectorized_multiclass_backprop_classifier_network.py` - including two operations easy to miss
+from the class design alone: `.sum(axis=0)` (`accumulate_gradient_batch`'s batched bias gradient)
+and the 2D tuple-index write `target_batch[row, category] = 1.0` (`learn_batch`'s batched
+one-hot target, a different index shape than the single-example `target[category] = 1.0` case).
+If [the vectorized classes](vectorized-array-classes.md)' design changes - a new method, a
+reworked formula - this table needs re-deriving to match before
+[the Rust core](rust-array-core.md)'s own scope is adjusted.
 
 ## dtype and shape
 

@@ -192,6 +192,23 @@ retraining. Plots a training-accuracy-by-epoch curve, a confusion matrix
 (`chart.new_confusion_matrix_figure`), and a grid of sample test predictions
 (`chart.sample_predictions_figure`) colored to flag any incorrect ones.
 
+## demo: vectorized UCI digit recognition
+
+    . cli demo
+
+Select **Vectorized UCI digit recognition (numpy)** from the menu it prints.
+
+Runs `perceptron/demos/demo_vectorized_uci_digit_recognition.py` - trains
+`MultiClassBackpropClassifierNetwork` and its numpy-array-backed sibling
+`VectorizedMultiClassBackpropClassifierNetwork` (see
+[structure](structure.md#vectorized-array-based-classes)) on the same UCI digits split, same seed
+and hyperparameters, and reports each one's measured training/test accuracy and wall-clock
+training time side by side. Measured: matching accuracy (99.5%/96.1% vs. 99.4%/96.7% train/test)
+at 8.57s vs. 77.16s - a 9.00x wall-clock speedup, the same numbers documented in
+[vectorized array-based classes](vectorized-array-classes.md#measured-results), checked live
+rather than only quoted. Plots both training-accuracy-by-epoch curves overlaid, a
+confusion matrix, and sample test predictions for the vectorized network.
+
 ## demo: UCI digit capture
 
     . cli demo
@@ -251,6 +268,23 @@ model to `data/mnist/trained_model.json` (gitignored, same as the
 digit-recognition demo's), printing how to reload it without retraining. Plots the same chart set
 as the digit-recognition demo: a per-digit training-accuracy-by-epoch curve, a confusion matrix,
 and a grid of sample test predictions.
+
+## demo: vectorized MNIST recognition
+
+    . cli demo
+
+Select **Vectorized MNIST recognition (numpy)** from the menu it prints.
+
+Runs `perceptron/demos/demo_vectorized_mnist_recognition.py` - headless, console-only. Trains
+`MultiClassBackpropClassifierNetwork` and `VectorizedMultiClassBackpropClassifierNetwork` for one
+real epoch each over the full 60000-example MNIST training set (`[30]`-node hidden layer, the
+same architecture [research and analysis](research-and-analysis.md#parallelizing-mnist-training)'s
+own ~12.5-minutes/epoch pure-Python figure used), reporting test accuracy and wall-clock epoch
+time side by side, plus timing `load_mnist_dataset_as_array`'s bulk decode against
+`load_mnist_dataset`'s tuple-per-example decode on the same file. Measured: 32.7s vs. 18.45 min
+- a 33.87x wall-clock speedup for the epoch, and a 15.44x speedup for the bulk decode alone (see
+[structure](structure.md#vectorized-array-based-classes)). Takes on the order of 15-20 minutes to
+run, mostly the pure-Python epoch.
 
 ## demo: MNIST ensemble capture
 

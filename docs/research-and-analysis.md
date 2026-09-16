@@ -2,273 +2,78 @@
 
 [← back to README](../README.md)
 
-Write-ups of investigations that shaped a design decision - the numbers behind a choice, not
-just the choice itself. Unlike [structure](structure.md) (what the code does) or
-[demos](demos.md) (what each demo shows), this is where the *why*, backed by measurements, lives
-once the investigation itself is no longer visible in any single commit.
+Write-ups of the investigations behind this codebase's design decisions - the measurements that
+drove a choice, not just the choice itself. Unlike [structure](structure.md) (what the code does
+now) or [demos](demos.md) (what each demo shows), this is where the *why* lives, condensed to the
+question asked, what was measured, and the decision it produced.
 
 ## parallelizing MNIST training
 
-### context
+Training `MultiClassBackpropClassifierNetwork` on full real MNIST (60000 images, 784 dims, pure
+Python) benchmarked at ~12.5 minutes/epoch on this 8-CPU machine - the question was whether
+`multiprocessing` could cut that meaningfully.
 
-Training `MultiClassBackpropClassifierNetwork` on the full real MNIST dataset (60000 images,
-784 input dimensions, pure Python, no vectorization) was benchmarked directly at ~12.5ms/
-iteration with a 30-node hidden layer - about 12.5 minutes/epoch, ~2-2.5 hours for a 10-epoch
-run. This machine has 8 CPUs (`nproc` / `os.cpu_count()`, confirmed directly), so the obvious
-question was whether `multiprocessing` could cut that by close to a factor of 8.
+**Rejected: data-parallel synchronous weight averaging.** Shard the data 8 ways, train 8 replicas
+of the same network for one epoch, average their weights, broadcast back. Measured (2000-image
+subset, 2 epochs, 8 workers): only ~2x speedup (each epoch re-shipped the entire shard over IPC),
+and a real accuracy drop (71.3% vs. 92.7% train) - averaging the weights of several replicas of a
+*nonlinear* network isn't the same as averaging the functions they learned, and synchronizing
+more often to fix that trades the accuracy loss back for less parallelism. No setting of that
+dial was clearly good on all three axes (speed/accuracy/sync frequency), so this was dropped
+rather than tuned further.
 
-Two genuinely different parallelization strategies were prototyped and measured against each
-other before committing to either.
+**Adopted: an ensemble of independently-trained one-vs-rest classifiers.** Rather than sharing a
+hidden layer, train 10 completely independent `BackpropClassifierNetwork`s, one per digit, each
+on its own small class-balanced binary dataset - genuinely independent sub-problems, so there is
+no synchronization step of any kind. Measured on 3 digits (0, 1, 7): 98.21% 3-way ensemble argmax
+accuracy, comparable to or better than the shared-hidden-layer approach on the full 10-way
+problem. Full-scale result: **~26 minutes wall-clock** (10 jobs, 8 parallel workers, 2 rounds)
+vs. ~2-2.5 hours for the original single-network plan - a ~5-6x speedup *alongside* better
+accuracy, the opposite tradeoff the rejected approach hit, because the sub-problems are genuinely
+independent rather than artificially decoupled and then reconciled.
 
-### approach 1: data-parallel synchronous weight averaging (rejected)
+**Building it at full scale hit a real memory-exhaustion failure**, worked through by testing
+each hypothesis directly rather than trusting the most plausible-looking one:
 
-The natural first attempt: shard the training data into 8 pieces, give every worker process a
-copy of the *same* network's current weights, have each train independently on its own shard
-for one epoch, then average the 8 resulting weight snapshots elementwise and broadcast the
-average back out as the next epoch's starting point (a standard "parallel SGD" / federated-
-averaging pattern).
+- Not a multiprocessing deadlock - `free -h` showed swap thrashing, confirmed by killing the
+  stuck processes and watching memory free immediately.
+- Not `Pool.imap`'s laziness - a minimal repro showed `imap` consumes its entire input generator
+  immediately regardless of worker speed.
+- Not `worker_count` too high - a memory-aware cap was a real, necessary fix on its own, but
+  still thrashed; the memory estimate itself undercounted the real cost by ~10x.
+- Not pyarrow's import footprint, despite matching a known Python/multiprocessing gotcha:
+  removing pyarrow from the picture entirely (2380 MB peak worker RSS with it vs. 2254 MB
+  without) barely moved the number.
+- **The real cause**: the main process decoded the *entire* 60000-example dataset into
+  `(tuple-of-784-floats, label)` pairs before any subsampling - 47 million boxed Python floats,
+  duplicated into every forked worker.
 
-Measured on a 2000-image subset, 2 epochs, 8 workers, `[30]`-node hidden layer:
-
-| | sequential (single process) | parallel (8-way, per-epoch averaging) |
-|---|---|---|
-| wall time | 52.3s | 26.6s |
-| train accuracy | 92.7% | 71.3% |
-| test accuracy | 85.9% | 63.8% |
-
-Two real problems, not one:
-
-1. **Speedup was only ~2x, not ~8x.** Each epoch re-shipped the *entire* training shard (not
-   just the weight snapshot) to every worker over IPC - at MNIST's scale that's roughly 196,000
-   floats per shard, every single epoch. This is a fixable inefficiency (give each worker its
-   shard once, at pool startup, instead of every round) - but it was never tested further, once
-   the second problem made the whole approach unattractive regardless.
-2. **Accuracy dropped substantially, not just slightly.** This is a more fundamental issue than
-   IPC overhead: averaging the weights of several replicas of a *nonlinear* network is not the
-   same as averaging the functions those replicas learned. Each replica in this test only saw
-   1/8 of the data for a full epoch before being averaged back together - a much weaker, lossier
-   update than true sequential SGD over the same data. The standard mitigation (synchronize
-   more often - every few hundred examples instead of once per epoch) trades the accuracy loss
-   back for *less* parallel speedup, since more synchronization means more communication
-   relative to actual computation. This makes the whole approach a three-way tradeoff between
-   speed, accuracy, and sync frequency, with no setting of the dial that's clearly good on all
-   three - the fundamental reason it was dropped, not pursued further with a smarter IPC layout.
-
-### approach 2: an ensemble of independently-trained one-vs-rest classifiers (adopted)
-
-A different decomposition sidesteps synchronization entirely, rather than trying to do it more
-cheaply. `MultiClassBackpropClassifierNetwork`'s one-vs-rest output layer already means each of
-the 10 output nodes is, conceptually, its own binary "is this digit D?" classifier - they just
-happen to share one hidden layer today, which is exactly what makes them dependent on each
-other during training (a hidden node's gradient depends on *all 10* output deltas).
-
-The proposal: don't share the hidden layer at all. Train 10 completely independent
-`BackpropClassifierNetwork`s (already built, unchanged - this is exactly what that class is),
-one per digit, each on its own small, class-balanced binary dataset: every real example of
-digit D (positive, label 1.0), plus an equal-sized sample drawn evenly across the other 9
-digits (negative, label 0.0) - a training set roughly 1/5 the size of the full 60000-image set
-per classifier, instead of all 60000. Since nothing is shared between the 10 training runs,
-there is no synchronization step of any kind - not "less frequent," genuinely none. This is
-about as close to embarrassingly parallel as a learning problem gets.
-
-Measured directly (not estimated) for 3 of the 10 digits (0, 1, 7 - chosen for shape variety:
-round, straight, angular), `[16]`-node hidden layer (half the width used above - a binary
-sub-problem needs less capacity than full 10-way classification), 5 epochs each:
-
-| digit | balanced training set size | training time | binary training accuracy |
-|---|---|---|---|
-| 0 | 11846 | 382.2s | 97.79% (still improving) |
-| 1 | 13484 | 466.5s | 98.68% (still improving) |
-| 7 | 12530 | 435.2s | 96.53% (still improving) |
-
-None of the three had plateaued or converged by epoch 5 - all three were still improving,
-meaning even this is a conservative accuracy measurement, not a ceiling.
-
-The one real open question this approach raises - can classifiers trained completely
-independently, with no shared representation or joint optimization, actually be compared
-fairly against each other via a simple argmax over their probabilities? - was tested directly,
-not assumed:
-
-**3-way ensemble argmax accuracy on digits {0, 1, 7}: 98.21%** (614 held-out test samples).
-
-This is comparable to or better than what the shared-hidden-layer approach achieved on the full
-10-way problem in earlier testing. Independently-trained probabilities competed fairly.
-
-### honest timing comparison
-
-Per-classifier cost here (6.45ms/iteration, smaller hidden layer, less per-example work) is
-roughly half the single shared network's per-iteration cost, but total example-count processed
-across all 10 classifiers is *higher* than a single pass over 60000 images (each image is a
-positive example for exactly one classifier, and a candidate negative example for several
-others) - extrapolating to all 10 digits at 10 epochs each: ~13 minutes/classifier,
-~2.15 hours of total sequential-equivalent work. This is not less total computation than
-approach 1 or the original single-network plan - it's *more*.
-
-What makes it faster in wall-clock terms is that all 10 jobs are fully independent, so 8
-parallel workers clear them in 2 rounds (`ceil(10/8)`) with no communication between rounds:
-**~26 minutes wall-clock**, versus ~2-2.5 hours for the original single shared-network run - a
-genuine ~5-6x speedup, achieved *alongside* better accuracy rather than trading against it,
-which is the opposite tradeoff approach 1 ran into.
-
-### why this worked where approach 1 didn't
-
-Approach 1's bottleneck was never really the IPC inefficiency (that part was fixable) - it was
-that the 8 workers' training runs were not actually independent problems, just 8 partial views
-of *one* problem, artificially decoupled and then reconciled by averaging. Reconciliation is
-where both the communication cost and the accuracy loss came from. Approach 2 removes the need
-for reconciliation by making the sub-problems genuinely independent in the first place - 10
-different binary questions, not 8 partial answers to the same 10-way question - so there is
-nothing to synchronize, communicate, or average, and the parallelism is close to free.
-
-### decision
-
-Proceed with approach 2: a new ensemble class composed of 10 independent
-`BackpropClassifierNetwork`s (one per digit), a small balanced-binary-dataset builder, and a
-`multiprocessing`-based job dispatcher to train all 10 concurrently. See
-[structure](structure.md) for the resulting design once implemented.
-
-### building it: a real memory-exhaustion failure, and three wrong hypotheses before the right one
-
-Implementing approach 2 for real, at full MNIST scale, hit a genuine failure the small-scale
-prototyping above never exercised: the machine (5.7GB RAM, 2GB swap) ran out of memory and
-started thrashing hard enough that a training run never completed. Each hypothesis below was
-tested directly and ruled out before moving to the next - none were assumed.
-
-**Not a multiprocessing deadlock.** The stuck run's worker processes showed frozen CPU time
-(`ps`'s `TIME` column not advancing between checks) and a `futex_wait_queue` wait channel -
-consistent with either a genuine deadlock or a process stalled on swapped-out memory.
-`free -h` settled it: 1.8GB of the 2GB swap file in use and climbing. This was swap thrashing,
-not a hang - confirmed further once killing the stuck processes immediately freed the memory.
-
-**Not `Pool.imap`'s laziness.** A prior fix (see the ensemble-training PRs) built each class's
-balanced dataset via a generator passed to `Pool.imap`, intending to keep at most a few datasets
-in memory at once rather than all 10 upfront. A minimal repro disproved this: `imap` consumes
-its *entire* input generator essentially immediately, regardless of how slowly workers actually
-process tasks - confirmed by printing from inside the generator alongside artificially slow
-workers and watching all output appear before any worker finished. The "lazy" dataset building
-never throttled anything.
-
-**Not `worker_count` being too high.** Capping the worker pool by an estimate of available
-memory (not just CPU count) was a real, necessary fix on its own - but reran into the same
-thrashing anyway. The estimate itself (based on a small sample's *pickled* size) turned out to
-undercount the real cost by roughly an order of magnitude, because it never accounted for what
-happens next.
-
-**Not pyarrow's import footprint - genuinely disproven, not just deprioritized.** The next
-hypothesis: forking worker processes *after* the main process had already imported `pyarrow`
-(needed to load the source parquet files) meant every worker inherited pyarrow's own
-multi-hundred-MB footprint, whether or not that worker ever used it. This looked promising and
-matched a known Python/multiprocessing pattern - but was tested rather than trusted:
-
-| scenario | worker peak RSS |
-|---|---|
-| real MNIST data, pyarrow imported in parent, `gc.freeze()` before fork | 2380 MB |
-| same, without `gc.freeze()` | 2376 MB (no difference) |
-| synthetic data, no pyarrow import anywhere | 803 MB |
-| real MNIST data loaded via a new pyarrow-free binary format (`mnist_data.convert_parquet_to_binary`, a one-time offline conversion - kept, since it's useful regardless) | 2254 MB |
-
-The last row is the decisive one: removing pyarrow from the picture entirely barely moved the
-number. Whatever was costing ~1.5GB per worker, it wasn't pyarrow.
-
-**The real cause.** The synthetic-data test above used ~11846 freshly-generated examples
-directly - a similar count to one class's balanced set, but *not* the product of first loading
-all 60000 real examples and then subsampling. The real code path does exactly that: the main
-process decodes the *entire* dataset into `(tuple-of-784-floats, label)` pairs before any
-subsampling happens, and that fully-decoded structure - 60000 × 784 = 47 million individual
-boxed Python float objects - is what gets duplicated into every forked worker. Not a library's
-fault: that's just what nearly 47 million Python objects costs, regardless of how they got
-there or which library was or wasn't involved in loading them.
-
-**The fix, measured before and after on identical real work:**
-
-| approach | worker peak RSS |
-|---|---|
-| main process fully decodes all 60000 examples, then ships one class's ~11846-example slice via IPC | 2254.7 MB |
-| main process reads only label bytes (cheap); the worker seeks directly to its own ~11846 chosen examples and decodes only those | 374.4 MB |
-
-A ~6x reduction, by ensuring no process - main or worker - ever holds the full dataset decoded
-in memory at once. `mnist_data.load_mnist_labels` (label bytes only) and
-`load_mnist_records_at_indices` (direct seek, decodes only the requested examples) replace
-eager full-dataset decoding; `ensemble_train.select_balanced_indices` decides *which* examples
-each class needs from label data alone, and `train_ensemble_parallel_from_indices` has each
-worker load only its own selection, itself.
-
-**Verified end to end**, not just at the single-worker/single-class scale above: the real, full
-60000-image MNIST training set, all 10 classes, memory-aware worker count (8 workers on this
-machine) - **31.2 minutes wall-clock, memory stable throughout (no swap growth), 89.4% held-out
-test accuracy**, no digit's confusion-matrix row or column collapsed. The run that previously
-couldn't complete at all now finishes reliably, in less time than even the original "ideal"
-estimate for this approach.
-
-**The general lesson**, beyond this specific fix: a plausible, mechanism-matching hypothesis
-(pyarrow's known import-weight problem, matching a real documented Python gotcha) can still be
-wrong. Each hypothesis here was cheap to test in isolation and expensive to have shipped
-untested - the pyarrow theory in particular "felt right" and would have been easy to stop
-investigating at, had it not been measured directly against a synthetic-data control.
+**The fix** (measured before/after on identical work): `mnist_data.load_mnist_labels` (label
+bytes only) plus `load_mnist_records_at_indices` (direct seek, decodes only requested examples)
+replace eager full-dataset decoding, so no process ever holds the full dataset decoded at once -
+peak worker RSS dropped from 2254.7 MB to 374.4 MB (~6x). Verified end to end: full 60000-image,
+10-class training, 8 workers - **31.2 minutes wall-clock, memory stable, 89.4% held-out test
+accuracy**.
 
 ## softmax/cross-entropy re-alignment
 
-### context
+An audit against canonical literature (Rumelhart/Hinton/Williams's generalized delta rule;
+Nielsen's BP1-BP4 equations, which `backprop_node.py`'s math matches essentially exactly) found
+one deliberate deviation: `MultiClassBackpropClassifierNetwork` treats multi-class classification
+as one-vs-rest (`class_count` independent sigmoid outputs, quadratic loss) rather than the
+canonical softmax + cross-entropy treatment for a *mutually exclusive* target like digit
+classification. The only reason recorded anywhere for one-vs-rest was incidental ("needed no
+code changes") - an unexamined default, not a considered tradeoff.
 
-An audit of the backprop implementation against canonical literature (Rumelhart/Hinton/
-Williams's generalized delta rule; Nielsen's *Neural Networks and Deep Learning*, whose BP1-BP4
-equations `backprop_node.py`'s forward/backward math matches essentially exactly - confirmed
-both by direct derivation and by this codebase's own independently hand-computed, pinned
-regression tests) found the core math correct, but flagged one deliberate deviation:
-`MultiClassBackpropClassifierNetwork` treats multi-class classification as one-vs-rest -
-`class_count` independent sigmoid output nodes, each trained against a one-hot target with
-quadratic (MSE) loss via the same `BackpropNode.compute_output_delta` every binary network uses.
-The canonical treatment for a *mutually exclusive* multi-class target (exactly what digit
-classification is - one true label per image) is a softmax output layer with cross-entropy loss,
-where the delta simplifies to `activation - target` with no extra sigmoid-derivative factor.
+Softmax's cross-node coupling (`a_i = e^z_i / Σ_j e^z_j`) only affects the forward pass - the
+delta simplifies to `activation - target`, exactly as per-node-independent as one-vs-rest's own
+delta, so the backward-pass plumbing needed zero changes. This made the fix purely additive: two
+extension points (`BackpropLayer._node_cls`, `BackpropNetworkBase.output_layer_cls`), a new
+`SoftmaxOutputNode`/`SoftmaxOutputLayer`, and `SoftmaxMultiClassBackpropClassifierNetwork` (a
+single class-attribute override on top of `MultiClassBackpropClassifierNetwork`, which is kept
+unchanged as a simpler reference point).
 
-Checking every place this one-vs-rest choice is explained (the class's own docstring,
-`docs/structure.md`'s existing "multi-class" section) found only incidental reasons -
-"`compute_output_delta` needed no changes" - never an argument that one-vs-rest+MSE is the
-statistically right model for a mutually-exclusive target. That reads as an unexamined default,
-not a considered tradeoff, and was worth fixing.
-
-### why the ensemble is correctly out of scope
-
-`EnsembleBackpropClassifierNetwork`'s own one-vs-rest design (see "parallelizing MNIST
-training" above) is a *different*, independently measured tradeoff: removing the shared hidden
-layer entirely is what makes its 10 sub-networks genuinely trainable in separate processes with
-zero communication. Softmax reintroduces exactly the cross-output coupling that split was built
-to eliminate - applying it there would either do nothing (each sub-network has a single output
-node; softmax over one logit is a constant 1.0) or require sharing state across independently-
-trained processes, undoing the measured design. This re-alignment is scoped to
-`MultiClassBackpropClassifierNetwork` (the shared-hidden-layer sibling) only.
-
-### the architectural question, and why it turned out simple
-
-Softmax's cross-node coupling (`a_i = e^z_i / Σ_j e^z_j` needs every sibling's `z_j`) only
-affects the **forward** pass. Once every node's activation is computed, softmax+cross-entropy's
-delta is `activation - target` - a function of that node's own (already-joint) activation and
-its own target alone, exactly as per-node-independent as the one-vs-rest delta it replaces. So
-`BackpropNetworkBase`'s backward-pass plumbing (`_backward_hidden_layers`, `_apply_gradients`,
-`snapshot`/`restore`) needed zero changes. The only place genuinely needing whole-layer (not
-per-node) computation is the output layer's own `forward()`.
-
-That made this purely additive: two small extension points
-(`BackpropLayer._node_cls`, `BackpropNetworkBase.output_layer_cls`, both defaulting to the
-existing classes - zero behavior change for anything that doesn't override them), a new
-`SoftmaxOutputNode`/`SoftmaxOutputLayer` (`perceptron/model/softmax_output_layer.py`), and
-`SoftmaxMultiClassBackpropClassifierNetwork` (`perceptron/model/softmax_multiclass_backprop_classifier_network.py`)
-- which is a *single* class-attribute override (`output_layer_cls = SoftmaxOutputLayer`) on top
-of `MultiClassBackpropClassifierNetwork`, since every other method (`learn`, `_backward`,
-`randomize`, `randomized`, `snapshot`, `restore`, `save`, `load`) already worked polymorphically
-through `cls(...)`/`self.output_layer_cls` and needed no override at all.
-
-`MultiClassBackpropClassifierNetwork` itself is kept, completely unchanged - existing demos and
-already-saved models keep working, and it remains a legitimate, simpler reference point to
-contrast the softmax sibling against, the same way this codebase already keeps
-`EnsembleBackpropClassifierNetwork`'s differently-motivated design alongside both.
-
-### measured comparison
-
-Same architecture, same seed, same everything except the output layer/loss, trained on the full
-bundled UCI digits set (1797 samples, 80/20 split, matching `demo_uci_digit_recognition.py`'s
-own 32-node hidden layer / 30 epochs / learning_rate=0.5):
+Measured on the full bundled UCI digits set (`demo_uci_digit_recognition.py`'s own architecture):
 
 | | training accuracy | best epoch | held-out test accuracy |
 |---|---|---|---|
@@ -276,73 +81,24 @@ own 32-node hidden layer / 30 epochs / learning_rate=0.5):
 | softmax (cross-entropy) | 100.00% | 11/30 | 96.94% |
 
 Softmax reached full training accuracy in about half the epochs and generalized slightly better
-on this run. Not a claim that softmax is *always* better - 1797 samples is small, and one seeded
-A/B run isn't a statistically powered comparison - but real, reproducible evidence it isn't worse
-here, on top of the semantic correctness win (`predict_probabilities()` now genuinely sums to
-1.0, unlike one-vs-rest's independent sigmoids) and avoiding quadratic loss's documented
-"learning slowdown" pathology (a confidently-wrong, saturated sigmoid neuron produces a tiny
-gradient exactly when the error is largest; cross-entropy's `activation - target` delta doesn't).
-
-### deferred: the binary case
-
-`BackpropClassifierNetwork` (used directly, and inside every `EnsembleBackpropClassifierNetwork`
-sub-network) still uses quadratic loss for genuinely binary classification. The canonical fix
-there is *binary* cross-entropy, not softmax - it collapses to the same clean `activation -
-target` delta for a single sigmoid unit. That's a separate, much larger-blast-radius change
-(every binary backprop demo and test in this codebase depends on `BackpropClassifierNetwork`'s
-current behavior) and was deliberately left out of this re-alignment.
+(one seeded run, not a statistically powered comparison, but real evidence it isn't worse, plus
+the semantic correctness win: `predict_probabilities()` now genuinely sums to 1.0).
+`EnsembleBackpropClassifierNetwork`'s own one-vs-rest design is a *different*, independently
+motivated tradeoff (parallelizability across independent processes, which softmax's cross-output
+coupling would undo) and is deliberately untouched by this re-alignment.
 
 ## binary cross-entropy for BackpropClassifierNetwork
 
-### context
+The binary case was deferred above and investigated as a follow-up. Architecturally simpler than
+softmax (a single output node's delta needs nothing from any sibling): `CrossEntropyOutputNode`
+overrides `compute_output_delta` to `self.delta = self.value() - reference_value`, reusing the
+same `_node_cls`/`output_layer_cls` hooks the softmax work added.
 
-The deferred binary case above was investigated as a follow-up. `BackpropClassifierNetwork` is
-directly used by 4 standalone demos (`demo_backprop_circular_boundary.py`,
-`demo_backprop_linear_parity_check.py`, `demo_backprop_stripes_architecture_sweep.py`,
-`demo_xor_backprop_convergence.py`) and by every one of `EnsembleBackpropClassifierNetwork`'s 10
-sub-networks (real MNIST training). Its docstring gives no rationale for quadratic loss beyond
-describing the sigmoid/gradient-descent mechanism generically - the same "unexamined default"
-pattern the softmax audit found for the multi-class case.
-
-Architecturally, binary cross-entropy is *simpler* to add than softmax was: a single output
-node's delta needs nothing from any sibling (unlike softmax's joint normalization), so it
-doesn't even need a new `Layer` subclass overriding `forward()` - just a
-`CrossEntropyOutputNode(BackpropNode)` overriding `compute_output_delta` to
-`self.delta = self.value() - reference_value`, reusing the same `_node_cls`/`output_layer_cls`
-hooks the softmax work added.
-
-### measured comparison: cross-entropy is not a free win here
-
-Before assuming the same clean improvement the softmax work found, a cross-entropy variant was
-prototyped and measured against `test_backprop_training_pipeline.py`'s exact pinned XOR scenario
-(`BackpropClassifierNetwork([8], 2, square_bounds(10.0))`, `learning_rate=1.0`, 100 epochs),
-across 10 different (data-generation seed, weight-init seed) pairs:
-
-| seed | quadratic (MSE) | binary cross-entropy |
-|---|---|---|
-| 0 | 97.00% | 84.67% |
-| 1 | 98.33% | 93.67% |
-| 2 | 97.33% | 85.67% |
-| 3 | 97.33% | 92.33% |
-| 4 | 98.33% | 95.00% |
-| 5 | 98.33% | 94.00% |
-| 6 | 99.33% | 95.67% |
-| 7 | 96.67% | 92.00% |
-| 8 | 96.67% | 93.67% |
-| 9 | 98.67% | 92.00% |
-| **mean** | **97.80%** | **91.87%** |
-
-Cross-entropy underperformed quadratic loss on every single seed, not a fluke of one run - the
-opposite of what "canonical alignment" would predict as an automatic win, and the opposite of
-what the softmax/multi-class comparison above actually found.
-
-### why: cross-entropy needs a smaller learning rate here
-
-Rather than stopping at "cross-entropy is worse" (a plausible-looking but untested conclusion),
-the mechanism was tested directly: cross-entropy's delta drops the `a(1-a)` damping term
-quadratic loss's delta has, so at a fixed learning rate its effective gradient magnitude is
-larger - which can overshoot instead of converging smoothly. Sweeping `learning_rate` down for
-the cross-entropy variant, same 10 seeds:
+Measured against `test_backprop_training_pipeline.py`'s pinned XOR scenario, 10 seeds: quadratic
+loss meaned 97.80%, cross-entropy meaned 91.87% - cross-entropy *underperformed* on every seed,
+the opposite of softmax's clean win. The mechanism: cross-entropy's delta drops the `a(1-a)`
+damping term quadratic loss has, so at a fixed learning rate its effective gradient magnitude is
+larger and can overshoot. Sweeping `learning_rate` down for cross-entropy alone:
 
 | learning_rate | mean training accuracy |
 |---|---|
@@ -351,249 +107,100 @@ the cross-entropy variant, same 10 seeds:
 | 0.25 | 96.67% |
 | 0.1 | 97.60% |
 
-At `learning_rate=0.1`, cross-entropy's mean (97.60%) matches quadratic's mean at its own tuned
-`learning_rate=1.0` (97.80%). So cross-entropy isn't worse in principle - the hypothesis holds -
-but it is not a drop-in replacement at this codebase's existing, separately-tuned
-hyperparameters, unlike softmax's clean win at `demo_uci_digit_recognition.py`'s unmodified
-`learning_rate=0.5`.
-
-### why this changes the scope decision from the multi-class case
-
-Every consumer of `BackpropClassifierNetwork` has its own hand-tuned `learning_rate`/`epochs`
-(`demo_xor_backprop_convergence.py`'s is pinned into a regression test with exact hand-derived
-values), so none of them can simply have the loss function swapped in-place - each would need
-its own re-tuning and re-measurement pass. The most consequential case is
-`EnsembleBackpropClassifierNetwork`'s real-MNIST training (`ensemble_train.py`,
-`learning_rate=0.5`, a real ~31-minute wall-clock run per attempt) - unlike softmax, which was
-architecturally excluded there (cross-node coupling would undo the ensemble's parallelization),
-binary cross-entropy has no such exclusion, so extending it there is *possible* - but validating
-a retuned learning rate on real digit data means multiple expensive real training runs, and this
-2D-XOR-toy-problem finding may not even transfer to MNIST's very different input scale/dimension
-without its own dedicated measurement.
-
-### decision
-
-Build `BinaryCrossEntropyBackpropClassifierNetwork` as a standalone additive sibling (same
-pattern as `SoftmaxMultiClassBackpropClassifierNetwork`: new class, `BackpropClassifierNetwork`
-completely untouched, no demo repointed, no existing hyperparameter or pinned test touched) -
-it's genuinely useful as a literature-aligned option and cheap/low-risk to add on its own terms.
-Do **not** extend it to `EnsembleBackpropClassifierNetwork`/real-MNIST training as part of this
-work - that needs its own dedicated learning-rate retuning investigation, given the real cost of
-each measurement and the genuine uncertainty (not assumption) about whether the benefit
-transfers from this toy problem to that one.
+At `learning_rate=0.1`, cross-entropy matches quadratic's own tuned-rate mean (97.80%) - not
+worse in principle, but not a drop-in replacement at this codebase's existing per-consumer tuned
+hyperparameters either. `BinaryCrossEntropyBackpropClassifierNetwork` was built as a standalone
+additive sibling regardless (genuinely useful, cheap to add); it was **not** extended to
+`EnsembleBackpropClassifierNetwork`'s real-MNIST training as part of this work - that needed its
+own dedicated retuning investigation, given the cost of each real training run and the open
+question of whether this toy-problem finding transfers to MNIST's scale (see next entry).
 
 ## the ensemble/real-MNIST investigation
 
-The "own dedicated investigation" deferred above was carried out as a follow-up, in three steps,
-each cheaper than the last one turned out to be necessary before committing to the next.
+The deferred retuning question above, worked through in three steps, cheapest first:
 
-### step 1: a cheap prerequisite check found a bigger issue than expected
+**Step 1 - a cheap check found a bigger issue than expected.** Sampling real MNIST inputs
+through a freshly-`randomize()`d `BackpropClassifierNetwork` at the ensemble's architecture
+(`[16]` hidden, `dimension=784`) found hidden-layer `z` ranging -83 to +87, with **83.5% of
+hidden activations already saturated** before any training - the exact sigmoid-saturation
+pathology `MultiClassBackpropClassifierNetwork.randomize()` already fixed via fan-in-aware init,
+but never applied to `BackpropClassifierNetwork` (which every ensemble sub-network uses). A
+confound independent of loss function, dominating any loss-function comparison run on top of it.
 
-Before comparing loss functions on the ensemble at all, a first check (no training, seconds to
-run): sample real MNIST inputs through a freshly-`randomize()`d `BackpropClassifierNetwork` at
-the ensemble's actual architecture (`layer_sizes=[16]`, `dimension=784`) and measure the
-resulting pre-activation (`z`) distribution. Result: hidden-layer `z` ranged from **-83 to +87**,
-with **83.5% of hidden activations already saturated** (`<0.01` or `>0.99`) *before any training
-happens at all*. This is exactly the failure mode `MultiClassBackpropClassifierNetwork.randomize()`'s
-own docstring already documented and fixed for that class (fan-in-aware `limit = 1/sqrt(fan_in)`
-initialization) - but `BackpropClassifierNetwork`, which every ensemble sub-network uses, still
-uses the original per-dimension-bounds-width scaling, tuned for 1-2D geometric problems, never
-updated for MNIST's 784-dimension fan-in. This is a confound independent of loss function: any
-loss-function comparison run on top of it would be dominated by this pre-existing pathology, not
-by cross-entropy vs quadratic loss.
-
-### step 2: a cheap proxy sweep isolating init from loss function
-
-Before spending real training time, a small, fast proxy (320 real MNIST examples, one digit's
-class-balanced one-vs-rest binary target, built via the same `select_balanced_indices` machinery
-`ensemble_train.py` itself uses, 5 epochs, 5 seeds) tested init scheme and loss function as
-separate factors:
+**Step 2 - a cheap proxy sweep isolating init from loss function** (320 real MNIST examples, one
+digit's balanced binary target, 5 epochs, 5 seeds):
 
 | config | mean test accuracy |
 |---|---|
-| quadratic, current init, learning_rate=0.5 (closest match to current production) | 82.75% |
-| quadratic, **fan-in-aware init**, learning_rate=0.5 | **93.75%** |
-| cross-entropy, current init, learning_rate=0.5 | 87.50% |
-| cross-entropy, fan-in-aware init, learning_rate=0.5 | 92.50% |
-| cross-entropy, fan-in-aware init, learning_rate=0.1 | 93.25% |
+| quadratic, current init | 82.75% |
+| quadratic, fan-in-aware init | **93.75%** |
+| cross-entropy, current init | 87.50% |
+| cross-entropy, fan-in-aware init | 92.50% |
 
-Fixing initialization alone - holding quadratic loss, the loss function currently in production,
-fixed - closed an 11-point gap, consistently across all 5 seeds with no overlap between the two
-init schemes' ranges. That is a substantially bigger and more certain effect than the loss
-function switch: once init is fixed, quadratic and cross-entropy come out roughly tied.
-Cross-entropy's one clear edge in this proxy was *robustness* to the current bad
-initialization (87.50% vs 82.75% at current init) - consistent with cross-entropy's gradient not
-vanishing when a node is saturated, the same "learning slowdown" mechanism this whole
-investigation started from.
+Fixing initialization alone closed an 11-point gap - a substantially bigger, more certain effect
+than the loss-function switch (once init is fixed, quadratic and cross-entropy come out roughly
+tied).
 
-### step 3: real, full-scale validation
-
-Two real training runs on the actual 60000-image MNIST training set / 10000-image test set, same
-architecture as `demo_mnist_ensemble_recognition.py` (`layer_sizes=[16]`, `learning_rate=0.5`,
-`epochs=5`), `seed=0` for reproducibility, monkeypatching `ensemble_train.BackpropClassifierNetwork`
-to a fan-in-aware-`randomize()` subclass before training (safe because this pipeline's
-multiprocessing is fork-based - forked workers inherit the parent process's already-patched
-module state; confirmed directly with a fast, small-slice, `epochs=0` check before committing to
-the full run, so the weights in the final ensemble were provably drawn from the patched
-`randomize()`, not silently still the default):
+**Step 3 - real, full-scale validation** (actual 60000/10000 MNIST, `[16]` hidden,
+`learning_rate=0.5`, 5 epochs):
 
 | config | wall-clock | test accuracy |
 |---|---|---|
-| current init, quadratic loss (documented baseline, unseeded) | ~31.2 min | 89.4% |
-| **fan-in-aware init, quadratic loss** | 29.6 min | **96.01%** |
-| fan-in-aware init, binary cross-entropy loss (learning_rate=0.5, untuned for cross-entropy) | 33.5 min | 92.82% |
+| current init, quadratic (documented baseline) | ~31.2 min | 89.4% |
+| **fan-in-aware init, quadratic** | 29.6 min | **96.01%** |
+| fan-in-aware init, cross-entropy (untuned lr) | 33.5 min | 92.82% |
 
-The fan-in-aware-init run reached **96.01% test accuracy** - a 6.6-point improvement over the
-documented baseline, from an initialization fix alone, at the same wall-clock cost, with every
-one of the 10 sub-networks still visibly improving at epoch 5 rather than plateaued (unlike the
-proxy's small scale, a real training run can distinguish this properly) - suggesting there may be
-more headroom left with more epochs, itself worth a future note.
+Fan-in-aware init alone: **+6.6 points** at the same wall-clock cost. Cross-entropy at the
+quadratic-tuned learning rate trailed fan-in-aware-quadratic by 3.19 points - the same
+undamped-gradient/overshoot pattern confirmed at all three scales tested (XOR, small proxy, full
+MNIST) now.
 
-The cross-entropy run, at the same `learning_rate=0.5` used for quadratic loss (not retuned for
-cross-entropy), reached 92.82% - clearly ahead of the *unfixed-init* baseline (89.4%), but 3.19
-points behind fan-in-aware-init quadratic loss at the same real scale. Every per-digit binary
-training accuracy came in lower than quadratic's own (e.g. digit 9: 94.9% vs 98.3%), the same
-pattern the XOR toy problem and the small proxy both already showed: cross-entropy's larger,
-undamped gradient needs a smaller learning rate than whatever is tuned for quadratic loss, or it
-partially overshoots instead of converging as cleanly. This is now confirmed at all three scales
-tested (XOR, small MNIST proxy, full real MNIST) - the same real, replicated effect, not sampling
-noise at any one scale.
-
-### interpretation and decision
-
-The investigation's original question - does binary cross-entropy improve the real MNIST
-ensemble - gets a clear, three-scale-confirmed answer: **not at the learning rate currently
-tuned for quadratic loss**, and retuning it (as the small proxy suggested `learning_rate=0.1`
-might, itself unverified at full scale) would cost at least one more ~30+ minute real run to
-confirm, for a gain that even the best case seen anywhere in this investigation (the proxy's
-93.25%) never exceeded fan-in-aware quadratic loss's real-scale result.
-
-The investigation surfaced a much higher-value, already-confirmed fix instead:
-**`BackpropClassifierNetwork`'s initialization scheme**, unrelated to loss function, is the
-dominant lever - a 6.6-point real-scale improvement (89.4% -> 96.01%) from applying the exact
-same fan-in-aware fix `MultiClassBackpropClassifierNetwork.randomize()` already uses, for the
-identical documented reason (fan-in-dependent sigmoid saturation), now confirmed to apply
-equally to `BackpropClassifierNetwork` at MNIST's 784-dimension scale. This was not the question
-this investigation set out to answer, but the evidence for it is now stronger and cheaper to act
-on than the original loss-function question.
-
-**Decision:** this finding - `BackpropClassifierNetwork`'s init scheme needs the same
-fan-in-aware fix already applied elsewhere - is significant enough to act on as its own,
-separately-scoped piece of work, not folded into this write-up. The binary cross-entropy
-question, on the other hand, is considered adequately answered for now: consistently
-confirmed not to help at production's current learning rate, across three independent scales,
-with no further real-MNIST retuning planned unless a future need specifically calls for it.
+**Decision:** `BackpropClassifierNetwork`'s init scheme (fixed via
+`FanInAwareBackpropClassifierNetwork`, now what `EnsembleBackpropClassifierNetwork` is built
+from) was the dominant, already-actionable finding - not the original loss-function question,
+which is considered adequately answered (cross-entropy doesn't help at production's current
+learning rate; retuning would cost its own real ~30-minute run for a gain no measurement here
+exceeded fan-in-aware quadratic's result).
 
 ## Xavier/Glorot init: measured, not worth adopting
 
-### context
-
-A second backprop-literature audit, after `FanInAwareBackpropClassifierNetwork` was built and
-wired into the real MNIST ensemble (see above), asked a follow-up question:
-`randomize_fan_in_aware`'s `limit = 1/sqrt(fan_in)` scaling is fan-in-only, and doesn't exactly
-match the specific variance target LeCun et al. 1998 derived (`1/fan_in`, which for a uniform
-draw needs `limit = sqrt(3)/sqrt(fan_in)`, not `1/sqrt(fan_in)`) - it's closer to a common
-practical simplification of that scheme (also, historically, PyTorch's own pre-Kaiming default
-`nn.Linear` init). Since every network in this codebase uses sigmoid activation throughout, the
-literature's most specifically-tailored scheme for that case is Glorot & Bengio 2010's
-("Xavier") initialization, `limit = sqrt(6/(fan_in+fan_out))`, derived to keep both forward
-activation variance *and* backward gradient variance stable across layers - not just the forward
-term a fan-in-only scheme accounts for. A related, smaller question was whether zero-initializing
-biases (the more commonly cited default in the literature, e.g. Goodfellow et al.) would help or
-hurt, given the current scheme randomizes biases too.
-
-### measured comparison
-
-Same proxy as the earlier ensemble investigation (320 real MNIST examples, digit 3's
-class-balanced one-vs-rest target, 5 epochs, 5 seeds, `learning_rate=0.5` - the demo's own tuned
-rate, unchanged, since nothing here is a loss-function change that would need its own retuning).
-Three configs: the current production scheme, Xavier/Glorot weights with the same random-scaled
-bias, and Xavier/Glorot weights with zero bias:
+A follow-up audit asked whether Glorot & Bengio 2010's Xavier init (`limit =
+sqrt(6/(fan_in+fan_out))`, tailored for sigmoid networks specifically) would beat the fan-in-only
+scheme already adopted (`limit = 1/sqrt(fan_in)`, closer to LeCun 1998's practical
+simplification). Measured on the same proxy as the ensemble investigation (320 examples, digit
+3, 5 epochs, 5 seeds):
 
 | config | mean test accuracy |
 |---|---|
-| (A) current fan-in-only (production) | 93.75% |
-| (B) Xavier/Glorot, random bias | 93.75% |
-| (C) Xavier/Glorot, zero bias | 93.75% |
+| current fan-in-only (production) | 93.75% |
+| Xavier/Glorot, random bias | 93.75% |
+| Xavier/Glorot, zero bias | 93.75% |
 
-A clean null, not a weak signal - (B) and (C) even produced identical per-seed results (93.8%
-across all 5 seeds), and (A) landed at the same mean. A cheap prerequisite check (mirroring the
-earlier investigation's own step 1) confirmed Xavier/Glorot doesn't reintroduce saturation
-either - 0% of hidden activations saturated at MNIST's real 784-dimension scale, matching the
-already-fixed fan-in-only scheme exactly.
-
-### interpretation
-
-Unlike the original fan-in-only fix - which showed an unambiguous +11-point effect at this exact
-same proxy scale, later confirmed at full real-MNIST scale (+6.6 points, 89.4% -> 96.01%) - this
-comparison shows nothing to confirm. The likely reason: once the dominant saturation pathology is
-fixed (which both schemes do equally well), the *further* refinement Xavier/Glorot offers over a
-simpler fan-in-only scheme - accounting for backward gradient variance via fan_out, not just
-forward activation variance via fan_in - mainly matters for deeper networks or unusual
-layer-width ratios (the case Glorot & Bengio's own paper studied). This codebase's networks are
-shallow (a single hidden layer, in every current use), where that extra term has little room to
-matter.
-
-### decision
-
-Not adopted. No real-scale validation run was spent confirming this - the proxy's result is
-unambiguous enough (a literal tie across 3 configs x 5 seeds, not a marginal or noisy difference)
-that spending ~30 minutes of real training time to re-confirm a null result already this clean
-would not be a good use of that time. `randomize_fan_in_aware` and
-`FanInAwareBackpropClassifierNetwork` stay as they are; this remains a documented, measured "no"
-rather than an untested assumption either way.
+A clean null - (B) and (C) even produced identical per-seed results. Likely reason: once the
+dominant saturation pathology is fixed (which both schemes do equally well), Xavier/Glorot's
+further refinement (accounting for backward gradient variance via fan_out, not just forward
+variance via fan_in) mainly matters for deeper networks or unusual layer-width ratios; this
+codebase's networks are shallow throughout. **Not adopted** - the proxy result was unambiguous
+enough that a ~30-minute real-scale run to re-confirm a null this clean wasn't judged worth it.
 
 ## momentum: measured, not worth adopting
 
-### context
+Rumelhart, Hinton & Williams 1986's own generalized delta rule (this codebase's cited backprop
+reference) includes a momentum term (`Δw_ji(n) = η·δ_j·a_i + α·Δw_ji(n-1)`) `apply_gradient`
+never implemented. Measured on the same proxy (320 examples, digit 3, fan-in-aware init):
 
-A third backprop-literature audit noticed that `docs/research-and-analysis.md`'s own first audit
-entry cites Rumelhart, Hinton & Williams 1986 ("Learning representations by back-propagating
-errors" - the founding backprop paper) as this implementation's reference for the "generalized
-delta rule." That paper's actual generalized delta rule includes a momentum term the codebase
-doesn't implement:
-
-```
-Δw_ji(n) = η·δ_j·a_i + α·Δw_ji(n-1)
-```
-
-`BackpropNode.apply_gradient` only ever implements the first term. Unlike every prior addition in
-this investigation series, momentum needs genuine new persistent per-node state (a running
-`previous_weight_delta`/`previous_bias_delta`, not present anywhere in the current node classes)
-rather than just a method override - so before building anything committed, the question was
-measured with a throwaway prototype first (a `MomentumBackpropNode` monkeypatched into
-`BackpropLayer._node_cls` for the duration of an isolated script, the same technique used to
-validate `FanInAwareBackpropClassifierNetwork` before it existed as a real class).
-
-### measured comparison
-
-Same proxy as the earlier investigations (320 real MNIST examples, digit 3's class-balanced
-one-vs-rest target, `FanInAwareBackpropClassifierNetwork`'s already-adopted init).
-
-**First pass** - Rumelhart et al.'s own cited momentum coefficient (α=0.9) across a learning-rate
-sweep, 5 seeds each, 5 epochs unless noted:
+Canonical coefficient (α=0.9) across a learning-rate sweep, 5 seeds, 5 epochs:
 
 | config | mean test accuracy |
 |---|---|
-| no momentum, learning_rate=0.5 (baseline) | 93.75% |
-| momentum=0.9, learning_rate=0.5 | 91.75% |
-| momentum=0.9, learning_rate=0.25 | 90.75% |
-| momentum=0.9, learning_rate=0.1 | 91.50% |
-| momentum=0.9, learning_rate=0.05 | 91.25% |
-| no momentum, learning_rate=0.5, 20 epochs | 90.75% |
-| momentum=0.9, learning_rate=0.1, 20 epochs | 92.50% |
+| no momentum, lr=0.5 (baseline) | 93.75% |
+| momentum=0.9, lr=0.5 | 91.75% |
+| momentum=0.9, lr=0.25 | 90.75% |
+| momentum=0.9, lr=0.1 | 91.50% |
+| momentum=0.9, lr=0.05 | 91.25% |
 
-α=0.9 robustly *hurt* relative to the baseline across a 10x learning-rate range - unlike the
-binary cross-entropy investigation, where a lower learning rate fully recovered the baseline's
-performance, no learning rate tested here closed the gap. More epochs helped momentum relatively
-(92.50% at 20 epochs vs the 20-epoch no-momentum baseline's own 90.75%) but the original 5-epoch,
-no-momentum baseline (93.75%) was never matched by any α=0.9 configuration tested.
-
-**Second pass**, testing whether α=0.9 (tuned for the batch/mini-batch regime the original paper
-mostly discusses) was simply too aggressive for this codebase's *per-example online* SGD, where
-each individual gradient is far noisier than a batch-averaged one: a finer sweep of lower
-coefficients at the original tuned `learning_rate=0.5`, with more seeds (15, not 5) for
-statistical confidence after a smaller-sample run initially looked promising:
+α=0.9 robustly *hurt* across a 10x learning-rate range. A finer sweep at the tuned lr=0.5, more
+seeds (15) after an initial 5-seed run looked misleadingly promising:
 
 | momentum | mean test accuracy | stdev |
 |---|---|---|
@@ -604,89 +211,31 @@ statistical confidence after a smaller-sample run initially looked promising:
 | 0.6 | 93.67% | 1.20% |
 | 0.7 | 93.67% | 1.10% |
 
-All six configurations land within 0.33 percentage points of each other, well inside the noise
-band given stdevs of 0.57-1.2% at n=15 - a flat, statistically indistinguishable landscape, not a
-real effect. (An earlier 5-seed-only run of momentum=0.5 showed 94.50%, apparently beating the
-baseline - re-run at n=15 it settled to 94.00%, within noise of the baseline's 93.83%. Exactly
-the kind of small-sample mirage this investigation's own methodology - re-measuring before
-trusting a result - exists to catch.)
+All six land within 0.33 points of each other, well inside the noise band at n=15 - a flat,
+statistically indistinguishable landscape (an earlier 5-seed run of momentum=0.5 had shown
+94.50%, apparently beating baseline; at n=15 it settled to 94.00%, within noise - exactly the
+small-sample mirage re-measuring exists to catch).
 
-### interpretation
-
-Momentum's canonical value (α=0.9) is actively harmful here, robustly across learning rates -
-plausibly because per-example online SGD's individual gradients are noisier than the
-mini-batch/batch gradients momentum's literature is more commonly validated against, so
-accumulating velocity across noisy individual steps amplifies noise rather than smoothing signal.
-Lower coefficients (0.3-0.7) avoid that harm but show no measurable benefit either - consistent
-with the Xavier/Glorot finding above: this codebase's shallow, single-hidden-layer networks
-likely don't have the ravine-shaped/ill-conditioned loss surfaces momentum is specifically
-designed to help traverse.
-
-### decision
-
-Not adopted as a default - no learning rate or coefficient measured here beats plain SGD, so
-`MomentumBackpropClassifierNetwork` (see `perceptron/model/momentum_layer.py`/
-`momentum_backprop_classifier_network.py`) does not pick one and requires `momentum` as an
-explicit constructor argument rather than silently defaulting to Rumelhart et al.'s own cited
-value or any other. Unlike the other measured-and-rejected finding above (Xavier/Glorot), this
-one *was* committed as a real, tested class rather than left as an uncommitted prototype, on
-request - it remains genuinely useful to have available (e.g. for a future investigation under
-mini-batch gradients, where momentum's own literature is more commonly validated, and where this
-investigation's leading candidate explanation - per-example online SGD's especially noisy
-individual gradients - would no longer apply the same way), just not as something this
-investigation's own results recommend turning on today.
-
-The `snapshot()`/`restore()` design question this entry originally left open resolved itself by
-default: `MomentumBackpropClassifierNetwork` doesn't override either, so momentum's persistent
-per-node state (`_prev_weight_deltas`/`_prev_bias_delta`) is treated as pure optimizer state, not
-model state - a `restore()` call (including `train_linear_classifier_network`'s own
-pocket-algorithm rollback) leaves it exactly where training last left it, unconnected to whichever
-weight snapshot was just restored. This matches the more common convention the entry
-flagged as the likely answer, not the alternative of persisting it alongside the weights.
+**Interpretation:** momentum's canonical value is actively harmful here, plausibly because
+per-example online SGD's gradients are noisier than the mini-batch/batch gradients momentum's
+literature validates against, so accumulating velocity amplifies noise rather than smoothing
+signal. **Decision:** not adopted as a default - `MomentumBackpropClassifierNetwork` requires an
+explicit `momentum` argument rather than defaulting to any value tested. Built and kept anyway
+(unlike the Xavier/Glorot finding) as a real capability, e.g. for retesting once mini-batch
+gradients exist (see [mini-batch gradient descent](mini-batch-gradient-descent.md)).
 
 ## ReLU hidden-layer activation: a clean win, once retuned
 
-### context
+Built as `ReLUBackpropClassifierNetwork` (a new `hidden_layer_cls` extension point). Measured
+against the same pinned XOR scenario as the binary cross-entropy investigation, 10 seeds, at the
+demo-tuned `learning_rate=1.0`:
 
-`docs/structure.md`'s "possible next steps" flagged ReLU as a hidden-layer activation worth
-adding, directly motivated by this session's own sigmoid-saturation findings (the fan-in-aware
-init fix was the single biggest real-scale accuracy win any investigation here found). Unlike
-the momentum and Xavier/Glorot investigations, this one was built as a real, committed sibling
-class first (`ReLUBackpropClassifierNetwork`, with a new `hidden_layer_cls` extension point on
-`BackpropNetworkBase`) rather than only measured via a throwaway prototype, since it's a genuine
-architectural capability worth having on its own terms regardless of what any one measurement
-shows - the measurement below is what decides whether it's *used* anywhere, not whether it
-exists.
-
-### measured comparison: untuned, ReLU loses badly; retuned, it wins
-
-Same XOR scenario as the binary cross-entropy investigation (`BackpropClassifierNetwork([8], 2,
-square_bounds(10.0))`, 100 epochs, 10 (data-generation seed, weight-init seed) pairs), sigmoid
-hidden layers vs `ReLUBackpropClassifierNetwork`'s ReLU hidden layers, both at the demo-tuned
-`learning_rate=1.0`:
-
-| seed | sigmoid | ReLU (lr=1.0, untuned) |
+| | sigmoid | ReLU (lr=1.0, untuned) |
 |---|---|---|
-| 0 | 97.00% | 73.67% |
-| 1 | 98.33% | 74.67% |
-| 2 | 97.33% | 75.67% |
-| 3 | 97.33% | 75.67% |
-| 4 | 98.33% | 75.67% |
-| 5 | 98.33% | 74.00% |
-| 6 | 99.33% | 71.67% |
-| 7 | 96.67% | 73.33% |
-| 8 | 96.67% | 71.67% |
-| 9 | 98.67% | 74.33% |
-| **mean** | **97.80%** | **74.03%** |
+| mean | 97.80% | 74.03% |
 
-A large, consistent gap - every seed, not a fluke. Before concluding ReLU is simply worse here,
-the same two hypotheses the binary cross-entropy and momentum investigations already validated
-as real mechanisms were checked directly rather than assumed away:
-
-- **Dead units**: checked directly (a unit whose activation is exactly 0.0 across the entire
-  training set, after training) - only 1 of 8 hidden units was dead at `learning_rate=1.0`.
-  Not nothing, but nowhere near enough to explain a 24-point gap on its own.
-- **Learning rate**: swept down, same 10 seeds each:
+A large, consistent gap. Dead units were checked directly and ruled out (only 1 of 8 hidden
+units dead - not enough to explain a 24-point gap). Sweeping `learning_rate` down for ReLU alone:
 
 | learning_rate | mean training accuracy |
 |---|---|
@@ -697,228 +246,71 @@ as real mechanisms were checked directly rather than assumed away:
 | 0.05 | 99.20% |
 | 0.01 | 99.47% |
 
-At `learning_rate=0.1`, ReLU's mean (99.27%) doesn't just recover to sigmoid's tuned performance
-(97.80%) - it exceeds it, and stays high down to `learning_rate=0.01`. Checked the dead-unit
-count again at `learning_rate=0.1` for the same seed=0 run: still 1 of 8 - unchanged from
-`learning_rate=1.0`, confirming dead units aren't the mechanism behind the learning-rate
-sensitivity either.
-
-### interpretation: the same root cause connects three separate findings
-
-ReLU's derivative in its active region is a flat 1.0 - no damping term the way sigmoid's
-`a(1-a)` provides (which shrinks toward zero as a unit saturates, naturally limiting how far a
-confident unit's weights move in one step). That is *exactly* the same mechanism identified
-independently in two earlier entries: binary cross-entropy's delta drops the same `a(1-a)`
-factor (for a different reason - the loss function's own derivative, not the activation's), and
-momentum's canonical coefficient amplified per-example gradient noise because it, too, had
-nothing damping how far weights moved per step. All three needed a smaller learning rate than
-whatever was already tuned for plain sigmoid + quadratic loss + no momentum - not because
-anything was wrong with them, but because removing any part of sigmoid's self-limiting factor
-from the update rule increases the effective step size for the same nominal `learning_rate`,
-and this codebase's existing tuned rates were never tuned for that.
-
-### decision
-
-Adopted as a genuine, positive finding - `ReLUBackpropClassifierNetwork` at `learning_rate=0.1`
-outperforms the sigmoid baseline at its own tuned `learning_rate=1.0` (99.27% vs 97.80% mean),
-a real result on real (if small-scale) data, not just "didn't lose." Unlike the binary
-cross-entropy and momentum investigations, this is being recorded as a genuine capability
-worth highlighting, not just a class that exists to lose a documented comparison. Still,
-consistent with every other sibling class in this codebase: not wired into any existing demo
-by default, and `BackpropClassifierNetwork` itself is completely unchanged - this needs its own
-tuned `learning_rate` wherever it's actually used, the same caveat binary cross-entropy already
-carries, not a drop-in replacement for the sigmoid default.
+At `learning_rate=0.1`, ReLU's mean (99.27%) *exceeds* sigmoid's own tuned performance (97.80%).
+The mechanism: ReLU's derivative in its active region is a flat 1.0, with no damping term the
+way sigmoid's `a(1-a)` provides - the same root cause identified for binary cross-entropy's and
+momentum's own learning-rate sensitivity, applied to a third case. **Decision:** adopted as a
+genuine, positive finding, not just "didn't lose" - but still needs its own tuned learning rate
+wherever used, not a drop-in replacement for sigmoid at existing hyperparameters.
 
 ## L2 weight regularization: closes the overfitting gap, doesn't improve it
 
-### context
-
-`docs/structure.md`'s "possible next steps" flagged L2 (weight decay) regularization as cheap to
-add and cheap to measure. Unlike the other four techniques investigated this session, L2's whole
-purpose is generalization (discouraging large weights, which is what actually controls a model's
-effective complexity) - so measuring it on the XOR toy problem (used for cross-entropy, momentum,
-and ReLU) would miss the point: XOR's training data is continuously resampled from a fixed true
-target, not a finite dataset a network can overfit to in the usual sense. Measured instead on the
-same fixed, finite MNIST proxy (400 real examples, digit 3's class-balanced one-vs-rest target,
-80/20 split) used for the ensemble init and Xavier/Glorot investigations, combined with the
-already-adopted fan-in-aware init (via a throwaway subclass, so L2's effect isn't confounded with
-the already-solved saturation problem), at the demo-tuned `learning_rate=0.5`.
-
-### measured comparison
+Measured on a fixed, finite MNIST proxy (400 examples, digit 3, 80/20 split, fan-in-aware init,
+`learning_rate=0.5`) rather than XOR's continuously-resampled target, since L2's whole purpose is
+generalization:
 
 | l2_lambda | mean train accuracy | mean test accuracy | train-test gap |
 |---|---|---|---|
-| 0.0 (no regularization) | 98.50% | 93.75% | 4.75 pts |
+| 0.0 (none) | 98.50% | 93.75% | 4.75 pts |
 | 0.0001 | 98.31% | 92.75% | 5.56 pts |
 | 0.001 | 98.19% | 92.25% | 5.94 pts |
 | 0.01 | 93.75% | 93.75% | 0 pts |
-| 0.1 | 55.13% | 59.25% | &minus;4.13 pts |
-| 0.5 | 55.13% | 59.25% | &minus;4.13 pts |
+| 0.1 | 55.13% | 59.25% | −4.13 pts |
+| 0.5 | 55.13% | 59.25% | −4.13 pts |
 
-Three distinct regimes, not a single "helps" or "doesn't help" verdict:
-
-- **Too weak (0.0001, 0.001):** slightly *worse* on both train and test accuracy than no
-  regularization at all - not enough penalty to meaningfully constrain the weights, just enough
-  to mildly interfere with fitting.
-- **Closes the gap, but doesn't help (0.01):** training accuracy drops from 98.50% to 93.75% -
-  landing exactly on test accuracy's own unchanged 93.75%. This is the textbook regularization
-  signature (the train-test gap that indicates overfitting genuinely closes), but note what
-  actually happened: training accuracy fell to *meet* test accuracy, not test accuracy rising to
-  meet training. On this proxy, L2 traded away fit rather than buying generalization.
-- **Collapse (0.1, 0.5):** both land on identical numbers, confirmed directly rather than assumed
-  to be coincidence - checked the trained network's own hidden-layer weights and found them
-  decayed to near-zero (max magnitude ~0.003, mean ~0.0005), and its predictions on the entire
-  test set collapsed to a single constant class. Past some threshold between 0.01 and 0.1, the
-  weight-decay term overwhelms the gradient signal entirely and the network stops learning
-  anything - both "too strong" values land on the same degenerate, weights-near-zero result
-  because they're both well past that threshold, not because 0.1 and 0.5 are equivalent in
-  general.
-
-### interpretation
-
-No `l2_lambda` value tested improved held-out test accuracy above the unregularized baseline
-(93.75%) on this proxy - the best outcome (0.01) matched it, at the cost of noticeably worse
-training accuracy. This doesn't mean L2 regularization is wrong in principle (its whole
-literature-backed premise - constraining weight magnitude reduces effective model complexity -
-is well established), but on a network and dataset this small (a single 16-node hidden layer,
-320 training examples), there may simply not be enough overfitting happening in the first place
-for a weight-magnitude penalty to have room to help versus hurt. A 4.75-point train-test gap at
-`l2_lambda=0.0` is real but modest, not the kind of severe overfitting L2 regularization is
-usually reached for.
-
-### decision
-
-Not adopted as a default, for the same reason as momentum: no coefficient measured here beats
-plain SGD on the metric regularization actually exists to improve (held-out accuracy), so
-`L2RegularizedBackpropClassifierNetwork` requires `l2_lambda` as an explicit constructor
-argument rather than defaulting to any of the values tested. Kept as a real, tested class rather
-than left uncommitted, for the same reason as momentum: genuinely useful to have available for a
-larger or more overfitting-prone future scenario than this proxy represents, where L2's actual
-mechanism (as directly confirmed here - it does constrain weight magnitude, exactly as designed)
-would have more overfitting to actually correct.
+Three regimes: too weak (0.0001-0.001, slightly worse on both metrics), the gap genuinely closes
+at 0.01 but by training accuracy *falling to meet* test accuracy rather than the reverse, and
+collapse at 0.1+ (weights decayed to near-zero, predictions collapsed to a single constant
+class - confirmed directly, not assumed from the identical numbers). No `l2_lambda` improved
+held-out accuracy above the unregularized baseline - plausibly because a single 16-node hidden
+layer on 320 examples doesn't have severe enough overfitting for a weight-magnitude penalty to
+have room to help. **Decision:** not adopted as a default, for the same reason as momentum -
+`L2RegularizedBackpropClassifierNetwork` requires an explicit `l2_lambda`. Kept as a real,
+tested capability for a more overfitting-prone future scenario.
 
 ## softmax on real full-scale MNIST
 
-### context
-
-`docs/structure.md`'s "possible next steps" flagged this as worth measuring before committing
-effort: `SoftmaxMultiClassBackpropClassifierNetwork` (built during the "softmax/cross-entropy
-re-alignment" investigation above) was only validated on the small bundled UCI digits set (1797
-samples), where it beat `MultiClassBackpropClassifierNetwork`'s one-vs-rest approach (96.94% vs
-95.54% test accuracy, reaching full training accuracy in about half the epochs). Whether that
-held at MNIST's real full scale (60000 train / 10000 test, 784-dimension input) was untested,
-and unlike the binary cross-entropy investigation's own retuning question, a joint 10-output
-softmax network can't be parallelized across processes the way `EnsembleBackpropClassifierNetwork`
-was specifically built to allow (see "parallelizing MNIST training") - so pure-Python training
-time at this scale was a real, unmeasured risk before committing to the run at all.
-
-A cheap feasibility check first: an isolated 500-record timing test at this session's own
-architecture (`layer_sizes=[16]`, `dimension=784`, matching the ensemble/demo's own config)
-measured 4.03ms/iteration for one-vs-rest and 4.68ms/iteration for softmax - both comfortably
-feasible (~4.0 and ~4.7 min/epoch respectively), a fraction of the older, larger-hidden-layer
-~12.5ms/iteration figure in the "parallelizing MNIST training" entry. Full training-set memory
-footprint was checked too (1861 MB peak RSS for the full 60000-example decoded set, well within
-the 4.1GB free on this machine).
-
-### measured comparison
-
-Full real MNIST (60000 train / 10000 test), same architecture as
-`demo_mnist_ensemble_recognition.py`/the ensemble (`layer_sizes=[16]`, `dimension=784`,
-`learning_rate=0.5`, 5 epochs), both trained sequentially in one process (the ensemble's own
-parallelization strategy doesn't apply here - neither network can be split into independent
-sub-problems the way the ensemble's ten binary classifiers can):
-
-| epoch | one-vs-rest (training accuracy) | softmax (training accuracy) |
-|---|---|---|
-| 1 | 91.26% | 83.67% |
-| 2 | 91.86% | 84.39% |
-| 3 | 92.24% | 88.57% |
-| 4 | 92.64% | 89.69% |
-| 5 | 93.49% | 88.92% |
+`SoftmaxMultiClassBackpropClassifierNetwork` had only been validated on small-scale UCI digits
+(where it beat one-vs-rest, 96.94% vs. 95.54%). A feasibility check first (500-record timing:
+4.03ms/iter one-vs-rest vs. 4.68ms/iter softmax, both comfortably fast; 1861 MB peak RSS for the
+full decoded set) cleared the way for a real run - full 60000/10000 MNIST, `[16]` hidden,
+`learning_rate=0.5`, 5 epochs, both trained sequentially (softmax's joint output can't be split
+across processes the way the ensemble's ten binary classifiers can):
 
 | | held-out test accuracy | training time |
 |---|---|---|
 | one-vs-rest | 92.75% | 31.4 min |
 | softmax | 89.12% | 35.5 min |
-| ensemble (`FanInAwareBackpropClassifierNetwork` x10, independent, documented baseline) | 96.01% | ~29.6 min |
+| ensemble (fan-in-aware x10, documented baseline) | 96.01% | ~29.6 min |
 
-Two things stand out beyond the headline test-accuracy gap:
+The opposite result from the small-scale UCI comparison - softmax trailed at every epoch, and its
+training accuracy wasn't even monotonic (dropped from epoch 4 to 5). Consistent with the same
+mechanism confirmed three times already: softmax's `activation - target` delta drops the same
+`a(1-a)` damping term binary cross-entropy's does, and this run used the quadratic-tuned
+`learning_rate=0.5`, never retuned for softmax - the non-monotonic curve looks like overshoot,
+not a representational disadvantage. **Decision:** not retuned further (the same cost/value
+tradeoff the binary cross-entropy investigation already declined to spend on) - considered
+adequately answered. `MultiClassBackpropClassifierNetwork` remains the better full-scale
+one-network option at today's tuning; the ensemble remains the best of all three by a wide
+margin.
 
-- **Softmax's training accuracy isn't monotonic** - it dropped from epoch 4 to epoch 5 (89.69%
-  -> 88.92%), unlike one-vs-rest's clean, monotonic climb every single epoch. (This measurement
-  trains each network directly rather than through `train_linear_classifier_network`'s
-  pocket-algorithm rollback, so the reported softmax network is literally its raw epoch-5 state,
-  including this regression - not rolled back to its best epoch.)
-- **Softmax trails at every epoch measured**, and by a wide margin early on (91.26% vs 83.67% at
-  epoch 1) - the opposite of the small-scale UCI digits result, where softmax led throughout and
-  converged faster.
+## momentum under mini-batch gradients
 
-### interpretation
-
-This is the opposite result from the small-scale UCI digits comparison, but a familiar
-*pattern*, not a new one: this session has now measured the same mechanism three times for a
-different loss function - binary cross-entropy's delta (`activation - target`, no `a(1-a)`
-damping term) needed a substantially lower learning rate than whatever's tuned for quadratic
-loss, at every scale tested (XOR toy problem, small MNIST proxy, and the real full-scale
-ensemble - see "the ensemble/real-MNIST investigation"). Softmax's own delta drops the exact
-same damping term for the exact same reason (see "softmax/cross-entropy re-alignment"'s
-derivation). This run used `learning_rate=0.5` for both networks - tuned for one-vs-rest's
-quadratic loss, never retuned for softmax - and the non-monotonic training-accuracy curve (a
-real regression at epoch 5, not just a slower climb) is consistent with overshooting rather than
-a genuine representational or optimization-landscape disadvantage for softmax at this scale.
-
-Not confirmed: retuning softmax's learning rate at full MNIST scale would need its own real
-~30+ minute run to verify, the same cost/value tradeoff the binary cross-entropy investigation
-already weighed and declined to spend further on ("consistently confirmed not to help at
-production's current learning rate... with no further real-MNIST retuning planned unless a
-future need specifically calls for it"). The same posture applies here.
-
-### decision
-
-`SoftmaxMultiClassBackpropClassifierNetwork` measures as a clean loss against both
-`MultiClassBackpropClassifierNetwork` (92.75%) and the ensemble (96.01%) at real MNIST scale, at
-this codebase's currently-tuned `learning_rate=0.5` - not because softmax is wrong for this
-problem (the smaller-scale UCI digits result, and the underlying cross-entropy-loss-slowdown
-literature, both say otherwise), but plausibly because that learning rate was never tuned for
-it, the same untuned-learning-rate mechanism already confirmed for binary cross-entropy at all
-three scales tested. `MultiClassBackpropClassifierNetwork` remains the better-performing
-full-scale multi-class option of the two at today's tuning; `EnsembleBackpropClassifierNetwork`
-remains the best of all three by a wide margin (96.01%), for the same
-parallelizability-plus-fan-in-aware-init reasons already documented. No further real-MNIST
-retuning of softmax is planned unless a future need specifically calls for it - the question is
-considered adequately answered for now, the same posture the binary cross-entropy investigation
-already settled on.
-
-## momentum under mini-batch gradients: suggestive, but confounded by an untuned learning rate
-
-### context
-
-The "momentum" entry above left one question open: momentum's canonical coefficient (α=0.9)
-robustly *hurt* under this codebase's per-example online SGD, with the leading candidate
-explanation being that per-example gradients are noisier than the mini-batch gradients
-momentum's own literature is validated against -
-`MomentumBackpropClassifierNetwork` was kept specifically to retest once mini-batch gradients
-existed (see that entry's own "decision," and `momentum_backprop_classifier_network.py`'s
-docstring). [Mini-batch gradient descent](mini-batch-gradient-descent.md) built exactly that
-capability (`BackpropNode.accumulate_gradient`/`apply_accumulated_gradient`, `learn_batch`,
-`train.train_backprop_network_mini_batch` - see that document's own "status" section for what
-was built, across three PRs). This entry is that retest - stage 6 of that workplan.
-
-Same proxy as the original momentum investigation: 320 real MNIST examples, digit 3's
-class-balanced one-vs-rest target (`ensemble_train.select_balanced_indices`), fan-in-aware
-init, `learning_rate=0.5`, 5 epochs, `layer_sizes=[16]`. Two differences from the original,
-both because that investigation's own script was an isolated, uncommitted prototype (like
-several other entries in this document - see "Xavier/Glorot", "momentum" itself) rather than
-something this session could re-run byte-for-byte: test accuracy here is measured against a
-fixed ~2020-example class-balanced set built from the real MNIST *test* split (the original's
-own test-set construction wasn't preserved), and momentum coefficients (0.0, 0.3, 0.5, 0.7,
-0.9) crossed with four batch sizes (1, 8, 32, 128), 10 seeds each, 200 runs total, in parallel
-across an 8-core process pool (the same fork-based-sharing pattern `ensemble_train.py` already
-uses for independent training runs) - about 24 minutes wall-clock.
-
-### measured comparison
-
-Mean test accuracy ± stdev, n=10 seeds per cell:
+[Mini-batch gradient descent](mini-batch-gradient-descent.md) exists specifically to retest
+momentum's null finding under lower-noise batch gradients. Same proxy as the original momentum
+investigation (320 real MNIST examples, digit 3, fan-in-aware init, `learning_rate=0.5`, 5
+epochs, `[16]` hidden), momentum coefficients (0.0, 0.3, 0.5, 0.7, 0.9) crossed with batch sizes
+(1, 8, 32, 128), 10 seeds each, 200 runs:
 
 | momentum | batch_size=1 | batch_size=8 | batch_size=32 | batch_size=128 |
 |---|---|---|---|---|
@@ -928,152 +320,46 @@ Mean test accuracy ± stdev, n=10 seeds per cell:
 | 0.7 | 91.74% ± 1.07% | 91.85% ± 0.73% | 90.82% ± 1.12% | 84.29% ± 6.29% |
 | 0.9 | 89.06% ± 1.46% | 90.82% ± 1.17% | 91.64% ± 0.77% | **87.66% ± 2.62%** |
 
-Two patterns stand out:
+`batch_size=1` replicates the original finding (momentum=0.9 hurts, 0.3-0.7 flat within noise) -
+a methodology sanity check that passed. But accuracy at fixed `learning_rate=0.5` collapses as
+batch size grows regardless of momentum (91.43% -> 71.24% at momentum=0.0), and momentum visibly
+rescues that collapse (84.65% -> 91.64% at batch_size=32, momentum 0.0 -> 0.9). That rescue is
+real and reproducible, but confounded: `learning_rate=0.5` was never scaled up for larger batches
+(a batch of `b` produces `320/b` update steps per epoch - far fewer total steps unless the rate
+compensates, the standard mini-batch "linear scaling rule"). Momentum's velocity term is a
+plausible partial substitute for that missing scaling, which would explain the rescue *without*
+it being evidence about gradient noise specifically - the mechanism this retest was meant to
+isolate. **Decision:** not a clean confirmation or reversal - `MomentumBackpropClassifierNetwork`
+remains not adopted as a default. A follow-up sweep scaling `learning_rate` with `batch_size`
+would be needed to isolate the effect cleanly; not yet run.
 
-- **`batch_size=1` replicates the original investigation's own qualitative finding**, as a
-  methodology sanity check: momentum=0.9 measurably hurts (89.06% vs the 91.43% baseline, a
-  2.4-point drop, the same direction and a comparable magnitude to the original's own
-  91.75%-vs-93.75% first-pass gap), while 0.3-0.7 cluster within noise of the baseline (91.39%
-  to 91.74%, inside each other's stdev) - the same flat, statistically indistinguishable
-  landscape the original's own 15-seed second pass found. Absolute accuracy differs from the
-  original (93.75%/93.83% baseline vs 91.43% here), expected given the different,
-  independently-reconstructed test set - the *pattern* replicates, which is what matters for
-  trusting the rest of this sweep's methodology.
-- **Accuracy at fixed `learning_rate=0.5` collapses as `batch_size` grows, at every momentum
-  value** - baseline (momentum=0.0) drops from 91.43% at `batch_size=1` to a wildly unstable
-  71.24% ± 13.75% at `batch_size=128` (some seeds are catastrophically undertrained, others
-  aren't - hence the huge stdev). **Momentum visibly rescues this**, and does so
-  monotonically: at `batch_size=32`, accuracy climbs cleanly from 84.65% (momentum=0.0) to
-  91.64% (momentum=0.9), with stdev *shrinking* the same direction (6.78% -> 0.77%) - the
-  clearest, most orderly pattern in this entire sweep. `batch_size=128` shows the same shape,
-  more extreme (71.24% -> 87.66%, stdev 13.75% -> 2.62%).
+## convolutional layers on UCI digits
 
-### interpretation
-
-The `batch_size=32`/`128` rescue effect is real and reproducible (tight stdevs at high
-momentum, n=10), but it isn't clean evidence for the original hypothesis (momentum helps more
-under lower-noise mini-batch gradients) on its own - it's confounded with a much more standard,
-well-known effect this sweep didn't control for: **`learning_rate=0.5` was never scaled up for
-larger batch sizes**. A batch of `b` examples produces `320/b` weight-update steps per epoch
-instead of `320` - at `batch_size=128`, only ~15 update steps happen across all 5 epochs, versus
-1600 at `batch_size=1`. With a fixed per-step learning rate, far fewer steps means far less
-total displacement in weight-space per epoch of data seen, unless the learning rate is scaled
-up to compensate (the standard "linear scaling rule" for mini-batch SGD - e.g. Goyal et al.,
-2017, "Accurate, Large Minibatch SGD"). Momentum's velocity term, which lets a step's effective
-displacement keep growing across consecutive similarly-directed updates, is a plausible partial
-substitute for that missing learning-rate scaling - which would explain the rescue effect
-*without it being evidence specifically about gradient noise*, the mechanism the original
-investigation's momentum-retest motivation was actually about (see "context" above). This is
-the same category of confound the "softmax on real full-scale MNIST" entry above flagged for
-itself (`learning_rate=0.5`, tuned for one-vs-rest's quadratic loss, never retuned for
-softmax) - a batch-size sweep at one fixed learning rate is really answering "how much does an
-untuned learning rate hurt as batch size grows," not cleanly isolating momentum's effect from
-that confound.
-
-`batch_size=1`/`8`'s own flat, momentum-doesn't-clearly-help result (closest to the original
-per-example-SGD regime this session's own hypothesis was about) is the cleaner read of the two:
-still no evidence momentum helps once gradients are only mildly less noisy than fully
-per-example - consistent with, not yet a reversal of, the original investigation's own null
-finding.
-
-### decision
-
-Not a clean confirmation or reversal of the original "momentum: measured, not worth adopting"
-finding - momentum still isn't a demonstrated win at the batch sizes closest to the original's
-own regime (1, 8), and the striking rescue effect at 32/128 is real but plausibly explained by
-an untuned learning rate rather than by gradient noise specifically, the actual mechanism this
-retest was designed to isolate. `MomentumBackpropClassifierNetwork` remains not adopted as a
-default, for the same reason as before: no configuration measured here cleanly beats a properly
-tuned baseline. A follow-up sweep that scales `learning_rate` with `batch_size` (the standard
-mini-batch SGD practice this one didn't apply) - rather than more epochs, which would multiply
-this sweep's already-24-minute cost considerably for the larger batch sizes - is the natural
-next step to actually isolate momentum's effect from the learning-rate confound, but hasn't
-been run; this entry reports what was measured, not what a corrected sweep would show.
-
-## convolutional layers on UCI digits: a clean null result
-
-### context
-
-[Convolutional layers](convolutional-layers.md)'s workplan built a from-scratch
-`ConvMultiClassBackpropClassifierNetwork` (`ConvKernel`/`ConvUnit`/`ConvLayer` - see that
-document's stages 1-5, all implemented and tested) specifically to answer one honestly-flagged
-open question: whether local receptive fields and weight sharing measurably help on this
-codebase's own real image data, or whether - given `MultiClassBackpropClassifierNetwork`'s
-already-strong dense baseline on UCI digits (99.5%/96.9% train/test,
-`randomize_fan_in_aware`'s own docstring) - the task is already close to saturated for a dense
-network, leaving little room for convolution to show a clear win at this scale. This entry is
-that validation - stage 6 of the workplan.
-
-Full, real UCI digits (1797 samples), the exact same fixed train/test split
-`demo_uci_digit_recognition.py` itself uses (`split_train_test(dataset, test_fraction=0.2,
-seed=0)` - 1438 train, 359 test), `learning_rate=0.5`, `epochs=30`, matching that demo's own
-tuned parameters exactly for a fair comparison. Two architectures compared at a deliberately
-comparable overall trainable-parameter budget, not an arbitrarily different one:
+[Convolutional layers](convolutional-layers.md)'s `ConvMultiClassBackpropClassifierNetwork` was
+validated against the dense baseline on full UCI digits (1797 samples, the same fixed
+`split_train_test(seed=0)` split `demo_uci_digit_recognition.py` uses, `learning_rate=0.5`,
+`epochs=30`), at a deliberately comparable trainable-parameter budget:
 
 | architecture | shape | trainable parameters |
 |---|---|---|
-| dense (`MultiClassBackpropClassifierNetwork`) | `[32]` hidden layer | 2410 |
-| conv (`ConvMultiClassBackpropClassifierNetwork`) | `kernel_size=3`, `channel_count=4` conv layer -> `[16]` dense hidden layer | 2530 (40 kernel + 2490 dense) |
+| dense | `[32]` hidden | 2410 |
+| conv | `kernel_size=3`, `channel_count=4` conv -> `[16]` dense | 2530 |
 
-8 seeds each (varying only weight initialization/training randomness - the train/test split
-itself stayed fixed across every run, unlike the momentum retest's own per-seed resampling,
-since UCI digits is this codebase's own established fixed benchmark), 16 runs total, run in
-parallel across an 8-core process pool (the same fork-based-sharing pattern `ensemble_train.py`
-and the momentum retest both already use) - 518.3s wall-clock.
-
-### measured comparison
+8 seeds each (fixed split, varying only init/training randomness):
 
 | architecture | train accuracy | test accuracy |
 |---|---|---|
-| dense | mean=99.57% stdev=0.08% | mean=96.69% stdev=0.62% |
-| conv | mean=99.78% stdev=0.10% | mean=96.52% stdev=0.73% |
+| dense | mean 99.57%, stdev 0.08% | mean 96.69%, stdev 0.62% |
+| conv | mean 99.78%, stdev 0.10% | mean 96.52%, stdev 0.73% |
 
-Test accuracy per seed:
-
-- dense: 95.54%, 96.66%, 96.94%, 96.66%, 96.94%, 97.21%, 97.49%, 96.10%
-- conv: 96.94%, 95.26%, 97.21%, 96.10%, 96.10%, 97.21%, 97.21%, 96.10%
-
-The two means differ by 0.17 percentage points - smaller than either architecture's own stdev
-(0.62%/0.73% at n=8) and well inside the overlap of their two per-seed ranges. Both architectures
-land in the same 95.3%-97.5% band; neither one's seeds cluster above or below the other's in any
-visible pattern.
-
-### interpretation
-
-A flat, statistically indistinguishable result - the same shape of finding as momentum's own
-canonical-coefficient sweep and L2's own regularization sweep (see those entries above), not a
-win for either architecture. This is consistent with, not a refutation of, the open question
-`convolutional-layers.md`'s own "numerical and behavioral risks" section flagged before this
-measurement was taken: UCI digits' 8x8 images are small and the task is already close to
-saturated for a plain dense network at this parameter budget (99.5%/96.9% is close to ceiling
-for 1797 samples, 10 classes), leaving little room for convolution's own real advantages -
-translation invariance, fewer effective parameters per learned feature - to show up as a test-
-accuracy improvement specifically. Training accuracy tells a similar story: conv's 99.78% is
-marginally higher than dense's 99.57%, plausibly just a slightly easier optimization landscape
-at this parameter count on this particular training set, not a generalization advantage (the
-held-out numbers don't follow the same pattern).
-
-Two things this measurement does *not* by itself establish: whether convolution's own real
-advantages would show up on a task with more, or spatially larger, structure to exploit (real
-MNIST's 28x28 images are the next, larger-scale test this workplan's own "expected effect and
-validation targets" section already scoped, gated on this comparison being "favorable or at
-least not a clear loss" - a flat null qualifies, per that document's own stated bar), and
-whether a different conv architecture (more channels, a different kernel size, more training
-epochs at conv's own possibly-different optimal learning rate) would separate the two more
-clearly - this measurement used one specific, reasonably-chosen but not exhaustively-tuned
-architecture and the dense baseline's own already-tuned hyperparameters, not a search over
-either.
-
-### decision
-
-Not adopted as a demonstrated win at this scale - no accuracy improvement was measured on UCI
-digits at a comparable parameter budget, honestly reported as a null result rather than
-stretched into a positive finding. `ConvMultiClassBackpropClassifierNetwork` remains built and
-tested (see `convolutional-layers.md`'s own stages 1-5), a genuine, correct capability now
-available in this codebase, just not one this specific measurement recommends over the existing
-dense baseline for this specific task. Per the workplan's own stated bar ("favorable, or at
-least not a clear loss"), this flat result is enough to make a real-MNIST-scale run worth
-considering as a follow-up, not enough to justify it as a confident next step on its own -
-that's a real, further wall-clock cost (a full real-MNIST run takes on the order of 30 minutes
-per architecture per seed, per the ensemble/real-MNIST investigation above) for a question this
-UCI-digits-scale result leaves genuinely open rather than answered.
+The two test-accuracy means differ by 0.17 points - smaller than either architecture's own
+stdev, both landing in the same 95.3%-97.5% per-seed band. A flat, statistically
+indistinguishable result, honestly reported as a null rather than stretched into a win for
+either side - plausibly because UCI digits' 8x8 images and 1797 samples are already close to
+saturated for a dense network at this parameter budget, leaving little room for convolution's
+real advantages (translation invariance, fewer effective parameters per feature) to show up as a
+test-accuracy improvement. **Decision:** not adopted as a demonstrated win at this scale;
+`ConvMultiClassBackpropClassifierNetwork` remains a real, correct, tested capability. Whether
+real MNIST's larger spatial structure would separate the two differently is a real, further
+wall-clock cost (~30 minutes per architecture per seed) this result leaves open rather than
+answered - see [structure](structure.md#possible-next-steps).

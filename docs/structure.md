@@ -63,6 +63,29 @@ perceptron/
                                      weight update, bias excluded (see "backprop siblings")
     l2_regularized_backprop_classifier_network.py  L2-regularized sibling of
                                      backprop_classifier_network.py (see "backprop siblings")
+    conv_kernel.py                  ConvKernel — one output channel's shared, trainable
+                                     kernel weights/bias, with its own accumulate_gradient/
+                                     apply_accumulated_gradient pair (see "convolutional layer")
+    conv_unit.py                    ConvUnit — one output spatial position's forward/backward
+                                     math over a receptive-field window into ConvKernel's shared
+                                     weights (see "convolutional layer")
+    conv_layer.py                   ConvLayer — a channel_count x out_height x out_width grid of
+                                     ConvUnits sharing channel_count ConvKernels; the per-layer
+                                     accumulate/apply/snapshot/restore hooks BackpropNetworkBase
+                                     dispatches through instead of reaching into layer.nodes
+                                     directly (see "convolutional layer")
+    conv_multiclass_backprop_classifier_network.py  one ConvLayer -> dense hidden/output layers,
+                                     a sibling of multiclass_backprop_classifier_network.py (see
+                                     "convolutional layer")
+    array_layer.py                  ArrayLayer — one layer's weights/activations as whole numpy
+                                     arrays (W, b) instead of per-node objects; forward/backward/
+                                     gradient formulas are matrix ops, not per-node loops (see
+                                     "vectorized array-based classes")
+    vectorized_multiclass_backprop_classifier_network.py  VectorizedMultiClassBackpropClassifierNetwork
+                                     — a standalone (non-BackpropNetworkBase) network built from
+                                     ArrayLayers, sharing only the external learn/classify_state/
+                                     snapshot/save contract every sibling network shares (see
+                                     "vectorized array-based classes")
   capture_common.py               stamp_brush — the brush-stamping loop shared by
                                    digit_capture.py and mnist_capture.py's own paint_brush_stroke
   graphics/
@@ -97,7 +120,10 @@ perceptron/
                                    (load_mnist_labels) and indexed-record (load_mnist_records_at_indices,
                                    direct seek - decodes only what's asked for) readers that
                                    together let ensemble training avoid ever fully decoding the
-                                   dataset in any one process (see research-and-analysis.md)
+                                   dataset in any one process (see research-and-analysis.md), plus
+                                   load_mnist_dataset_as_array — a bulk numpy decode straight from
+                                   raw bytes for the vectorized classes below (see "vectorized
+                                   array-based classes")
   ensemble_train.py                builds each class's balanced binary dataset from label data
                                    alone (select_balanced_indices/build_balanced_binary_dataset),
                                    then trains all class_count classifiers as fully independent
@@ -164,6 +190,14 @@ perceptron/
                                                  (one-vs-rest vs softmax, quadratic vs binary cross-entropy,
                                                  fan-in-aware vs Xavier/Glorot init) live, side by side, with
                                                  charts - see "backprop siblings" and demos.md
+    demo_vectorized_uci_digit_recognition.py     trains MultiClassBackpropClassifierNetwork and
+                                                 VectorizedMultiClassBackpropClassifierNetwork on the same
+                                                 UCI digits split, same seed/hyperparameters, reporting
+                                                 accuracy and wall-clock side by side (see "vectorized
+                                                 array-based classes")
+    demo_vectorized_mnist_recognition.py         the same pure-Python-vs-numpy comparison, one real epoch
+                                                 over the full 60000-example MNIST training set (see
+                                                 "vectorized array-based classes")
 data/
   digits/
     digits.csv                      bundled 8x8 digits dataset (1797 rows, 64 pixels + a
@@ -221,6 +255,25 @@ tests/                           one file per module under test, plus test_train
   test_l2_regularized_backprop_model.py       one file per backprop sibling class and its underlying
                                    node/layer machinery (see "backprop siblings"), each with the same
                                    hand-computed-forward/backward-pass pattern as test_backprop_model.py
+  test_backprop_layer.py, test_backprop_constructor_validation.py  shared BackpropLayer behavior
+                                   and the parametrized constructor-validation checks every
+                                   BackpropNetworkBase sibling's __init__ shares
+  test_gradient_accumulation.py, test_learn_batch.py, test_train_mini_batch.py  mini-batch gradient
+                                   descent: node-level accumulate_gradient/apply_accumulated_gradient
+                                   parity against the per-example apply_gradient path, learn_batch on
+                                   the classifier networks, and train.train_backprop_network_mini_batch
+                                   (see "mini-batch gradient descent")
+  test_conv_kernel.py, test_conv_unit.py, test_conv_layer.py,
+  test_conv_multiclass_backprop_model.py  ConvKernel weight/gradient arithmetic, ConvUnit forward/
+                                   backward against hand-computed values, ConvLayer's receptive-field
+                                   wiring and per-layer accumulate/apply/snapshot hooks, and
+                                   ConvMultiClassBackpropClassifierNetwork end to end against a UCI
+                                   digits baseline (see "convolutional layer")
+  test_array_layer.py, test_vectorized_multiclass_backprop_model.py  ArrayLayer's forward/backward/
+                                   gradient formulas parity-checked against BackpropNode's per-node
+                                   reference, and VectorizedMultiClassBackpropClassifierNetwork end to
+                                   end (learn, learn_batch, randomize, snapshot/restore, save/load) -
+                                   see "vectorized array-based classes"
 cli                                setup / test / clean helper script
 ```
 
@@ -477,101 +530,104 @@ which `intensity_to_color`'s strict range assertion then rejected - `scale_to_fi
 result (not the general-purpose `resize_area_weighted` itself, whose valid output range depends
 on its caller's own input range).
 
+## convolutional layer
+
+`ConvMultiClassBackpropClassifierNetwork` places one `ConvLayer` directly after the
+(non-trainable) input `StateLayer`, followed by ordinary dense hidden/output layers - a sibling
+of `MultiClassBackpropClassifierNetwork`, not a retrofit (its `__init__` doesn't call
+`super().__init__()`; it builds `hidden_layers`/`output_layer`/`trainable_layers` directly). It
+encodes the one structural fact dense layers throw away for image data: pixels have 2D spatial
+relationships, and the same local pattern can appear anywhere in the image. A `ConvLayer` holds
+`channel_count` `ConvKernel`s (each owning `kernel_size**2` shared, trainable weights plus a
+bias) and `out_height * out_width * channel_count` `ConvUnit`s, one per output spatial position
+per channel; each `ConvUnit` connects only to its own `kernel_size x kernel_size` receptive-field
+window of the input (single input channel, `'valid'` padding, configurable stride) and computes
+against its channel's shared `ConvKernel` weights rather than owning independent weights the way
+`BackpropNode` does. `ConvUnit` is composition, not inheritance (`AbstractNode`, not
+`BackpropNode`), since a genuinely shared, cross-instance weight list doesn't fit
+`BackpropNode.input_node_weights`'s owned-and-rebindable design.
+
+Weight sharing is why `BackpropNetworkBase`'s gradient/persistence methods
+(`_accumulate_gradients`, `_apply_accumulated_gradients`, `_apply_gradients`, `snapshot`,
+`restore`) dispatch through a per-*layer* hook (`BackpropLayer.accumulate_gradients()` etc.)
+instead of reaching into `layer.nodes` directly - calling `apply_accumulated_gradient` once per
+spatial position would apply the same kernel's update up to `out_height * out_width` times per
+step. `BackpropLayer`'s default implementations are exactly the old per-node loop bodies (every
+other sibling layer is unaffected); `ConvLayer` overrides them to iterate `ConvUnit`s for
+accumulation (summing every position's contribution into its kernel) but `ConvKernel`s (once
+each) for apply/snapshot/restore.
+
+Validated on UCI digits at a comparable trainable-parameter budget (2410 dense vs. 2530 conv, 8
+seeds each): mean test accuracy came out statistically indistinguishable (96.69% dense vs. 96.52%
+conv) - a clean null, not a win, honestly reported rather than stretched into one (see
+[research and analysis](research-and-analysis.md#convolutional-layers-on-uci-digits)). Stacked
+conv layers, multi-channel input, `'same'` padding, and pooling are all out of scope - a single
+conv layer directly after the non-trainable input needs no backprop-through-convolution, since
+nothing before it is ever trained.
+
+## vectorized array-based classes
+
+`VectorizedMultiClassBackpropClassifierNetwork` rewrites the forward/backward/gradient math
+around whole-layer numpy arrays instead of individual node objects: `ArrayLayer` holds a weight
+matrix `W` (shape `(size, input_size)`) and bias vector `b`, not `size` separate node objects,
+and every formula that was a per-node Python loop becomes one array operation (`forward`:
+`self.a = sigmoid(self.W @ x + self.b)`; `compute_hidden_delta`: one matmul, `next_layer.W.T @
+next_layer.delta`, replacing a per-node `sum()`; `accumulate_gradient`: `np.outer(self.delta,
+input_layer.a)`). This can't reuse `BackpropNetworkBase`'s per-node orchestration at all -
+there's no `own_index` to enumerate - so `VectorizedMultiClassBackpropClassifierNetwork` is a
+fully standalone class, sharing only the external contract (`learn`, `learn_batch`,
+`classify_state`, `predict_probabilities`, `snapshot`/`restore`, `save`/`load`) every sibling
+network already shares, with its own JSON envelope (arrays via `.tolist()`).
+
+Built and parity-checked against the pure-Python reference classes at every stage, then measured
+end to end: UCI digits (`[32]` hidden, 30 epochs) trains to matching accuracy (99.5%/96.1% vs.
+99.4%/96.7% train/test) in 8.57s vs. 77.16s pure-Python - **9.00x**. One real epoch over the full
+60000-example MNIST training set (`[30]` hidden) measures **33.87x** (32.7s vs. 18.45 min), with
+`load_mnist_dataset_as_array`'s bulk numpy decode itself **15.44x** faster than the existing
+tuple-per-example decode (0.41s vs. 6.32s) - see
+[vectorized array-based classes](vectorized-array-classes.md#measured-results) for the full
+numbers and parity methodology.
+
+`numpy` is kept permanently here, scoped specifically to this role: a performance-benchmarking
+mirror any future array backend's speed claim gets measured against, not this codebase's
+production array backend. [A hand-built Rust core](rust-array-core.md)
+(`rust/perceptron_array/`, wrapped via PyO3) implements the same operation subset
+([the numpy interface subset](numpy-interface-subset.md)) this class needs and is parity-tested
+against real numpy across 254 tests, and is the intended production array backend per
+[vectorization](vectorization.md#decision) - but nothing in `perceptron/model/` calls it yet;
+retargeting these classes (or building new ones) to it is a separate, not-yet-started step.
+
 ## possible next steps
 
-Recommendations from an audit-driven review of this codebase (see `research-and-analysis.md`
-for the investigations that shaped the architecture described above). Three of the original
-seven are now built, and a fourth has been measured (no new class needed - it already existed);
-the rest are ordered roughly by how directly each follows from an existing finding here, not by
-priority.
-
-**Built since this list was first written:**
-
-- ~~ReLU hidden-layer activation~~ - built as `ReLUBackpropClassifierNetwork` (see
-  `research-and-analysis.md`'s "ReLU hidden-layer activation" entry): retuned to its own learning
-  rate, it doesn't just match the sigmoid baseline, it exceeds it (99.27% vs 97.80% mean on a
-  fixed XOR scenario).
-- ~~Momentum~~ (not originally its own item here, but the same audit series that produced this
-  list also investigated it) - built as `MomentumBackpropClassifierNetwork` despite measuring as
-  a null (no coefficient tested beat plain SGD - see the "momentum" entry), since it remains a
-  genuine capability worth having on its own terms, e.g. for revisiting under mini-batch
-  gradients below.
-- ~~L2 weight regularization~~ - built as `L2RegularizedBackpropClassifierNetwork` (see the "L2
-  weight regularization" entry): also measured as a null on the proxy tested (no coefficient
-  improved held-out accuracy over the unregularized baseline), kept for the same reason as
-  momentum.
-- ~~Softmax multiclass training on real full-scale MNIST~~ - not a new class
-  (`SoftmaxMultiClassBackpropClassifierNetwork` already existed; only the real full-scale
-  measurement was outstanding) - measured as a clean loss against both
-  `MultiClassBackpropClassifierNetwork` (89.12% vs 92.75% test accuracy) and the ensemble
-  (96.01%) at this codebase's currently-tuned `learning_rate=0.5`, plausibly for the same
-  untuned-learning-rate-overshoot mechanism already confirmed for binary cross-entropy at every
-  scale tested - see the "softmax on real full-scale MNIST" entry.
-- ~~Mini-batch gradient descent~~ - built per
-  [mini-batch gradient descent](mini-batch-gradient-descent.md)'s workplan:
-  `BackpropNode.accumulate_gradient`/`apply_accumulated_gradient` (plus the matching
-  `MomentumBackpropNode`/`L2RegularizedBackpropNode` overrides), `BackpropNetworkBase`'s
-  `_accumulate_gradients`/`_apply_accumulated_gradients`, `learn_batch` on
-  `BackpropClassifierNetwork`/`MultiClassBackpropClassifierNetwork` (and every sibling that
-  inherits it unchanged - momentum, L2, ReLU, fan-in-aware, binary cross-entropy, softmax), and
-  `train.train_backprop_network_mini_batch`.
-- ~~The momentum re-test mini-batch gradient descent was built to unblock~~ - run: momentum
-  coefficients (0.0-0.9) crossed with batch sizes (1, 8, 32, 128), 10 seeds each, 200 runs on
-  the same real-MNIST proxy the original investigation used. Result is inconclusive, not a
-  clean win: `batch_size=1`/`8` (closest to the original per-example regime) still shows no
-  clear momentum benefit; `batch_size=32`/`128` shows a striking rescue effect from higher
-  momentum, but it's confounded with `learning_rate=0.5` never being scaled up for larger
-  batches (the standard mini-batch SGD practice this sweep didn't apply), not clean evidence for
-  the original gradient-noise hypothesis. `MomentumBackpropClassifierNetwork` remains not
-  adopted as a default. See `research-and-analysis.md`'s "momentum under mini-batch gradients"
-  entry.
-- ~~Convolutional layers, from scratch~~ - built per
-  [convolutional layers](convolutional-layers.md)'s workplan (`ConvKernel`, `ConvUnit`,
-  `ConvLayer`, `ConvMultiClassBackpropClassifierNetwork`, and the one shared-code change every
-  prior sibling avoided needing: `BackpropLayer` gaining per-layer gradient/persistence hooks)
-  and validated on UCI digits at a comparable trainable-parameter budget (2410 dense vs. 2530
-  conv, 8 seeds each): mean test accuracy came out statistically indistinguishable (96.69%
-  dense vs. 96.52% conv) - a clean null, not a win, honestly reported. See
-  `research-and-analysis.md`'s "convolutional layers on UCI digits" entry.
-- ~~The Rust array core~~ - built per [the Rust implementation plan](rust-array-core.md)'s own
-  PR-staged workplan (PR 0 through PR 9, 10 merged PRs, #174-#183): `rust/perceptron_array/`, a
-  standalone PyO3 crate implementing every operation in
-  [the numpy interface subset](numpy-interface-subset.md)'s table, parity-tested against real
-  numpy (and a pure-Python reference, where one exists independent of numpy) across 254 tests.
-  Per [vectorization](vectorization.md#decision-numpy-stays-permanently-as-a-benchmark-mirror-the-rust-core-becomes-production)'s
-  own decision this is the intended production array backend, but nothing in `perceptron/model/`
-  calls it yet - see that document's own "status" for exactly what's built vs. what's still a
-  separate, later step.
-
-**Still open:**
+What's next for this codebase, given the architecture and measured results described above (see
+[research and analysis](research-and-analysis.md) for the investigations behind each decision),
+ordered roughly by how directly each follows from an existing finding here, not by priority.
 
 - **A learning-rate-vs-batch-size sweep**, to isolate the momentum re-test's large-batch rescue
   effect from the untuned-learning-rate confound identified above (scale `learning_rate` with
   `batch_size`, the standard practice the original sweep didn't apply) - the natural follow-up
   to actually test the original gradient-noise hypothesis cleanly, not yet run.
 - **A real-MNIST-scale convolutional layers validation**, now that the UCI-digits-scale result
-  came back a flat null rather than a clear loss (the workplan's own stated bar for considering
-  this) - real MNIST has meaningfully more spatial structure (28x28 vs. 8x8) for convolution's
-  own advantages to potentially show up in, but a full run costs on the order of 30 minutes per
-  architecture per seed (see the ensemble/real-MNIST investigation above), a real wall-clock
-  cost this UCI-digits result alone doesn't settle is worth spending. Not yet run.
+  came back a flat null rather than a clear loss - real MNIST has meaningfully more spatial
+  structure (28x28 vs. 8x8) for convolution's own advantages to potentially show up in, but a
+  full run costs on the order of 30 minutes per architecture per seed (see
+  [research and analysis](research-and-analysis.md#the-ensemblereal-mnist-investigation)), a
+  real wall-clock cost this UCI-digits result alone doesn't settle is worth spending. Not yet
+  run.
 - **CI** (e.g. GitHub Actions running `pytest` on push/PR) - the one item here that's pure
-  engineering, not ML content. Nothing currently protects this test suite (225 tests as of this
+  engineering, not ML content. Nothing currently protects this test suite (311 tests as of this
   writing, many pinned to hand-derived or empirically-measured expected values) from silently
-  regressing. **Blocked on solving where the reference MNIST dataset comes from first**: a CI
-  workflow attempted this session had to explicitly exclude `test_mnist_data.py` (see
-  `setup.md`) to avoid a permanently-red build, since its 9 tests need the real MNIST
-  parquet/binary files, which are gitignored with no scripted fetch step anywhere in this
-  codebase - supplied locally, by hand, whenever a dev checkout needed them. Building CI without
-  first deciding how a fresh checkout gets that data (a public mirror to fetch from? a repo
-  secret + private download step? committing a small stratified subset instead of the full
-  dataset?) means shipping CI that quietly can't protect part of the suite, not a real fix.
-- **Retargeting production code to the Rust array core.** The core itself is built and
-  parity-tested (see the "built" entry above), but nothing in `perceptron/model/` calls it yet -
-  [vectorized array-based model classes](vectorized-array-classes.md)'s classes still run on
-  `numpy`, which is correct (that's their now-permanent benchmarking-mirror role, not a gap to
-  fix), but no production path exists that uses the Rust core instead. [the Rust implementation
-  plan](rust-array-core.md)'s own "what stays explicitly out of scope" deliberately left this
-  cutover as a separate, later step from building the core - either retargeting those classes or
+  regressing. **Blocked on solving where the reference MNIST dataset comes from first**:
+  `test_mnist_data.py`'s tests need the real MNIST parquet/binary files, which are gitignored
+  with no scripted fetch step anywhere in this codebase - supplied locally, by hand, whenever a
+  dev checkout needs them (see [setup](setup.md)). Building CI without first deciding how a
+  fresh checkout gets that data (a public mirror to fetch from? a repo secret + private download
+  step? committing a small stratified subset instead of the full dataset?) means shipping CI
+  that quietly can't protect part of the suite, not a real fix.
+- **Retargeting production code to the Rust array core.** [The Rust core](rust-array-core.md) is
+  built and parity-tested, but nothing in `perceptron/model/` calls it yet -
+  [the vectorized classes](structure.md#vectorized-array-based-classes) still run on `numpy`,
+  which is correct (that's their permanent benchmarking-mirror role, not a gap to fix), but no
+  production path exists that uses the Rust core instead - either retargeting those classes or
   building new ones against `perceptron_array.Array` directly, then a fresh parity/wall-clock
   comparison against both the numpy-backed and pure-Python baselines. Not yet started.
