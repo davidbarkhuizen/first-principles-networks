@@ -2,12 +2,10 @@
 
 [← back to README](../README.md)
 
-**Status: stage 2 (the numpy capability) and stage 5 (the Rust-matmul-backed counterpart) done;
-stage 3 (the wall-clock/robustness follow-on measurement) and stage 4 (docs closeout) not yet
-run.** Written up front as a design/measurement plan before any of it existed, per this repo's own
-practice (see [Adam optimizer](adam-optimizer.md), [the Rust production cutover
-plan](rust-production-cutover.md) for precedent) - updated here with stage-by-stage status notes
-as it's executed.
+**Status: all five stages done.** Written up front as a design/measurement plan before any of it
+existed, per this repo's own practice (see [Adam optimizer](adam-optimizer.md), [the Rust
+production cutover plan](rust-production-cutover.md) for precedent) - updated here with
+stage-by-stage status notes as it was executed.
 
 ## why this, and why now
 
@@ -159,14 +157,81 @@ questions here - the design was already fully determined by mirroring two existi
 (`AdamArrayLayer` and `RustArrayLayer`) at once, so this stage skipped a separate design-only PR
 and went straight to implementation + tests.
 
-## measurement plan
+## measurement plan and result (stage 3)
 
 No new algorithmic question here - this stage is an architectural port (same algorithm proven
 correct in [Adam optimizer](adam-optimizer.md), different execution substrate), not a new
-hypothesis to test. Once correctness is established, the natural follow-on measurement - does
-Adam's batch-size robustness translate into an actual wall-clock win once matmul is real, the
-question stage 5 explicitly deferred to this capability - is its own next stage, not assumed or
-folded into this one.
+hypothesis to test. Two things this codebase's own rigor standard requires checking rather than
+assuming, though: does the vectorized port actually turn into a wall-clock win (not just a
+theoretical one), and does the per-node reference's batch-size-robustness result (fixed
+`learning_rate` barely degrades Adam across `batch_size`, where sigmoid collapses -
+[research and analysis](research-adam-optimizer.md#adam-under-batch-size-a-much-bigger-cleaner-win-stage-4-of-the-adam-optimizer-workplan))
+still hold once the algorithm runs through a genuinely different code path (batched matmul,
+different floating-point summation order).
+
+**Part A - wall-clock, one mini-batch training step** (`forward_batch` + `compute_output_delta_batch`
++ `accumulate_gradient_batch` + `apply_accumulated_gradient`, `dimension=784, hidden=10` - the same
+shape/methodology [the Rust production cutover plan](rust-production-cutover.md#0b-fuse-each-layer-operation-into-one-rust-call)'s
+own go/no-go benchmark used for the plain (non-Adam) fused ops), three backends (per-node via
+`make_adam_layer_cls`, numpy `AdamArrayLayer`, Rust `AdamRustArrayLayer`), median of 20-50 timed
+reps per config:
+
+| batch size | per-node (us/example) | numpy (us/example) | Rust (us/example) | per-node/numpy | per-node/Rust | Rust/numpy |
+|---|---|---|---|---|---|---|
+| 1 | 8542.49 | 121.91 | 84.09 | 70.1x | 101.6x | 0.69x - **Rust faster** |
+| 8 | 3693.14 | 16.62 | 16.61 | 222.2x | 222.3x | 1.00x - parity |
+| 32 | 2800.73 | 5.63 | 9.99 | 497.5x | 280.4x | 1.78x slower |
+| 128 | 2713.91 | 3.94 | 8.08 | 688.8x | 335.9x | 2.05x slower |
+| 512 | 2715.24 | 3.42 | 12.05 | 793.9x | 225.3x | 3.52x slower |
+
+**Yes, decisively: both array-based backends are 70x-794x faster per example than the per-node
+path across every batch size tested**, and the win *grows* with batch size (the per-node path's
+per-example cost stays flat at ~2700-8500us regardless of batch - no vectorization to amortize -
+while numpy's/Rust's per-example cost keeps shrinking as batch grows). This directly confirms
+[Adam's stage 5 result](research-adam-optimizer.md#adam-at-real-mnist-ensemble-scale-the-proxy-result-holds-stage-5-of-the-adam-optimizer-workplan)'s
+own deferred question: mini-batching's *accuracy* robustness now comes with a *wall-clock* win too,
+once matmul is real, not just "the same number of per-example Python calls happening in a different
+order."
+
+The Rust/numpy split (parity at `batch_size<=8`, numpy pulling ahead by a widening margin from
+`batch_size=32` up) looks at first like a new Adam-specific regression, but a same-run plain-SGD
+control (`ArrayLayer`/`RustArrayLayer`, identical shape/methodology) rules that out: the control's
+own Rust/numpy ratio (0.45x at `batch_size=1`, 4.10x-4.72x by `batch_size=128-512`) is *at least as
+wide*, often wider. This is [the already-documented, already-accepted naive-matmul-vs-BLAS
+gap](rust-production-cutover.md#the-matmul-gap-that-remains) reappearing at this specific
+shape/measurement run, not something `layer_adam_apply_accumulated_gradient` introduced - and per
+[the 2026-09-16 clarification](rust-production-cutover.md#phase-0-fix-the-two-measured-bottlenecks-in-the-rust-core-itself-required-gate),
+adoption of the Rust backend was already unconditional on this gap, so it isn't a reason to
+reconsider `AdamRustArrayLayer` either.
+
+**Part B - accuracy-robustness across `batch_size`, array/Rust-backed network**
+(`AdamRustArrayMultiClassBackpropClassifierNetwork`, `[16]` hidden, fixed `learning_rate=0.01`, 10
+seeds, 5 epochs, same 320-example real-MNIST digit-3 proxy construction/scale
+[stage 4 of the Adam optimizer workplan](research-adam-optimizer.md#adam-under-batch-size-a-much-bigger-cleaner-win-stage-4-of-the-adam-optimizer-workplan)
+used for the per-node result):
+
+| batch_size | accuracy |
+|---|---|
+| 1 | 86.62% ± 1.87% |
+| 8 | 85.88% ± 2.05% |
+| 32 | 88.50% ± 1.29% |
+| 128 | 87.38% ± 0.40% |
+
+**The robustness result holds through the array/Rust port**: no collapse, no meaningful trend
+across two orders of magnitude of `batch_size` (86.62%-88.50%, well within seed-to-seed noise of
+each other), stdev staying low throughout (0.40%-2.05%) rather than exploding the way sigmoid's did
+in the per-node sweep (±3.87% to ±13.33%). Not bit-comparable to the per-node result
+(90.50%-86.75%) - different network entirely (`[16]`-hidden multi-class array network with
+fan-in-aware init and its own RNG stream vs. a single-output per-node network), the same
+RNG-mismatch caveat [the Rust core](rust-array-core.md#the-rng-exception) already documents - but
+qualitatively the same flat-across-batch-size shape, confirming the algorithmic property survived
+the architectural port rather than being an artifact of the specific per-node implementation.
+
+**Measured, not assumed - script not committed** (ephemeral, following this codebase's own
+practice for one-off sweep scripts - see [research and
+analysis](research-adam-optimizer.md#adam-under-batch-size-a-much-bigger-cleaner-win-stage-4-of-the-adam-optimizer-workplan)'s
+own "hand-rolled script" precedent): `part_a`/`part_b` in a throwaway benchmark script, run against
+this repo's `.venv` with the real MNIST data already fetched locally.
 
 ## risks and open questions
 
@@ -190,9 +255,11 @@ folded into this one.
    suite passes (332 tests in `tests/`, up 14 from before this stage; the separate
    `rust/indrajala_ml_array/tests` and `test_rust_array_multiclass_backprop_model.py` are
    unaffected - out of this stage's numpy-only scope per "scope" above).
-3. The wall-clock/robustness follow-on measurement flagged above (conditional on stage 2 landing
-   cleanly and a concrete scenario worth spending a real training run on).
-4. Docs closeout: `structure.md`'s possible-next-steps entry updated to reflect the actual result.
+3. ✅ The wall-clock/robustness follow-on measurement - see "measurement plan and result" above:
+   both array-based backends 70x-794x faster per example than the per-node path, widening with
+   batch size; batch-size accuracy-robustness confirmed to survive the array/Rust port.
+4. ✅ Docs closeout: `structure.md`'s possible-next-steps entry updated to reflect the actual
+   result (see below).
 5. ✅ `AdamRustArrayLayer` (`indrajala_ml/model/adam_rust_array_layer.py`) +
    `AdamRustArrayMultiClassBackpropClassifierNetwork`
    (`indrajala_ml/model/adam_rust_array_multiclass_backprop_classifier_network.py`) + the fused
