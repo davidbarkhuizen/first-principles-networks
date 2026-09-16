@@ -32,5 +32,9 @@ retrofit - so it can represent targets (like XOR) the discrete model structurall
   and the momentum re-test they unblocked
 - [convolutional layers](docs/convolutional-layers.md) — a from-scratch conv layer, local
   receptive fields and weight sharing, measured against the dense baseline on UCI digits
-- [Adam optimizer](docs/adam-optimizer.md) — a per-parameter adaptive-learning-rate sibling,
-  proposed and not yet started
+- [Adam optimizer](docs/adam-optimizer.md) — a per-parameter adaptive-learning-rate sibling, built
+  and measured: needs its own retuned learning rate like every other sibling here, but once
+  retuned it's a real, substantial win under large-batch training, at proxy and real-MNIST scale
+- [a learning-rate schedule](docs/learning-rate-schedule.md) — warmup, proposed and not yet started
+- [an array-based Adam sibling](docs/adam-array-layer.md) — a Rust-matmul-backed Adam, proposed
+  and not yet started
