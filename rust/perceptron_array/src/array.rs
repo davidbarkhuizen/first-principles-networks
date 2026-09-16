@@ -1,5 +1,6 @@
 use pyo3::exceptions::{PyIndexError, PyTypeError, PyValueError};
 use pyo3::prelude::*;
+use pyo3::types::PySlice;
 
 /// This core only ever needs a 1D vector or a 2D matrix - see docs/numpy-interface-subset.md's
 /// own "dtype and shape" section for why general N-dimensional machinery is deliberately not
@@ -107,13 +108,28 @@ impl RustArray {
         }
     }
 
-    /// `arr[i]` for a 1D array, `arr[i, j]` for a 2D array - two index shapes through the same
-    /// slot, matching how Python itself dispatches `arr[i]` vs. `arr[i, j]` (a single tuple
-    /// argument) through `__getitem__`. See docs/numpy-interface-subset.md's "re-checked against
-    /// the built implementation" note for why both shapes are required, not just the 1D one.
-    fn __getitem__(&self, index: &PyAny) -> PyResult<f64> {
+    /// `arr[i]` / `arr[i, j]` for single-element reads (two index shapes through the same slot,
+    /// matching how Python itself dispatches `arr[i]` vs. `arr[i, j]`), or `arr[:, :-1]` for a
+    /// contiguous 2D slice - the one slicing shape docs/numpy-interface-subset.md's own table
+    /// requires (`load_mnist_dataset_as_array`'s pixel-vs-label split), not general Python slice
+    /// semantics (step must be 1; no fancy/boolean indexing - see that document's "explicitly not
+    /// required").
+    fn __getitem__(&self, py: Python<'_>, index: &PyAny) -> PyResult<PyObject> {
+        if let Shape::Matrix(rows, cols) = self.shape {
+            if let Ok((row_slice, col_slice)) = index.extract::<(&PySlice, &PySlice)>() {
+                let (r0, r1) = Self::resolve_contiguous_range(row_slice, rows)?;
+                let (c0, c1) = Self::resolve_contiguous_range(col_slice, cols)?;
+                let new_rows = r1.saturating_sub(r0);
+                let new_cols = c1.saturating_sub(c0);
+                let mut out = Vec::with_capacity(new_rows * new_cols);
+                for row in r0..r1 {
+                    out.extend_from_slice(&self.data[row * cols + c0..row * cols + c1]);
+                }
+                return Ok(RustArray::from_matrix(out, new_rows, new_cols).into_py(py));
+            }
+        }
         let flat_index = self.resolve_index(index)?;
-        Ok(self.data[flat_index])
+        Ok(self.data[flat_index].into_py(py))
     }
 
     fn __setitem__(&mut self, index: &PyAny, value: f64) -> PyResult<()> {
@@ -126,6 +142,25 @@ impl RustArray {
         RustArray {
             data: self.data.clone(),
             shape: self.shape,
+        }
+    }
+
+    /// A no-op on a 1D array (numpy's own `.T` is a no-op there too), a real transpose on 2D -
+    /// `#[getter(T)]` keeps the Rust fn name lowercase/snake_case while exposing it to Python as
+    /// `.T`, matching `arr.T`'s usage in `ArrayLayer` (`X @ self.W.T`).
+    #[getter(T)]
+    fn transpose(&self) -> Self {
+        match self.shape {
+            Shape::Vector(_) => self.clone(),
+            Shape::Matrix(rows, cols) => {
+                let mut out = vec![0.0; rows * cols];
+                for row in 0..rows {
+                    for col in 0..cols {
+                        out[col * rows + row] = self.data[row * cols + col];
+                    }
+                }
+                RustArray::from_matrix(out, cols, rows)
+            }
         }
     }
 
@@ -166,7 +201,9 @@ impl RustArray {
             }
             Shape::Matrix(rows, cols) => {
                 let (row, col): (usize, usize) = index.extract().map_err(|_| {
-                    PyTypeError::new_err("index into a 2D array must be a (row, col) tuple")
+                    PyTypeError::new_err(
+                        "index into a 2D array must be a (row, col) tuple of ints, or a (slice, slice) tuple",
+                    )
                 })?;
                 if row >= rows || col >= cols {
                     return Err(PyIndexError::new_err("index out of range"));
@@ -174,5 +211,21 @@ impl RustArray {
                 Ok(row * cols + col)
             }
         }
+    }
+
+    /// Resolves a Python slice against an axis of the given length the same way numpy's own
+    /// slicing does (negative indices, an omitted stop, etc.), via `PySlice::indices` - but
+    /// rejects any step other than 1, since only contiguous slices are in scope (see
+    /// docs/numpy-interface-subset.md's "explicitly not required": no fancy or boolean indexing).
+    fn resolve_contiguous_range(slice: &PySlice, len: usize) -> PyResult<(usize, usize)> {
+        let indices = slice.indices(len as std::os::raw::c_long)?;
+        if indices.step != 1 {
+            return Err(PyValueError::new_err(
+                "only contiguous (step=1) slices are supported",
+            ));
+        }
+        let start = indices.start.max(0) as usize;
+        let stop = indices.stop.max(indices.start) as usize;
+        Ok((start, stop))
     }
 }
