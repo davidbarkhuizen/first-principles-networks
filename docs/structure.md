@@ -715,7 +715,10 @@ ranked.
   per-node loop - looks feasible without any new numeric-kernel work, since the matmul/SIMD
   infrastructure is already proven; the real cost is the same correctness-parity validation every
   array-based sibling here has paid against its per-node reference. See [an array-based Adam
-  sibling](adam-array-layer.md) for the design/measurement plan. Not yet started.
+  sibling](adam-array-layer.md) for the design/measurement plan. The numpy-backed half is now
+  built and parity-validated (`AdamArrayLayer`/`AdamVectorizedMultiClassBackpropClassifierNetwork`,
+  that doc's stage 2); the Rust-matmul-backed counterpart (`AdamRustArrayLayer`) and the
+  wall-clock/robustness follow-on measurement remain not started.
 
 ### infrastructure that protects the rigor
 
