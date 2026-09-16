@@ -241,8 +241,12 @@ assuming either way.
    checkout, and a genuinely missing file is fetched from the pinned tag and checksum-verified
    byte-identical to the original. Scoped to MNIST only, matching the actual CI blocker - UCI
    digits' `digits.csv` stays committed directly, per the resolved open question above.
-5. Add the CI workflow itself (GitHub Actions running `pytest` on push/PR), now unblocked -
-   including the `actions/cache` step from "CI-side caching" above, since it's a small addition
-   once the workflow exists at all, not a separate follow-on piece of work.
+5. ✅ Add the CI workflow itself (`.github/workflows/ci.yml`, running `./cli setup` + `./cli test`
+   on push to `main` and on every PR), including the `actions/cache` step from "CI-side caching"
+   above, keyed on `hashFiles('scripts/fetch_datasets.py')` so a pinned-tag/checksum bump
+   auto-invalidates the cache. Along the way, fixed a real (if previously latent) bug this stage
+   exposed: `./cli`'s `install_os_packages` quoted `"$os_packages"` as a single string, so
+   `apt-get` would have seen one nonexistent package `"python3-tk cargo"` instead of two; also
+   missing `-y`, which would have hung/failed non-interactively in CI. Both fixed.
 6. Update `docs/setup.md`/`docs/structure.md` to describe the shipped result, closing out the CI
    item in [structure](structure.md#possible-next-steps).

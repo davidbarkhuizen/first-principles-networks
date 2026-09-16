@@ -19,7 +19,7 @@ clean () {
 install_os_packages () {
 
     echo "installing os packages ..."
-    sudo apt install "$os_packages"
+    sudo apt-get install -y $os_packages
     echo "... installed os packages"
 }
 
