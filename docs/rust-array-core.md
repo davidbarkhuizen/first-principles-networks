@@ -2,8 +2,10 @@
 
 [← back to vectorization](vectorization.md)
 
-`rust/perceptron_array/` is a standalone PyO3 crate (`pyo3` as the only dependency, ~740 lines
-across `array.rs`/`ops.rs`/`linalg.rs`/`ufuncs.rs`/`random.rs`/`mnist.rs`/`lib.rs`) implementing
+`rust/perceptron_array/` is a standalone PyO3 crate (`pyo3` as the only dependency, ~1030 lines
+across `array.rs`/`ops.rs`/`linalg.rs`/`ufuncs.rs`/`random.rs`/`mnist.rs`/`lib.rs` - `linalg.rs`
+alone accounts for over a third of it now, between the 2D×2D blocking/threading/SIMD work and the
+matvec SIMD work below) implementing
 every operation in [the numpy interface subset](numpy-interface-subset.md)'s table: `Array`
 construction/shape/`.T`/slicing/`.copy()`/`.reshape()`/`.tolist()`, single-element read/write at
 both the 1D scalar-index and 2D tuple-index shapes, elementwise `+ - * /` with both scoped
@@ -36,20 +38,30 @@ an accidental **debug build** (`./cli build-rust` was missing `--release`); on a
 the real gap was already only ~3-10x, closed further by a matmul loop reorder and the fused
 functions above to ~2-7x for a synthetic forward pass. On this codebase's actual training paths
 (`learn()`'s per-example, `batch_size=1` shape - both existing production demos use this
-exclusively, not `learn_batch`), the fused Rust core measures as a genuine, real-training-run win:
-**3.40x faster at UCI digits scale, 1.31x faster at real MNIST scale** (see [research and
+exclusively, not `learn_batch`), the fused Rust core measures as a genuine, real-training-run win,
+first measured at **3.40x faster at UCI digits scale, 1.31x faster at real MNIST scale** (see
+[research and
 analysis](research-and-analysis.md#phase-2-tier-2-real-per-example-training-is-a-genuine-win-at-both-scales-measured)),
-with statistically indistinguishable accuracy. The `batch_size >= 32` gap this left (matmul's
-2D×2D case losing to numpy's BLAS at larger mini-batch sizes) was tracked as follow-on
-optimization work, not a blocker for the production paths that exist today - and is now
-**closed**: size-gated cache-blocking, threaded row-splitting, and an AVX2+FMA SIMD path (all
-2026-09-16, see [structure](structure.md#possible-next-steps) and [research and
-analysis](research-and-analysis.md#explicit-simd-intrinsics-a-real-further-win-with-fused-multiply-add-kept-consistent-across-every-path))
-moved `batch_size=512`'s Rust/numpy ratio from a widening multi-x loss to **0.84x-1.04x**,
-matching or beating numpy in most trials, bit-identical to the original naive loop's output at
-every stage. The 1D×2D/2D×1D matmul cases (`self.W @ x`-shaped, this codebase's actual
-`batch_size=1` production path) remain an unoptimized triple loop - untouched by this work, since
-they were never the gap it targeted.
+with statistically indistinguishable accuracy.
+
+Two further optimization passes moved that number since, both 2026-09-16:
+
+- **The `batch_size >= 32` gap** (matmul's 2D×2D case losing to numpy's BLAS at larger mini-batch
+  sizes) was tracked as follow-on work, not a blocker for the `batch_size=1` production paths -
+  now **closed**: size-gated cache-blocking, threaded row-splitting, and an AVX2+FMA SIMD path
+  (see [structure](structure.md#possible-next-steps) and [research and
+  analysis](research-and-analysis.md#explicit-simd-intrinsics-a-real-further-win-with-fused-multiply-add-kept-consistent-across-every-path))
+  moved `batch_size=512`'s Rust/numpy ratio from a widening multi-x loss to **0.84x-1.04x**,
+  bit-identical to the original naive loop's output at every stage.
+- **The `Matrix @ Vector`/`Vector @ Matrix` cases** (`self.W @ x`-shaped, this codebase's *actual*
+  `batch_size=1` production path - initially assumed not to matter at this scale, then measured
+  directly and found to be ~97% of a fused forward call's cost) got the same AVX2+FMA treatment
+  (see [research and
+  analysis](research-and-analysis.md#simd-for-the-matvec-production-path-a-bigger-win-than-the-batch32-work-it-followed))
+  - bit-identical between the scalar and AVX2 paths, though not to the old naive-sequential-sum
+  baseline (a deliberate, documented summation-order change, same accepted-risk category as
+  numpy's own internal reduction order). This moved the real, measured, per-example training-run
+  win to **~3.6x at UCI digits scale, ~2.6x at real MNIST scale** - the current numbers.
 
 ## why not just keep using real NumPy
 

@@ -318,4 +318,9 @@ closing the naive matmul's remaining gap at `batch_size >= 32` - was never part 
 is itself now done too (same day, cache-blocking + threading + explicit SIMD intrinsics, see
 [structure](structure.md#possible-next-steps) and
 [research and analysis](research-and-analysis.md#explicit-simd-intrinsics-a-real-further-win-with-fused-multiply-add-kept-consistent-across-every-path)):
-`batch_size=512`'s Rust/numpy ratio moved from a widening multi-x loss to 0.84x-1.04x.
+`batch_size=512`'s Rust/numpy ratio moved from a widening multi-x loss to 0.84x-1.04x. A second,
+larger follow-on win landed the same day on the `Matrix @ Vector` matmul case - `self.W @ x`, the
+shape phase 2's own `batch_size=1` benchmark above already runs on every `learn()` call - moving
+the real per-example training-run speedup this phase measured (3.40x/1.31x) to ~3.6x/~2.6x (see
+[research and
+analysis](research-and-analysis.md#simd-for-the-matvec-production-path-a-bigger-win-than-the-batch32-work-it-followed)).

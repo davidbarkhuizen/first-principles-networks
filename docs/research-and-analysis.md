@@ -669,3 +669,66 @@ no `_mm512_fmadd_pd` upside to chase on this machine. (Would need re-checking on
 hardware - `axpy_row`'s runtime `is_x86_feature_detected!` gate means a future AVX-512-capable
 machine falls back to the AVX2 path today, not a crash, but also not the extra width until an
 AVX-512 path is added.)
+
+## SIMD for the matvec production path: a bigger win than the batch>=32 work it followed
+
+The `batch_size >= 32` work above targeted `linalg.rs::matmul`'s 2D×2D case - a shape no current
+production path actually uses. Once that work closed out, a stage-0-style measurement (same
+"quantify before writing code" discipline as docs/rust-production-cutover.md's own "the decisive
+finding") checked whether the *other* two matmul cases (`Matrix @ Vector`, `Vector @ Matrix`) -
+untouched by any of the blocking/threading/SIMD work above - had any real headroom left, rather
+than trusting `linalg.rs`'s own prior doc comment, which asserted (unverified) that they "never
+exercised... at a size where it would matter."
+
+**That assumption was wrong.** At the real production shape (`dimension=784, hidden=16`), a
+microbenchmark (200,000 reps, warmed up first) found `W @ x` (12,544 FLOPs) cost **~10.2us**, of
+which **~97% was the matmul itself**, not PyO3 call overhead (a bare 1-element-read FFI round
+trip measured ~0.29us) - and this one matvec call was **~3.5x slower than numpy** at this exact
+shape, accounting for ~97% of a fused `layer_forward` call's cost and ~27-29% of a full `learn()`
+step's wall-clock. The `Vector @ Matrix` case (unused by the current class design, per the
+interface subset's own note) wasn't checked at production scale for the same reason it was never
+optimized before: nothing calls it today.
+
+**Why the matrix@vector case couldn't just reuse `axpy_row`.** `axpy_row` vectorizes across the
+*output* dimension while keeping the reduction over `k` strictly sequential - that's what makes
+it bit-identical regardless of which path runs. A per-row dot product's reduction dimension *is*
+the dimension SIMD would vectorize, so there's no grouping of 4 parallel lanes that's also
+bit-identical to a naive left-to-right sequential sum (float64 addition isn't associative - a
+different grouping is a different value, typically by ~1 ULP). Resolved by picking one canonical
+grouping - 4 interleaved partial sums (lane `j` accumulates indices `j, j+4, j+8, ...`), combined
+pairwise at the end - and using that *same* grouping in both the scalar fallback
+(`dot_product_scalar`) and the new AVX2+FMA path (`dot_product_avx2_fma`), via a shared
+`combine_lanes`/`dot_product_tail` so the two paths can't accidentally diverge. This does change
+the *value* matmul produces from the old naive-sequential-sum baseline (last-few-ULPs noise) - the
+same category of already-accepted risk as numpy's own internal reduction order not matching
+Python's sequential sum (see "summation-order rounding" in
+[vectorized array-based classes](vectorized-array-classes.md#numerical-parity-validation)), not a
+new one, and every parity check against numpy/the pure-Python reference already tolerates it via
+`rtol`, not exact equality. The `Vector @ Matrix` case needed no new reduction logic at all - it
+turned out to be structurally identical to `axpy_row`'s own row-scaling accumulate (one output
+"row" instead of many, `b`'s stride over `k` staying row-contiguous), so it was wired straight
+through the existing, already-bit-identical `axpy_row` instead.
+
+**Verified the same way as the earlier SIMD work**: built once with the AVX2 path forced off,
+captured `matmul`'s `Matrix @ Vector` output as exact IEEE-754 bit patterns across 7 shapes
+(spanning exact-multiples-of-4, remainders, and a 1x1 degenerate case, including the real
+`16x784`/`10x16` production shapes); rebuilt with AVX2 restored and re-captured - **byte-for-byte
+identical across all 7 shapes**. All 845 tests (525 crate-level) pass unchanged.
+
+**Net result:**
+
+| measurement | before | after |
+|---|---|---|
+| raw matvec, `16x784 @ 784` (production shape) | ~10.2us | **~4.3us** (2.4x faster) |
+| Rust/numpy ratio, same shape | 3.5x slower | **1.48x slower** |
+| full `learn()` step | ~73-75us | ~67us (~9% faster) |
+| UCI digits training run, Rust/numpy | 3.40x | **~3.6x** (3 trials: 3.53x-3.64x) |
+| real MNIST training run, Rust/numpy | 1.31x | **~2.6x** (5 trials: 2.59x-2.66x) |
+
+Test accuracy stayed statistically indistinguishable (UCI digits: 96.94% numpy vs. 96.66% Rust;
+real MNIST: 92.88% numpy vs. 93.18% Rust - both within the same RNG-mismatch noise band this
+codebase's other Rust-vs-numpy comparisons already show, not a regression). The real-MNIST result
+is the more striking one: `dimension=784, hidden=30` is exactly the shape where this matvec
+dominates most, and the Rust/numpy ratio nearly doubled. **Decision: adopted.** Unlike the
+`batch_size >= 32` work above (which targeted a shape no production path uses), this closes a gap
+in the shape *every* production training step actually runs.

@@ -21,11 +21,13 @@ fn available_parallelism_cached() -> usize {
 /// vector (`self.W @ x`), vector @ matrix (the interface subset's own "1D x 2D" case, not
 /// exercised by the current class design but part of its documented contract), and matrix @
 /// matrix (`X @ self.W.T`, `next_layer.delta_batch @ next_layer.W`,
-/// `self.delta_batch.T @ input_activation_batch`). The 1D cases stay a naive triple loop - this
-/// codebase's actual `batch_size=1` production path never exercises them at a size where it would
-/// matter. The 2D×2D case (`matmul_2d` below) is where `batch_size >= 32` mini-batch training
-/// actually spends its time, and has size-gated cache-blocking, threaded row-splitting, and an
-/// AVX2+FMA SIMD path - see docs/rust-array-core.md's own "status" for the measured result.
+/// `self.delta_batch.T @ input_activation_batch`). All three cases are SIMD-accelerated - see
+/// docs/rust-array-core.md's own "status" for the measured results and
+/// docs/research-and-analysis.md for why the matrix@vector case (this codebase's actual
+/// `batch_size=1` production path - `fused.rs::layer_forward`/`layer_hidden_delta` call it on
+/// every `learn()` step) turned out to matter contrary to this comment's own earlier claim that
+/// it didn't (2026-09-16 measurement: ~97% of a fused forward call's cost at the real
+/// `dimension=784, hidden=16` shape, ~3.5x slower than numpy before this fix).
 pub(crate) fn matmul(a: &RustArray, b: &RustArray) -> PyResult<RustArray> {
     match (a.shape, b.shape) {
         (Shape::Matrix(rows, cols), Shape::Vector(n)) => {
@@ -34,11 +36,7 @@ pub(crate) fn matmul(a: &RustArray, b: &RustArray) -> PyResult<RustArray> {
             }
             let mut out = vec![0.0; rows];
             for row in 0..rows {
-                let mut sum = 0.0;
-                for k in 0..cols {
-                    sum += a.data[row * cols + k] * b.data[k];
-                }
-                out[row] = sum;
+                out[row] = dot_product(&a.data[row * cols..(row + 1) * cols], &b.data);
             }
             Ok(RustArray::from_vector(out))
         }
@@ -46,13 +44,15 @@ pub(crate) fn matmul(a: &RustArray, b: &RustArray) -> PyResult<RustArray> {
             if n != rows {
                 return Err(shape_error(a.shape, b.shape));
             }
+            // out[0..cols] = sum_k a[k] * b[k*cols .. (k+1)*cols] - structurally identical to
+            // matmul_2d_row_range's own row-scaling accumulate (one output "row" instead of
+            // many), so it reuses axpy_row directly rather than a bespoke reduction: b's stride
+            // over k stays row-contiguous, and there's no per-output-element reduction to worry
+            // about staying bit-identical across scalar/SIMD (unlike the matrix@vector case
+            // above) - out accumulates sequentially over k regardless of which axpy_row path runs.
             let mut out = vec![0.0; cols];
-            for col in 0..cols {
-                let mut sum = 0.0;
-                for k in 0..rows {
-                    sum += a.data[k] * b.data[k * cols + col];
-                }
-                out[col] = sum;
+            for k in 0..rows {
+                axpy_row(&mut out, a.data[k], &b.data[k * cols..(k + 1) * cols]);
             }
             Ok(RustArray::from_vector(out))
         }
@@ -66,6 +66,92 @@ pub(crate) fn matmul(a: &RustArray, b: &RustArray) -> PyResult<RustArray> {
         }
         (a_shape, b_shape) => Err(shape_error(a_shape, b_shape)),
     }
+}
+
+/// `sum(a[i] * b[i] for i in 0..a.len())` - the matrix@vector case's per-row reduction. Unlike
+/// `axpy_row` (which vectorizes across the *output* dimension while keeping the reduction over
+/// `k` strictly sequential, so its result is bit-identical regardless of which path runs), a
+/// dot product's reduction dimension *is* the vectorized dimension - there is no way to sum 4
+/// lanes in parallel and then combine them into a single scalar that's also bit-identical to a
+/// naive left-to-right sequential sum (float64 addition isn't associative; a different grouping
+/// is a different value, typically by 1 ULP or so). So this picks one canonical grouping - 4
+/// interleaved partial sums (lane `j` accumulates indices `j, j+4, j+8, ...`), combined pairwise
+/// at the end - and uses that *same* grouping in both the scalar fallback and the AVX2 path,
+/// which is what actually matters: a training run's result must not depend on which machine
+/// happens to run it. Verified bit-identical between the two paths the same way axpy_row's own
+/// AVX2 addition was (docs/research-and-analysis.md) - exact IEEE-754 bit-pattern comparison,
+/// not just `pytest.approx`. This does change the *value* matmul produces from what a naive
+/// sequential sum gave before this change (last-few-ULPs noise, same category as numpy's own
+/// internal reduction order already not matching Python's sequential sum - see
+/// docs/vectorized-array-classes.md's "summation-order rounding" - not a new risk category, and
+/// every parity check against numpy/the pure-Python reference already tolerates it via rtol, not
+/// exact equality).
+#[inline]
+fn dot_product(a: &[f64], b: &[f64]) -> f64 {
+    #[cfg(target_arch = "x86_64")]
+    {
+        if std::is_x86_feature_detected!("avx2") && std::is_x86_feature_detected!("fma") {
+            return unsafe { dot_product_avx2_fma(a, b) };
+        }
+    }
+    dot_product_scalar(a, b)
+}
+
+/// `(lanes[0] + lanes[1]) + (lanes[2] + lanes[3])` - one fixed combine order, factored out so the
+/// scalar and AVX2 paths below can't accidentally diverge by combining their four partial sums
+/// differently.
+#[inline]
+fn combine_lanes(lanes: [f64; 4]) -> f64 {
+    (lanes[0] + lanes[1]) + (lanes[2] + lanes[3])
+}
+
+/// Accumulates `a[start..]`/`b[start..]` sequentially into `initial` - the remainder tail shared
+/// by both dot-product paths below once neither has any full 4-wide group left.
+#[inline]
+fn dot_product_tail(a: &[f64], b: &[f64], start: usize, initial: f64) -> f64 {
+    let mut sum = initial;
+    for i in start..a.len() {
+        sum = a[i].mul_add(b[i], sum);
+    }
+    sum
+}
+
+#[inline]
+fn dot_product_scalar(a: &[f64], b: &[f64]) -> f64 {
+    let len = a.len();
+    let mut lanes = [0.0f64; 4];
+    let mut i = 0;
+    while i + 4 <= len {
+        for lane in 0..4 {
+            lanes[lane] = a[i + lane].mul_add(b[i + lane], lanes[lane]);
+        }
+        i += 4;
+    }
+    dot_product_tail(a, b, i, combine_lanes(lanes))
+}
+
+/// AVX2+FMA path: 4 `f64` lanes per instruction, one `_mm256_fmadd_pd` per 4-element group -
+/// lane `j`'s running sum is exactly `dot_product_scalar`'s `lanes[j]`, since a per-lane FMA and
+/// `f64::mul_add` compute the same IEEE-754 fused multiply-add. Safety: only ever called after
+/// `dot_product`'s runtime `is_x86_feature_detected!` check, same discipline as
+/// `axpy_row_avx2_fma` above.
+#[cfg(target_arch = "x86_64")]
+#[target_feature(enable = "avx2,fma")]
+unsafe fn dot_product_avx2_fma(a: &[f64], b: &[f64]) -> f64 {
+    use std::arch::x86_64::{_mm256_fmadd_pd, _mm256_loadu_pd, _mm256_setzero_pd, _mm256_storeu_pd};
+
+    let len = a.len();
+    let mut acc_vec = _mm256_setzero_pd();
+    let mut i = 0;
+    while i + 4 <= len {
+        let a_vec = _mm256_loadu_pd(a.as_ptr().add(i));
+        let b_vec = _mm256_loadu_pd(b.as_ptr().add(i));
+        acc_vec = _mm256_fmadd_pd(a_vec, b_vec, acc_vec);
+        i += 4;
+    }
+    let mut lanes = [0.0f64; 4];
+    _mm256_storeu_pd(lanes.as_mut_ptr(), acc_vec);
+    dot_product_tail(a, b, i, combine_lanes(lanes))
 }
 
 /// Threaded row-splitting on top of the size-gated blocking below (docs/rust-production-cutover.md's

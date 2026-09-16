@@ -41,9 +41,11 @@ measured against - not a prototype superseded once something faster exists.
 [The Rust array core](rust-array-core.md) is this codebase's production array backend - actual
 training/demo code routes through it via `RustArrayLayer`/
 `RustArrayMultiClassBackpropClassifierNetwork` (see [the production cutover
-plan](rust-production-cutover.md), done through phase 2: a real, measured 3.40x/1.31x speedup
-over numpy at UCI digits/real MNIST scale, statistically indistinguishable accuracy). Both are
-kept side by side, permanently, each for a different purpose - neither replaces the other.
+plan](rust-production-cutover.md), done through phase 2: a real, measured speedup over numpy at
+UCI digits/real MNIST scale, statistically indistinguishable accuracy - first measured at
+3.40x/1.31x, moved to ~3.6x/~2.6x by later matmul SIMD work, see [structure](structure.md#possible-next-steps)).
+Both are kept side by side, permanently, each for a different purpose - neither replaces the
+other.
 
 ## expected effect
 
@@ -62,7 +64,10 @@ landing inside the 15-45x practical-win range, at real, practical batch-size-1 S
 forward-pass-only microbenchmark. See [vectorized array-based
 classes](vectorized-array-classes.md#measured-results) for the full numbers. For the Rust core,
 now that [the production cutover](rust-production-cutover.md) is done (see "decision" above): a
-genuine **3.40x** speedup over numpy at UCI digits scale and **1.31x** at real MNIST scale on this
-codebase's actual `learn()`-shaped (`batch_size=1`) training paths - see [the Rust
-core](rust-array-core.md) and [research and
-analysis](research-and-analysis.md#phase-2-tier-2-real-per-example-training-is-a-genuine-win-at-both-scales-measured).
+genuine speedup over numpy on this codebase's actual `learn()`-shaped (`batch_size=1`) training
+paths, first measured at **3.40x** at UCI digits scale and **1.31x** at real MNIST scale (see [the
+Rust core](rust-array-core.md) and [research and
+analysis](research-and-analysis.md#phase-2-tier-2-real-per-example-training-is-a-genuine-win-at-both-scales-measured)),
+moved to **~3.6x**/**~2.6x** by later matmul SIMD work targeting the `batch_size=1` shape directly
+(see [research and
+analysis](research-and-analysis.md#simd-for-the-matvec-production-path-a-bigger-win-than-the-batch32-work-it-followed)).
