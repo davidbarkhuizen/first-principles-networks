@@ -10,20 +10,39 @@ both the 1D scalar-index and 2D tuple-index shapes, elementwise `+ - * /` with b
 broadcasting cases and scalar operands, `__iadd__`/`__isub__`, `exp`, `__matmul__` (all three
 shape combinations), `outer`, `sum_axis0`, `argmax`, a hand-rolled xorshift128+ `uniform`, and
 `decode_mnist_pixels`. It's parity-tested against real numpy (and, where a pure-Python reference
-exists independent of numpy, against that too - a three-way match) across 254 tests in
-`rust/perceptron_array/tests/`. The one documented exception is `uniform`: a hand-rolled PRNG can
-never reproduce numpy's Mersenne Twister bit-for-bit, so its tests check statistical plausibility
-(range, mean, variance), not per-draw equality - see `random.rs`'s own doc comment.
+exists independent of numpy, against that too - a three-way match) across 525 tests in
+`rust/perceptron_array/tests/` (254 covering the operation subset itself, plus 271 covering
+`fused.rs`'s per-layer functions below). The one documented exception is `uniform`: a hand-rolled
+PRNG can never reproduce numpy's Mersenne Twister bit-for-bit, so its tests check statistical
+plausibility (range, mean, variance), not per-draw equality - see `random.rs`'s own doc comment.
 
-**Status: built and parity-tested, not yet wired into production.** Nothing in
-`perceptron/model/` calls this core yet - see [vectorization](vectorization.md#decision) for why
-it's the intended production array backend, and [structure](structure.md#vectorized-array-based-classes)
-for the numpy-backed classes it would eventually replace as production, not supersede (numpy
-stays on permanently as the benchmarking mirror). [A workplan](rust-production-cutover.md) covers
-this, gated on a measured prerequisite that workplan's own first section covers in detail:
-composing a forward pass from individual `Array` calls the way a naive port would is currently
-65-335x *slower* than numpy at this codebase's real layer sizes, so the cutover needs a
-performance fix in this crate first, not just new Python classes calling it.
+Also includes `fused.rs`: one Rust function per `ArrayLayer` method (`layer_forward`,
+`layer_output_delta`, `layer_accumulate_gradient_batch`, etc. - see
+[the production cutover plan](rust-production-cutover.md#0b-fuse-each-layer-operation-into-one-rust-call)
+for the full list), doing an entire layer computation in a single Python-to-Rust call instead of
+composing it from several `Array` operator calls - added specifically to cut per-call FFI
+overhead once that turned out to matter (see "status" below).
+
+**Status: built, parity-tested, and wired into production.** This core backs
+`RustArrayLayer`/`RustArrayMultiClassBackpropClassifierNetwork`
+(`perceptron/model/rust_array_layer.py`,
+`perceptron/model/rust_array_multiclass_backprop_classifier_network.py`) - see
+[structure](structure.md#vectorized-array-based-classes) for the numpy-backed classes it replaced
+as production (numpy stays on permanently as the benchmarking mirror, per
+[vectorization](vectorization.md#decision)). [The production cutover plan](rust-production-cutover.md)
+covers the full path this took: an initial naive per-op composition really was 65-335x slower
+than numpy at this codebase's real layer sizes - but that number turned out to be measured against
+an accidental **debug build** (`./cli build-rust` was missing `--release`); on a release build,
+the real gap was already only ~3-10x, closed further by a matmul loop reorder and the fused
+functions above to ~2-7x for a synthetic forward pass. On this codebase's actual training paths
+(`learn()`'s per-example, `batch_size=1` shape - both existing production demos use this
+exclusively, not `learn_batch`), the fused Rust core measures as a genuine, real-training-run win:
+**3.40x faster at UCI digits scale, 1.31x faster at real MNIST scale** (see [research and
+analysis](research-and-analysis.md#phase-2-tier-2-real-per-example-training-is-a-genuine-win-at-both-scales-measured)),
+with statistically indistinguishable accuracy. The crate's matmul is still a naive triple loop, so
+it still loses to numpy's BLAS at larger mini-batch sizes (`batch_size >= 32`) - tracked as
+follow-on optimization work (SIMD, blocking/tiling, threading), not a blocker for the production
+paths that exist today.
 
 ## why not just keep using real NumPy
 
@@ -110,17 +129,25 @@ target, since this crate's naive (no-SIMD, no-blocking) matmul should land meani
 15-45x as a realistic, still practically significant win, and the real (not extrapolated) 9.00x/
 33.87x numpy measurements this core's own eventual production numbers would be compared against.
 
+## what was out of scope for this crate's own build (now resolved elsewhere)
+
+Two items this crate's own PR-staged build deliberately left alone, since resolved by
+[the production cutover plan](rust-production-cutover.md) as separate, later work rather than by
+changing this crate's own scope: **retargeting production code paths to this core** (done -
+`perceptron/model/rust_array_layer.py`/`rust_array_multiclass_backprop_classifier_network.py` are
+a new call path alongside the existing numpy one, not an import swap that removes it) and **any
+change to `perceptron/model/`** (the fused per-layer functions above did require crate changes,
+but nothing in the existing pure-Python or numpy-backed classes was touched).
+
 ## what stays explicitly out of scope
 
-- **Retargeting production code paths to this core.** This crate is standalone and proven
-  correct; the actual cutover (routing `perceptron/model/`'s training/demo entrypoints through it
-  instead of `numpy`) is a separate, mechanical follow-on - a new call path alongside the existing
-  numpy one, not an import swap that removes it.
-- **BLAS-competitive matmul performance.** Naive-but-correct; any tuning is a separately-measured
-  follow-up.
+- **BLAS-competitive matmul performance.** Naive-but-correct; any tuning (SIMD, blocking/tiling,
+  threading) is separately-measured follow-up work - see
+  [structure](structure.md#possible-next-steps).
 - **Any operation outside [the numpy interface subset](numpy-interface-subset.md)'s own table.**
   No axis-parameterized reductions, no `where`/`maximum`/`clip`, no general N-d arrays or
   broadcasting - see that document's own "explicitly not required" for what a future
   ReLU/softmax/momentum/L2 vectorized variant would need to add here first.
-- **Any change to `perceptron/model/`.** This crate is fully standalone; nothing in the existing
-  pure-Python codebase changes as a result of it.
+- **Any change to the pure-Python or numpy-backed model classes.** `MultiClassBackpropClassifierNetwork`,
+  `ArrayLayer`, and `VectorizedMultiClassBackpropClassifierNetwork` stay exactly as they are,
+  permanently - the Rust-backed classes are new siblings, not replacements or retrofits.

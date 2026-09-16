@@ -30,19 +30,20 @@ real dependency, and pyarrow as a one-time conversion step
    the formal contract the third document satisfies.
 3. **[the Rust array core](rust-array-core.md)** - a hand-built, tightly-scoped array core in
    Rust, wrapped for Python via PyO3/maturin, implementing exactly document 2's contract - this
-   codebase's intended production array backend, once wired in (see "decision" below).
+   codebase's production array backend (see "decision" below).
 
 ## decision
 
 `VectorizedMultiClassBackpropClassifierNetwork` and its real-numpy backend
 ([vectorized array-based classes](vectorized-array-classes.md)) are kept indefinitely as a
-standing performance-benchmarking mirror - the reference point any future backend's own speed
-claim gets measured against - not a prototype superseded once something faster exists.
-[The Rust core](rust-array-core.md) is this codebase's intended production array backend - the
-implementation actual training/demo code would route through - but nothing in
-`perceptron/model/` calls it yet; that cutover is a separate, not-yet-started step (see
-[structure](structure.md#possible-next-steps)). Both are kept side by side, permanently, each for
-a different purpose - neither replaces the other.
+standing performance-benchmarking mirror - the reference point any backend's own speed claim gets
+measured against - not a prototype superseded once something faster exists.
+[The Rust array core](rust-array-core.md) is this codebase's production array backend - actual
+training/demo code routes through it via `RustArrayLayer`/
+`RustArrayMultiClassBackpropClassifierNetwork` (see [the production cutover
+plan](rust-production-cutover.md), done through phase 2: a real, measured 3.40x/1.31x speedup
+over numpy at UCI digits/real MNIST scale, statistically indistinguishable accuracy). Both are
+kept side by side, permanently, each for a different purpose - neither replaces the other.
 
 ## expected effect
 

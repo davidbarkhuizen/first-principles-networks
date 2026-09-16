@@ -209,6 +209,27 @@ at 8.57s vs. 77.16s - a 9.00x wall-clock speedup, the same numbers documented in
 rather than only quoted. Plots both training-accuracy-by-epoch curves overlaid, a
 confusion matrix, and sample test predictions for the vectorized network.
 
+## demo: Rust vs vectorized UCI digit recognition
+
+    . cli demo
+
+Select **Rust vs vectorized UCI digit recognition** from the menu it prints.
+
+Runs `perceptron/demos/demo_rust_vs_vectorized_uci_digit_recognition.py` - the demo above's own
+scenario extended with a third network: `RustArrayMultiClassBackpropClassifierNetwork` (see
+[the production cutover plan](rust-production-cutover.md)), the Rust-array-core-backed sibling
+that replaces numpy as the production backend (numpy stays on permanently as the benchmark
+comparison, not removed or deprecated). Trains all three at the same seed/hyperparameters and
+reports each one's measured accuracy and wall-clock training time side by side. Measured: matching
+accuracy (99.5%/96.9% pure-Python, 99.5%/96.9% numpy, 99.7%/97.5% Rust train/test) at 68.89s
+(pure-Python) vs. 4.30s (numpy) vs. 1.30s (Rust) - a 3.30x speedup over numpy and 52.89x over
+pure-Python, close to [research and
+analysis](research-and-analysis.md#phase-2-tier-2-real-per-example-training-is-a-genuine-win-at-both-scales-measured)'s
+own recorded 3.40x figure (real training runs vary run to run). Saves the trained Rust model to
+`data/digits/trained_model_rust.json`, printing how to reload it without retraining. Plots all
+three training-accuracy-by-epoch curves overlaid, a confusion matrix, and sample test predictions
+for the Rust network.
+
 ## demo: UCI digit capture
 
     . cli demo
@@ -285,6 +306,25 @@ time side by side, plus timing `load_mnist_dataset_as_array`'s bulk decode again
 - a 33.87x wall-clock speedup for the epoch, and a 15.44x speedup for the bulk decode alone (see
 [structure](structure.md#vectorized-array-based-classes)). Takes on the order of 15-20 minutes to
 run, mostly the pure-Python epoch.
+
+## demo: Rust vs vectorized MNIST recognition
+
+    . cli demo
+
+Select **Rust vs vectorized MNIST recognition** from the menu it prints.
+
+Runs `perceptron/demos/demo_rust_vs_vectorized_mnist_recognition.py` - headless, console-only.
+The demo above's own scenario extended with a third network:
+`RustArrayMultiClassBackpropClassifierNetwork` (see [the production cutover
+plan](rust-production-cutover.md)), the Rust-array-core-backed sibling that replaces numpy as the
+production backend. Trains all three for one real epoch each over the full 60000-example MNIST
+training set (`[30]`-node hidden layer, same architecture as the demo above), reporting test
+accuracy and wall-clock epoch time side by side. Measured: matching accuracy (93.4%/93.3% pure-Python,
+93.4%/93.2% numpy, 93.0%/92.9% Rust train/test) at 1128.9s (pure-Python) vs. 15.9s (numpy) vs.
+11.4s (Rust) - a 1.39x speedup over numpy and 98.64x over pure-Python, close to [research and
+analysis](research-and-analysis.md#phase-2-tier-2-real-per-example-training-is-a-genuine-win-at-both-scales-measured)'s
+own recorded 1.31x multi-seed figure. Takes on the order of 15-20 minutes to run, mostly the
+pure-Python epoch.
 
 ## demo: MNIST ensemble capture
 
