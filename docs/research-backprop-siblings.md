@@ -156,7 +156,9 @@ plausible partial substitute for that missing scaling, which would explain the r
 it being evidence about gradient noise specifically - the mechanism this retest was meant to
 isolate. **Decision:** not a clean confirmation or reversal - `MomentumBackpropClassifierNetwork`
 remains not adopted as a default. A follow-up sweep scaling `learning_rate` with `batch_size`
-would be needed to isolate the effect cleanly; not yet run.
+would be needed to isolate the effect cleanly - see [the learning-rate-vs-batch-size
+follow-up](research-backprop-siblings.md#the-learning-rate-vs-batch-size-follow-up-the-confound-was-real-and-momentum-still-doesnt-help)
+directly below, which ran exactly that sweep.
 
 ## the learning-rate-vs-batch-size follow-up: the confound was real, and momentum still doesn't help
 
