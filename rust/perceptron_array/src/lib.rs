@@ -1,11 +1,13 @@
 use pyo3::prelude::*;
 
 mod array;
+mod linalg;
 mod ops;
 mod ufuncs;
 
 use array::RustArray;
-use ufuncs::exp;
+use linalg::outer;
+use ufuncs::{exp, sum_axis0};
 
 /// Proves the PyO3/maturin toolchain works end to end - importable and callable from Python,
 /// nothing array-specific yet. See docs/rust-array-core.md's "PR 0" for why this stage exists
@@ -19,6 +21,8 @@ fn ping() -> PyResult<String> {
 fn perceptron_array(_py: Python<'_>, m: &PyModule) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(ping, m)?)?;
     m.add_function(wrap_pyfunction!(exp, m)?)?;
+    m.add_function(wrap_pyfunction!(outer, m)?)?;
+    m.add_function(wrap_pyfunction!(sum_axis0, m)?)?;
     m.add_class::<RustArray>()?;
     Ok(())
 }
