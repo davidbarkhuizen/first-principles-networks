@@ -14,15 +14,32 @@
 
     . cli setup
 
-This installs `python3-tk`/`cargo` via `apt`, creates a `.venv`, installs the Python
-dependencies (`matplotlib`, `pytest`, `pyarrow`, `numpy` - see
-[vectorized array-based classes](vectorized-array-classes.md) for `numpy`'s scoped,
-benchmark-mirror-only role) from `requirements.txt`, installs `maturin` into that venv, builds the
-Rust array core into it (`maturin develop --release`, run from `rust/perceptron_array/` - see
-[the production cutover plan](rust-production-cutover.md) for why a debug build isn't good enough
-here), and fetches the real MNIST dataset (see "MNIST data" below).
+This installs `python3-tk`/`cargo` via `apt`, creates a `.venv`, installs the pinned Python
+dependencies (`matplotlib`, `pytest`, `pyarrow`, `numpy`, plus this package itself - see
+"dependencies" below - and see [vectorized array-based classes](vectorized-array-classes.md) for
+`numpy`'s scoped, benchmark-mirror-only role) from `requirements.txt`, installs `maturin` into
+that venv, builds the Rust array core into it (`maturin develop --release`, run from
+`rust/perceptron_array/` - see [the production cutover plan](rust-production-cutover.md) for why
+a debug build isn't good enough here), and fetches the real MNIST dataset (see "MNIST data"
+below).
 `. cli build-rust` re-runs just the Rust build step, and `. cli fetch-data` re-runs just the
 dataset fetch - each independently, without redoing the rest of setup.
+
+## dependencies
+
+`pyproject.toml` declares this package (`perceptron`, versioned, installable via `pip install -e .`
+- previously checkout-and-run only, relying on `python -m`'s implicit cwd-on-`sys.path` behavior)
+and its direct dependencies, unpinned. `requirements.txt` is the actual **pinned lock** `. cli
+setup` installs from (`pip install -r requirements.txt`, which includes `-e .`): every direct and
+transitive dependency pinned to the exact version this codebase's test suite is validated against,
+so a fresh checkout can't silently get a different, untested dependency version than the one this
+repo's own results were measured on.
+
+To deliberately bump a dependency: edit `requirements.in` (or `pyproject.toml`'s dependency list),
+regenerate with `pip install pip-tools && pip-compile requirements.in`, then **re-run the full test
+suite before committing the new `requirements.txt`** - a lock file is only trustworthy if it's
+pinned to versions that were actually validated, not just whatever pip-compile resolved to freshest
+that day.
 
 ## test
 
