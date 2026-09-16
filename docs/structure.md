@@ -619,7 +619,9 @@ mirror any array backend's speed claim gets measured against, not this codebase'
 array backend. [A hand-built Rust core](rust-array-core.md) (`rust/indrajala_ml_array/`, wrapped
 via PyO3) implements the same operation subset ([the numpy interface
 subset](numpy-interface-subset.md)) this class needs, is parity-tested against real numpy across
-525 tests, and backs `RustArrayLayer`/`RustArrayMultiClassBackpropClassifierNetwork`
+618 tests (525 at this phase's own completion; the growth since is [the Adam array-layer
+sibling](adam-array-layer.md)'s own stage 5 fused-op tests, a later addition), and backs
+`RustArrayLayer`/`RustArrayMultiClassBackpropClassifierNetwork`
 (`indrajala_ml/model/rust_array_layer.py`,
 `indrajala_ml/model/rust_array_multiclass_backprop_classifier_network.py`) - the actual production
 path, per [the production cutover plan](rust-production-cutover.md)'s now-completed phases 0-2:
@@ -710,15 +712,14 @@ ranked.
   not `VectorizedMultiClassBackpropClassifierNetwork`'s own `ArrayLayer`/batched-matmul design
   (`forward_batch`/`compute_hidden_delta_batch`/`accumulate_gradient_batch`, backed by the Rust
   `indrajala_ml_array` crate's AVX2 matmul kernels - see "vectorized array-based classes" above).
-  Extending that existing pattern to Adam - an `ArrayLayer` variant holding `m`/`v` state as
-  arrays, with the bias-corrected update expressed as one vectorized op per layer instead of a
-  per-node loop - looks feasible without any new numeric-kernel work, since the matmul/SIMD
-  infrastructure is already proven; the real cost is the same correctness-parity validation every
-  array-based sibling here has paid against its per-node reference. See [an array-based Adam
-  sibling](adam-array-layer.md) for the design/measurement plan. The numpy-backed half is now
-  built and parity-validated (`AdamArrayLayer`/`AdamVectorizedMultiClassBackpropClassifierNetwork`,
-  that doc's stage 2); the Rust-matmul-backed counterpart (`AdamRustArrayLayer`) and the
-  wall-clock/robustness follow-on measurement remain not started.
+  See [an array-based Adam sibling](adam-array-layer.md) for the design/measurement plan. Both the
+  numpy-backed half (`AdamArrayLayer`/`AdamVectorizedMultiClassBackpropClassifierNetwork`, that
+  doc's stage 2) and the Rust-matmul-backed counterpart
+  (`AdamRustArrayLayer`/`AdamRustArrayMultiClassBackpropClassifierNetwork`, stage 5 - one fused
+  `layer_adam_apply_accumulated_gradient` Rust call per layer, mirroring `RustArrayLayer`'s own
+  fused-op design) are now built and parity-validated against the per-node reference; the
+  wall-clock/robustness follow-on measurement (stage 3) and docs closeout (stage 4) remain not
+  started.
 
 ### infrastructure that protects the rigor
 

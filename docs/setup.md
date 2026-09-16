@@ -52,7 +52,7 @@ matplotlib's `Agg` backend, but never opens a window — so all of it runs unatt
 needed).
 
 This does **not** include [the Rust array core](rust-array-core.md)'s own tests
-(`rust/indrajala_ml_array/tests/`, 525 tests) - those are pytest tests against the built extension,
+(`rust/indrajala_ml_array/tests/`, 618 tests) - those are pytest tests against the built extension,
 kept alongside the standalone crate rather than under the top-level `tests/` directory. Run them
 directly, after `. cli setup`/`. cli build-rust` has built the extension into the venv:
 

@@ -2,11 +2,12 @@
 
 [← back to README](../README.md)
 
-**Status: stage 2 (the capability itself) done; stage 3 (the wall-clock/robustness follow-on
-measurement) and stage 4 (docs closeout) not yet run.** Written up front as a design/measurement
-plan before any of it existed, per this repo's own practice (see [Adam
-optimizer](adam-optimizer.md), [the Rust production cutover plan](rust-production-cutover.md) for
-precedent) - updated here with stage-by-stage status notes as it's executed.
+**Status: stage 2 (the numpy capability) and stage 5 (the Rust-matmul-backed counterpart) done;
+stage 3 (the wall-clock/robustness follow-on measurement) and stage 4 (docs closeout) not yet
+run.** Written up front as a design/measurement plan before any of it existed, per this repo's own
+practice (see [Adam optimizer](adam-optimizer.md), [the Rust production cutover
+plan](rust-production-cutover.md) for precedent) - updated here with stage-by-stage status notes
+as it's executed.
 
 ## why this, and why now
 
@@ -26,16 +27,17 @@ that would make large batches genuinely cheap in wall-clock terms too, not just 
 
 ## scope
 
-**Numpy-backed only** (`AdamArrayLayer`, an `ArrayLayer` sibling, plus
-`AdamVectorizedMultiClassBackpropClassifierNetwork`). The Rust-backed
-`AdamRustArrayLayer`/`AdamRustArrayMultiClassBackpropClassifierNetwork` counterpart is a real,
-separate follow-on - not this stage's scope - mirroring how every existing array-based capability
-here was built numpy-first, then ported to Rust as its own later, independently-measured effort
-(see [the Rust production cutover plan](rust-production-cutover.md)'s own phased history). Scoped
-to `MultiClassBackpropClassifierNetwork`'s array-based line, not `BackpropClassifierNetwork`'s -
+**Numpy-backed first** (`AdamArrayLayer`, an `ArrayLayer` sibling, plus
+`AdamVectorizedMultiClassBackpropClassifierNetwork`), stage 2 - mirroring how every existing
+array-based capability here was built numpy-first, then ported to Rust as its own later,
+independently-measured effort (see [the Rust production cutover
+plan](rust-production-cutover.md)'s own phased history). The Rust-backed
+`AdamRustArrayLayer`/`AdamRustArrayMultiClassBackpropClassifierNetwork` counterpart, stage 5, is
+now also built - see "the Rust-matmul-backed counterpart" below. Scoped to
+`MultiClassBackpropClassifierNetwork`'s array-based line, not `BackpropClassifierNetwork`'s -
 `VectorizedMultiClassBackpropClassifierNetwork`/`RustArrayMultiClassBackpropClassifierNetwork` are
 themselves multi-class-only, so there's no single-output array-based sibling to extend Adam onto
-without first building one (out of scope here).
+without first building one (out of scope here, still).
 
 ## design: mirrors `RustArrayMultiClassBackpropClassifierNetwork`'s own precedent - a new class, not a swap point
 
@@ -121,9 +123,41 @@ per-node reference (the established pattern `test_array_layer.py`'s own
   flagged below turned out not to block this: `MultiClassBackpropClassifierNetwork` already
   extends `BackpropNetworkBase`, whose `hidden_layer_cls`/`output_layer_cls` extension points are
   exactly what `AdamBackpropClassifierNetwork` itself hooks for the single-output case, so a
-  test-only `_AdamMultiClassBackpropClassifierNetwork` subclass (same construction, multi-class
-  sized) gives a real per-node Adam multi-class reference to compare against, mirroring
-  `tests/helpers.py::matching_array_backprop_networks`'s own weight-injection pattern.
+  test-only `tests/helpers.py::AdamMultiClassBackpropClassifierNetwork` subclass (same
+  construction, multi-class sized) gives a real per-node Adam multi-class reference to compare
+  against, via `tests/helpers.py::matching_adam_array_backprop_networks` - the Adam-sibling
+  analogue of `matching_array_backprop_networks`'s own weight-injection pattern. Hoisted into
+  `tests/helpers.py` (rather than kept local to this one test file, as originally written in stage
+  2) once stage 5's `test_adam_rust_array_multiclass_backprop_model.py` needed the identical
+  reference and helper.
+- `test_adam_rust_array_layer.py`/`test_adam_rust_array_multiclass_backprop_model.py` (stage 5):
+  the same two-tier treatment, against `AdamRustArrayLayer`/
+  `AdamRustArrayMultiClassBackpropClassifierNetwork` instead of the numpy siblings - see "the
+  Rust-matmul-backed counterpart" below.
+- `rust/indrajala_ml_array/tests/test_adam_fused_layer_ops.py` (stage 5): the Rust crate's own
+  fused `layer_adam_apply_accumulated_gradient` checked directly against `AdamArrayLayer` (the
+  numpy production reference), the same treatment `test_fused_layer_ops.py` already gives every
+  non-Adam fused op - at `t=1` and across several accumulated steps so `m`/`v`/`t` actually
+  exercise their accumulation logic, plus the usual shape/argument-validation tests.
+
+## the Rust-matmul-backed counterpart (stage 5)
+
+`AdamRustArrayLayer(RustArrayLayer)` mirrors `AdamArrayLayer(ArrayLayer)`'s relationship to its
+own base class exactly, one level over: same `m`/`v`/`t` state (held as `indrajala_ml_array.Array`,
+not numpy), same override-only-`apply_accumulated_gradient` shape, but the update itself is one
+fused Rust call (`layer_adam_apply_accumulated_gradient`, `fused.rs`) instead of a numpy
+expression - the same "fuse the whole method into one Rust call" treatment
+[the Rust production cutover plan](rust-production-cutover.md#0b-fuse-each-layer-operation-into-one-rust-call)
+already gave every plain-SGD `ArrayLayer` method. `t` is passed into the fused call already
+incremented (`self._t += 1` happens in Python first, mirroring `AdamArrayLayer`'s own order),
+since the bias-correction terms need the post-increment value and the Rust function has no reason
+to own that counter itself. `AdamRustArrayMultiClassBackpropClassifierNetwork` mirrors
+`AdamVectorizedMultiClassBackpropClassifierNetwork`'s external contract exactly, against
+`AdamRustArrayLayer` instead - same relationship `RustArrayMultiClassBackpropClassifierNetwork`
+has to `VectorizedMultiClassBackpropClassifierNetwork`, applied one level further. No new design
+questions here - the design was already fully determined by mirroring two existing patterns
+(`AdamArrayLayer` and `RustArrayLayer`) at once, so this stage skipped a separate design-only PR
+and went straight to implementation + tests.
 
 ## measurement plan
 
@@ -142,8 +176,8 @@ folded into this one.
   `VectorizedMultiClassBackpropClassifierNetwork`/`RustArrayMultiClassBackpropClassifierNetwork`
   are both multi-class-only - flagged, not resolved; may narrow the parity-check design above
   depending on which way this goes.
-- **The Rust-backed follow-on** (`AdamRustArrayLayer`) - explicitly out of scope here (see
-  "scope" above), noted so it isn't silently forgotten once the numpy version's own result is in.
+- **The Rust-backed follow-on** (`AdamRustArrayLayer`) - resolved; see "the Rust-matmul-backed
+  counterpart" above (stage 5, done).
 
 ## delivery stages (each its own PR, per this repo's practice)
 
@@ -159,3 +193,20 @@ folded into this one.
 3. The wall-clock/robustness follow-on measurement flagged above (conditional on stage 2 landing
    cleanly and a concrete scenario worth spending a real training run on).
 4. Docs closeout: `structure.md`'s possible-next-steps entry updated to reflect the actual result.
+5. ✅ `AdamRustArrayLayer` (`indrajala_ml/model/adam_rust_array_layer.py`) +
+   `AdamRustArrayMultiClassBackpropClassifierNetwork`
+   (`indrajala_ml/model/adam_rust_array_multiclass_backprop_classifier_network.py`) + the fused
+   Rust op (`layer_adam_apply_accumulated_gradient`, `fused.rs`) + parity-check tests at every
+   tier (`rust/indrajala_ml_array/tests/test_adam_fused_layer_ops.py`,
+   `test_adam_rust_array_layer.py`, `test_adam_rust_array_multiclass_backprop_model.py`) - the
+   Rust-backed counterpart flagged as out of scope in stage 2, now built; see "the Rust-matmul-
+   backed counterpart" above. Independent of stages 3/4 (a separate execution substrate for the
+   same already-proven-correct algorithm, not a further measurement of it) - built without waiting
+   on either. Full suite passes (355 tests in `tests/` - 14 of them this stage's own new
+   `test_adam_rust_array_layer.py`/`test_adam_rust_array_multiclass_backprop_model.py`, the rest of
+   the growth since stage 2's 332 from unrelated work done in between; `tests/helpers.py`'s shared
+   `AdamMultiClassBackpropClassifierNetwork`/`matching_adam_array_backprop_networks` also replaced
+   stage 2's test-file-local duplicate of the same reference). 618 tests pass in
+   `rust/indrajala_ml_array/tests` overall (up from 525 - see [the Rust production cutover
+   plan](rust-production-cutover.md) for that count's own history), including this stage's own new
+   `test_adam_fused_layer_ops.py`.
