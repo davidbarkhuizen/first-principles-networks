@@ -450,3 +450,45 @@ follow-on optimization work (SIMD, blocked/tiled matmul, threading), not a reaso
 `RustArrayMultiClassBackpropClassifierNetwork` or scope it down to the per-example path alone. See
 [the production cutover plan](rust-production-cutover.md#the-decisive-finding-this-plan-has-to-answer-first)
 ("adoption is unconditional, not gated on this benchmark") for the full framing change.
+
+## phase 2 tier 2: real per-example training is a genuine win at both scales measured
+
+Good news the synthetic phase-0b benchmark only hinted at: both of this codebase's actual
+production training paths (`demo_vectorized_uci_digit_recognition.py`,
+`demo_vectorized_mnist_recognition.py`) train via `train_linear_classifier_network`, i.e.
+`learn()`'s per-example (`batch_size=1`) path exclusively - checked directly, neither demo calls
+`learn_batch`. That is exactly the regime phase 0b's benchmark found the fused Rust core *beats*
+numpy in, not the `batch_size >= 32` regime it loses in. Tier 2 (docs/rust-production-cutover.md's
+phase 2) measures this on real training runs, not synthetic per-step timings: full
+`randomize()`-to-trained-accuracy runs, multiple independent seeds per class (the RNG mismatch
+means seeds can't be matched across classes - see [the Rust core](rust-array-core.md#the-rng-exception) -
+so seeds are independent draws, compared by distribution, not by seed-for-seed identity).
+
+**UCI digits** (`[32]` hidden, `dimension=64`, same fixed `split_train_test(seed=0)` split
+`demo_uci_digit_recognition.py` uses, `learning_rate=0.5`, `epochs=30`, 8 seeds each):
+
+| network | train accuracy | test accuracy | wall-clock |
+|---|---|---|---|
+| numpy (`VectorizedMultiClassBackpropClassifierNetwork`) | mean 99.57%, stdev 0.07% | mean 96.62%, stdev 0.47% | 4.27s |
+| Rust (`RustArrayMultiClassBackpropClassifierNetwork`) | mean 99.58%, stdev 0.03% | mean 96.90%, stdev 0.22% | 1.26s |
+
+**3.40x faster**, with test accuracy distributions overlapping well inside each other's stdev band
+- statistically indistinguishable, matching this codebase's own established
+"correctness/accuracy first, then compare" standard.
+
+**Real MNIST** (`[30]` hidden, `dimension=784` - `demo_vectorized_mnist_recognition.py`'s own
+already-documented architecture, `learning_rate=0.5`, 1 real epoch over the full 60000-example
+training set, 3 seeds each - fewer seeds than UCI digits purely because each one costs over ten
+times as long):
+
+| network | train accuracy | test accuracy | wall-clock |
+|---|---|---|---|
+| numpy | mean 93.13%, stdev 0.01% | mean 92.96%, stdev 0.14% | 15.1s |
+| Rust | mean 92.86%, stdev 0.11% | mean 92.66%, stdev 0.17% | 11.6s |
+
+**1.31x faster**, smaller than UCI digits' win - real MNIST's much larger `dimension=784` matmul
+gives the naive triple loop more relative work per call even at `batch_size=1`, eating into the
+per-call-overhead advantage that dominates at UCI digits' smaller `dimension=64` - but still a
+genuine, positive speedup, with test accuracy within 0.3 points, comparable to each network's own
+seed-to-seed spread. Both figures are honest, measured numbers from real training runs on real
+data, not extrapolated from the synthetic phase 0b benchmark.

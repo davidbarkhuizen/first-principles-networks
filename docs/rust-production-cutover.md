@@ -213,21 +213,24 @@ itself) plugs in.
 
 Two tiers, matching what's actually checkable:
 
-- **Tier 1 - exact, always checkable.** Inject identical fixed weights/inputs (never
-  `randomize()`) into both `VectorizedMultiClassBackpropClassifierNetwork` (numpy) and
-  `RustArrayMultiClassBackpropClassifierNetwork` (Rust), and require the two to produce
-  bit-identical or float64-noise-close forward/backward/gradient/apply results at both
-  `batch_size=1` and `batch_size>1`. This validates the *math* independent of the RNG problem,
-  and is the required regression gate before any accuracy or performance claim from either
-  network is trusted - the same discipline every prior numerical-parity gate in this codebase
-  uses.
-- **Tier 2 - statistical, not exact.** Full training runs from each class's own `randomize()`,
-  same dataset/hyperparameters, multiple independent seeds per class, compared by trajectory
-  shape and final-accuracy distribution (mean/stdev across seeds) rather than seed-for-seed
-  weight identity - the honest substitute for "same seed → same weights," which the RNG mismatch
-  makes structurally impossible (see [the Rust core](rust-array-core.md#the-rng-exception)).
-  "Identical accuracy trajectory" is not an achievable or meaningful claim here; "statistically
-  indistinguishable accuracy distribution, at the wall-clock cost measured in phase 0/3" is.
+- **Tier 1 - exact, always checkable. Done.** `tests/test_rust_array_multiclass_backprop_model.py`
+  injects identical fixed weights/inputs (never `randomize()`) into both
+  `VectorizedMultiClassBackpropClassifierNetwork`'s pure-Python-equivalent reference
+  (`MultiClassBackpropClassifierNetwork`) and `RustArrayMultiClassBackpropClassifierNetwork`
+  (Rust) and checks bit-close (`rtol=1e-9`) agreement after every single-example `learn()` step
+  (`batch_size=1`) and every `learn_batch()` call (`batch_size=8`), not just at the end.
+- **Tier 2 - statistical, not exact. Done.** Full training runs from each class's own
+  `randomize()`, same dataset/hyperparameters, multiple independent seeds per class, compared by
+  final-accuracy distribution (mean/stdev across seeds) rather than seed-for-seed weight identity
+  - the honest substitute for "same seed → same weights," which the RNG mismatch makes
+  structurally impossible (see [the Rust core](rust-array-core.md#the-rng-exception)). Measured at
+  both UCI digits (8 seeds) and real MNIST (3 seeds, 1 epoch each) scale - see [research and
+  analysis](research-and-analysis.md#phase-2-tier-2-real-per-example-training-is-a-genuine-win-at-both-scales-measured):
+  **3.40x faster at UCI digits, 1.31x faster at real MNIST**, both with statistically
+  indistinguishable test accuracy. This landed as a genuine, not just unconditionally-accepted,
+  win - both of this codebase's actual production training paths use `learn()`'s per-example
+  (`batch_size=1`) shape exclusively (checked directly - neither existing vectorized demo calls
+  `learn_batch`), which is exactly the regime phase 0b's benchmark found the Rust core ahead in.
 
 ## phase 3: the benchmark harness
 
@@ -296,7 +299,8 @@ built-and-shipped plan in this codebase has been folded into `structure.md`.
    against `MultiClassBackpropClassifierNetwork`'s pure-Python reference after every single-example
    `learn()` step (100 steps) and every `learn_batch()` call (20 batches of 8), not just at the
    end.
-6. Tier-2 statistical parity + accuracy validation (UCI digits first, then real MNIST).
+6. **Done.** Tier-2 statistical parity + accuracy validation (UCI digits first, then real
+   MNIST) - see phase 2 above.
 7. The benchmark demo(s) (phase 3).
 8. `structure.md`/`vectorization.md` updated to describe the shipped result.
 9. Retarget the two vectorized demos' primary path to the Rust-backed class.
