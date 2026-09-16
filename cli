@@ -5,7 +5,8 @@ set -euo pipefail
 option="${1:-}"
 
 venv_root=".venv"
-os_packages="python3-tk"
+os_packages="python3-tk cargo"
+rust_crate_root="rust/perceptron_array"
 
 clean () {
 
@@ -53,6 +54,20 @@ install_python_modules () {
     echo "... installed python modules"
 }
 
+install_maturin () {
+
+    echo "installing maturin ..."
+    python -m pip install maturin
+    echo "... installed maturin"
+}
+
+build_rust () {
+
+    echo "building $rust_crate_root ..."
+    (cd "$rust_crate_root" && maturin develop)
+    echo "... built $rust_crate_root"
+}
+
 
 setup () {
 
@@ -61,6 +76,8 @@ setup () {
     activate_venv
     install_and_upgrade_pip
     install_python_modules
+    install_maturin
+    build_rust
     deactivate_venv
 }
 
@@ -79,7 +96,7 @@ demo () {
 }
 
 usage () {
-    echo "usage: invoke [ clean | setup | test | demo [demo-number] ]"
+    echo "usage: invoke [ clean | setup | build-rust | test | demo [demo-number] ]"
 }
 
 case "$option" in
@@ -90,6 +107,12 @@ case "$option" in
 
     setup)
         setup
+    ;;
+
+    build-rust)
+        activate_venv
+        build_rust
+        deactivate_venv
     ;;
 
     test)
