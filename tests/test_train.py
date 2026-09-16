@@ -199,3 +199,23 @@ def test_train_linear_classifier_network_rejects_empty_training_data():
 
     with pytest.raises(AssertionError):
         train_linear_classifier_network(student, [])
+
+
+def test_train_linear_classifier_network_calls_a_schedule_with_increasing_step_indices():
+
+    random.seed(0)
+
+    bounds = square_bounds(10.0)
+    reference, training_data = reachable_reference_and_training_data(1, 2, bounds, 5)
+    student = LinearClassifierNetwork.randomized(1, 2, bounds)
+
+    calls: list[int] = []
+
+    def recording_schedule(step: int) -> float:
+        calls.append(step)
+        return 0.25
+
+    epochs = 2
+    train_linear_classifier_network(student, training_data, learning_rate=recording_schedule, epochs=epochs)
+
+    assert calls == list(range(len(training_data) * epochs))
