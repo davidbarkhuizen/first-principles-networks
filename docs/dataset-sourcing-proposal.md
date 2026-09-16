@@ -221,14 +221,21 @@ assuming either way.
 
 1. ✅ This design document.
 2. ✅ Compute real checksums + write real metadata for the existing local MNIST parquet files and
-   UCI digits (`dataset-packaging/indrajala-datasets-mnist/`,
-   `dataset-packaging/indrajala-datasets-uci-digits/`) - a local, no-GitHub-action-required step.
-   Along the way, corrected this document's own guessed MNIST schema against the real one (see
-   above), and verified UCI digits' license (CC BY 4.0) directly rather than leaving it a `TODO`.
-3. Create `indrajala-datasets-mnist` and `indrajala-datasets-uci-digits` on GitHub,
-   push the data + metadata - a real, visible, public action requiring explicit go-ahead, not
-   bundled into an automated step.
-4. Add the fetch script + `./cli` wiring in `perceptron`.
+   UCI digits - a local, no-GitHub-action-required step. Along the way, corrected this document's
+   own guessed MNIST schema against the real one (see above), and verified UCI digits' license
+   (CC BY 4.0) directly rather than leaving it a `TODO`.
+3. ✅ Create `indrajala-datasets-mnist` and `indrajala-datasets-uci-digits` on GitHub, push the
+   data + metadata:
+   - [`indrajala-datasets-mnist`](https://github.com/davidbarkhuizen/indrajala-datasets-mnist),
+     pinned tag `v2026-09-16`
+   - [`indrajala-datasets-uci-digits`](https://github.com/davidbarkhuizen/indrajala-datasets-uci-digits),
+     pinned tag `v2026-09-16`
+
+   Each repo's own packaging (README, directory layout) is MIT-licensed; the dataset content keeps
+   its own documented source license. `dataset-packaging/`'s staged copies (from stage 2) are now
+   redundant with these live repos and have been removed from `perceptron` to avoid two sources of
+   truth that could drift.
+4. Add the fetch script + `./cli` wiring in `perceptron`, pinned to the tags above.
 5. Add the CI workflow itself (GitHub Actions running `pytest` on push/PR), now unblocked -
    including the `actions/cache` step from "CI-side caching" above, since it's a small addition
    once the workflow exists at all, not a separate follow-on piece of work.
