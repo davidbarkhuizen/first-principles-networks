@@ -20,7 +20,8 @@ retrofit - so it can represent targets (like XOR) the discrete model structurall
   benchmarking mirror) and a hand-built Rust array core (the production backend)
 - [Rust production cutover](docs/rust-production-cutover.md) — how the Rust core became primary
   in production: a debug-build fix, a matmul reorder, fused per-layer calls, and a measured
-  3.40x/1.31x speedup over numpy on real training runs
+  speedup over numpy on real training runs (3.40x/1.31x at first, ~3.6x/~2.6x after later matmul
+  SIMD work - see [research and analysis](docs/research-and-analysis.md))
 - [mini-batch gradient descent](docs/mini-batch-gradient-descent.md) — batched gradient updates,
   and the momentum re-test they unblocked
 - [convolutional layers](docs/convolutional-layers.md) — a from-scratch conv layer, local

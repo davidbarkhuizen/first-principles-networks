@@ -606,16 +606,24 @@ a mechanical loop-reorder and fused-per-layer-call fix to the Rust core itself, 
 mirroring `VectorizedMultiClassBackpropClassifierNetwork`'s exact external contract, tier-1
 bit-close parity-checked against the pure-Python reference
 (`tests/test_rust_array_multiclass_backprop_model.py`), then measured on real training runs: a
-genuine **3.40x** speedup over numpy at UCI digits scale and **1.31x** at real MNIST scale (see
-[research and
+genuine speedup over numpy, first measured at 3.40x at UCI digits scale and 1.31x at real MNIST
+scale (see [research and
 analysis](research-and-analysis.md#phase-2-tier-2-real-per-example-training-is-a-genuine-win-at-both-scales-measured)),
 with statistically indistinguishable accuracy. `demo_rust_vs_vectorized_uci_digit_recognition.py`/
 `demo_rust_vs_vectorized_mnist_recognition.py` run all three (pure-Python, numpy, Rust) side by
-side. Neither training path above needs `batch_size >= 32` mini-batch matmul performance - both
-use `learn()`'s per-example (`batch_size=1`) shape exclusively - but that gap against numpy's BLAS
-is closed anyway (2026-09-16): cache-blocking, threading, and an AVX2+FMA SIMD path on the crate's
-2D×2D matmul case moved `batch_size=512`'s Rust/numpy ratio to 0.84x-1.04x, matching or beating
-numpy in most trials (see "possible next steps" below for the full writeup).
+side.
+
+Two further SIMD optimization passes (both 2026-09-16, see "possible next steps" below for the
+full writeup) moved that number since. Neither training path above needs `batch_size >= 32`
+mini-batch matmul performance - both use `learn()`'s per-example (`batch_size=1`) shape
+exclusively - but that gap against numpy's BLAS was closed anyway: cache-blocking, threading, and
+an AVX2+FMA SIMD path on the crate's 2D×2D matmul case moved `batch_size=512`'s Rust/numpy ratio
+to 0.84x-1.04x. More consequentially, the `Matrix @ Vector` case (`self.W @ x` - the shape
+`batch_size=1` training *actually* uses, initially assumed not worth optimizing at this scale,
+then measured directly and found to be ~97% of a fused forward call's cost) got the same AVX2+FMA
+treatment, moving the real per-example training-run win to **~3.6x** at UCI digits scale and
+**~2.6x** at real MNIST scale - the current numbers, still with statistically indistinguishable
+accuracy.
 
 ## possible next steps
 
@@ -679,3 +687,20 @@ ordered roughly by how directly each follows from an existing finding here, not 
   **AVX-512 checked and ruled out**: this machine's CPU (AMD Ryzen 7 3700U, Zen+) has no
   `avx512*` flags at all - AMD didn't add AVX-512 until Zen 4 (2022) - so AVX2's 4-lane `f64`
   width is this hardware's actual ceiling, not a further optimization candidate here.
+- **The matmul `Matrix @ Vector`/`Vector @ Matrix` cases: done, a bigger real win than the
+  `batch_size >= 32` work above** (2026-09-16, see [research and
+  analysis](research-and-analysis.md#simd-for-the-matvec-production-path-a-bigger-win-than-the-batch32-work-it-followed)).
+  Unlike the 2D×2D case, `self.W @ x` (`Matrix @ Vector`) *is* this codebase's actual
+  `batch_size=1` production shape - a stage-0 measurement found it costing ~10.2us at the real
+  `16x784` shape, ~97% of a fused `layer_forward` call and ~3.5x slower than numpy, overturning
+  an earlier, unverified assumption in `linalg.rs`'s own doc comment that this case "never
+  exercised... at a size where it would matter." Fixed with an AVX2+FMA dot-product path
+  (`dot_product`/`dot_product_avx2_fma` in `linalg.rs`) using a canonical 4-lane interleaved
+  summation order shared by the scalar fallback and the AVX2 path (bit-identical between the two,
+  verified the same way as the 2D×2D SIMD work - though not to the old naive-sequential-sum
+  baseline, a deliberate, documented summation-order change). `Vector @ Matrix` needed no new
+  code at all - it turned out to be structurally identical to `axpy_row`'s own row-scaling
+  accumulate, so it was wired straight through that existing function. Net effect: the real
+  per-example training-run win moved from 3.40x/1.31x to **~3.6x/~2.6x** (UCI digits/real MNIST),
+  with real MNIST's ratio nearly doubling - `dimension=784, hidden=30` is exactly the shape where
+  this matvec dominates most.
