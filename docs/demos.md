@@ -225,7 +225,11 @@ accuracy (99.5%/96.9% pure-Python, 99.5%/96.9% numpy, 99.7%/97.5% Rust train/tes
 (pure-Python) vs. 4.30s (numpy) vs. 1.30s (Rust) - a 3.30x speedup over numpy and 52.89x over
 pure-Python, close to [research and
 analysis](research-and-analysis.md#phase-2-tier-2-real-per-example-training-is-a-genuine-win-at-both-scales-measured)'s
-own recorded 3.40x figure (real training runs vary run to run). Saves the trained Rust model to
+own recorded 3.40x figure (real training runs vary run to run). Both figures above predate
+2026-09-16's later matmul SIMD work (see [research and
+analysis](research-and-analysis.md#simd-for-the-matvec-production-path-a-bigger-win-than-the-batch32-work-it-followed)) -
+re-running this demo today would show a faster Rust time and a higher ratio, around 3.6x per that
+entry's own measurement, not re-captured here in full per-network detail. Saves the trained Rust model to
 `data/digits/trained_model_rust.json`, printing how to reload it without retraining. Plots all
 three training-accuracy-by-epoch curves overlaid, a confusion matrix, and sample test predictions
 for the Rust network.
@@ -323,8 +327,12 @@ accuracy and wall-clock epoch time side by side. Measured: matching accuracy (93
 93.4%/93.2% numpy, 93.0%/92.9% Rust train/test) at 1128.9s (pure-Python) vs. 15.9s (numpy) vs.
 11.4s (Rust) - a 1.39x speedup over numpy and 98.64x over pure-Python, close to [research and
 analysis](research-and-analysis.md#phase-2-tier-2-real-per-example-training-is-a-genuine-win-at-both-scales-measured)'s
-own recorded 1.31x multi-seed figure. Takes on the order of 15-20 minutes to run, mostly the
-pure-Python epoch.
+own recorded 1.31x multi-seed figure. Both figures above predate 2026-09-16's later matmul SIMD
+work (see [research and
+analysis](research-and-analysis.md#simd-for-the-matvec-production-path-a-bigger-win-than-the-batch32-work-it-followed)) -
+re-running this demo today would show a faster Rust time and a higher ratio, around 2.6x per that
+entry's own measurement, not re-captured here in full per-network detail. Takes on the order of
+15-20 minutes to run, mostly the pure-Python epoch.
 
 ## demo: MNIST ensemble capture
 
