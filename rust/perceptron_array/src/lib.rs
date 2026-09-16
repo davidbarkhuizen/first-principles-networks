@@ -1,6 +1,7 @@
 use pyo3::prelude::*;
 
 mod array;
+mod fused;
 mod linalg;
 mod mnist;
 mod ops;
@@ -8,6 +9,11 @@ mod random;
 mod ufuncs;
 
 use array::RustArray;
+use fused::{
+    layer_accumulate_gradient, layer_accumulate_gradient_batch, layer_apply_accumulated_gradient,
+    layer_forward, layer_forward_batch, layer_hidden_delta, layer_hidden_delta_batch,
+    layer_output_delta,
+};
 use linalg::outer;
 use mnist::decode_mnist_pixels;
 use random::uniform;
@@ -30,6 +36,14 @@ fn perceptron_array(_py: Python<'_>, m: &PyModule) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(argmax, m)?)?;
     m.add_function(wrap_pyfunction!(uniform, m)?)?;
     m.add_function(wrap_pyfunction!(decode_mnist_pixels, m)?)?;
+    m.add_function(wrap_pyfunction!(layer_forward, m)?)?;
+    m.add_function(wrap_pyfunction!(layer_forward_batch, m)?)?;
+    m.add_function(wrap_pyfunction!(layer_output_delta, m)?)?;
+    m.add_function(wrap_pyfunction!(layer_hidden_delta, m)?)?;
+    m.add_function(wrap_pyfunction!(layer_hidden_delta_batch, m)?)?;
+    m.add_function(wrap_pyfunction!(layer_accumulate_gradient, m)?)?;
+    m.add_function(wrap_pyfunction!(layer_accumulate_gradient_batch, m)?)?;
+    m.add_function(wrap_pyfunction!(layer_apply_accumulated_gradient, m)?)?;
     m.add_class::<RustArray>()?;
     Ok(())
 }

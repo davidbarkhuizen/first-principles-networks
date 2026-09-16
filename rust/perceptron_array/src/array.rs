@@ -165,7 +165,7 @@ impl RustArray {
     /// `#[getter(T)]` keeps the Rust fn name lowercase/snake_case while exposing it to Python as
     /// `.T`, matching `arr.T`'s usage in `ArrayLayer` (`X @ self.W.T`).
     #[getter(T)]
-    fn transpose(&self) -> Self {
+    pub(crate) fn transpose(&self) -> Self {
         match self.shape {
             Shape::Vector(_) => self.clone(),
             Shape::Matrix(rows, cols) => {

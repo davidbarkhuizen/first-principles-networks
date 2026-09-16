@@ -393,8 +393,58 @@ per-op composition was already only ~3-10x slower than numpy before any of phase
 the matmul loop reorder alone (0a) brings it to ~2-7x, without yet fusing per-layer calls (0b).
 
 **Decision:** `./cli build-rust`/`./cli setup` now build with `maturin develop --release` (a
-one-line fix - see the `cli` script and [setup](setup.md)); [the production cutover
-plan](rust-production-cutover.md) records the corrected baseline and re-evaluates phase 0b's
-fused-call work against it, since the gap it was meant to close turned out much narrower than
-measured - a benchmark's headline number is only as good as the build it was measured against,
-and this one went unquestioned through two doc revisions before being re-run.
+one-line fix - see the `cli` script and [setup](setup.md)) - a benchmark's headline number is only
+as good as the build it was measured against, and this one went unquestioned through two doc
+revisions before being re-run.
+
+## phase 0b: fusing closes some further ground, but matmul is now the binding constraint
+
+With the release-build baseline corrected and 0a's loop reorder in, phase 0b fused each
+`ArrayLayer` method into a single Rust call (`fused.rs` - `layer_forward`, `layer_forward_batch`,
+`layer_output_delta`, `layer_hidden_delta`/`_batch`, `layer_accumulate_gradient`/`_batch`,
+`layer_apply_accumulated_gradient`), eliminating the per-op FFI-crossing count entirely (one
+Python-to-Rust call per layer method, not four to six). Re-measuring `layer_forward_batch` alone
+against numpy, same architecture as every prior table here (`dimension=784, hidden=16`):
+
+| batch size | numpy | fused Rust | ratio |
+|---|---|---|---|
+| 1 | 14.4 us | 27.7 us | 1.9x slower |
+| 8 | 21.9 us | 45.1 us | 2.1x slower |
+| 32 | 57.6 us | 135.1 us | 2.4x slower |
+| 128 | 154.2 us | 666.4 us | 4.3x slower |
+| 512 | 489.1 us | 2082.5 us | 4.3x slower |
+
+Fusing closed some further ground over 0a alone (batch 128 was 6.5x slower after 0a alone;
+4.3x after 0b) but not decisively - matmul, still a naive triple loop with no SIMD/blocking, is
+now the dominant remaining cost at these batch sizes, and fusing doesn't touch it. A fuller
+comparison - one whole mini-batch training step (`layer_forward_batch` + `layer_output_delta` +
+`layer_accumulate_gradient_batch` + `layer_apply_accumulated_gradient` vs. the equivalent numpy
+`ArrayLayer` method sequence, `dimension=784, hidden=10` - this codebase's real output-layer
+shape) tells a more textured story than the forward-pass-only table above:
+
+| batch size | numpy | fused Rust | ratio |
+|---|---|---|---|
+| 1 | 68.0 us | 30.5 us | **0.45x - Rust is faster** |
+| 8 | 67.2 us | 64.6 us | ~parity |
+| 32 | 108.3 us | 189.6 us | 1.75x slower |
+| 128 | 201.5 us | 798.9 us | 4.03x slower |
+| 512 | 1740.3 us | 3478.3 us | 2.00x slower |
+
+(Correctness held throughout both tables - max weight difference after a full training step ≤
+5e-16, float64 noise; every fused function checked against `array_layer.py`'s own `ArrayLayer`
+methods directly, not an independently-written reference formula - see
+`rust/perceptron_array/tests/test_fused_layer_ops.py`.)
+
+**The split result:** the fused Rust core beats numpy for per-example training (`batch_size=1`,
+`ArrayLayer.learn`'s own call shape) but loses to it, by a widening margin, for realistic
+mini-batch training (`batch_size >= 32`, `learn_batch`'s shape) - the opposite of what [the
+production cutover plan](rust-production-cutover.md#risks-and-open-questions)'s own "risks and
+open questions" guessed before this was measured (it expected batching to be the Rust core's
+strength and per-example calls its weakness, on the theory that a single Python↔Rust call still
+costs something no pure-Python-calling-numpy path pays - true, but overwhelmed at larger batches
+by numpy's BLAS-backed matmul pulling further ahead of this crate's still-naive one). **Decision:
+left open, not resolved here** - whether phase 1 (`RustArrayMultiClassBackpropClassifierNetwork`)
+gets built for the per-example path only, gets built anyway as a correctness-first standalone (the
+same treatment momentum/L2/Xavier-Glorot got), or isn't built, is recorded in [the production
+cutover plan](rust-production-cutover.md) as a decision still to be made, not defaulted either
+way.

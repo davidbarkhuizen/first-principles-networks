@@ -43,7 +43,7 @@ fn broadcast_row(
 }
 
 impl RustArray {
-    fn combine_with_array(
+    pub(crate) fn combine_with_array(
         &self,
         other: &RustArray,
         op: impl Fn(f64, f64) -> f64,
