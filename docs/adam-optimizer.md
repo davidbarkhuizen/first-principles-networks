@@ -102,10 +102,13 @@ independently-computable value the way momentum's own first-step test reduces to
 
 Two stages, cheapest and most comparable to existing results first:
 
-1. **The same tuned-XOR scenario momentum's own baseline used** (`test_backprop_training_pipeline.py`'s
-   pinned scenario, 10-15 seeds) - establishes whether Adam helps or hurts at all on this
-   codebase's smallest, most-measured target, directly comparable to momentum's own "measured, not
-   worth adopting" table.
+1. **The pinned tuned-XOR scenario** (`test_backprop_training_pipeline.py`'s pinned scenario,
+   10-15 seeds) - establishes whether Adam helps or hurts at all on this codebase's smallest,
+   most-measured target. Correction, found while executing this stage: momentum's own baseline was
+   actually measured on the 320-example real-MNIST proxy, not this XOR scenario (see
+   [research and analysis](research-and-analysis.md#momentum-measured-not-worth-adopting)) - this
+   stage instead reuses the same pinned XOR scenario the binary-cross-entropy and ReLU
+   investigations used.
 2. **The 320-example real-MNIST proxy, crossed with `batch_size`** - reusing the exact scratch-sweep
    pattern from the learning-rate-vs-batch-size sweep (fork-based multiprocessing pool, ~25 minutes
    at this scale, see [research and
@@ -146,7 +149,15 @@ used) - a real added step, not assumed away.
    fixed algorithmic constants in real-world use than a knob momentum's own posture was about.
    Mini-batch (`learn_batch`) verified working with no extra code, inherited unchanged the same
    way every prior sibling's did. Full suite (850 tests, up from 845) passes.
-3. The tuned-XOR-scale measurement, written up in `research-and-analysis.md`.
+3. ✅ The tuned-XOR-scale measurement, written up in [research and
+   analysis](research-and-analysis.md#adam-tuned-xor-measurement-stage-3-of-the-adam-optimizer-workplan).
+   At the demo-tuned `learning_rate=1.0` Adam collapses badly (58.27% vs. sigmoid's 97.80% mean,
+   10 seeds) - the same "no default is safe without retuning" pattern cross-entropy/ReLU/momentum
+   all showed. Retuned to `learning_rate=0.01-0.05`, Adam modestly beats the sigmoid baseline's
+   mean with a visibly tighter spread, confirmed at 15 seeds (98.09-98.38% vs. 97.33% mean,
+   0.75-1.14% vs. 1.66% stdev) - a real but modest edge on this small, near-ceiling toy problem,
+   not a dramatic win the way ReLU's retuned result was, and not a null the way momentum's own
+   retuned sweep was.
 4. The real-MNIST-proxy batch-size sweep, written up (reusing the learning-rate-vs-batch-size
    sweep's own script skeleton).
 5. Conditional: real-MNIST-ensemble-scale validation, only if stage 4's result justifies the
