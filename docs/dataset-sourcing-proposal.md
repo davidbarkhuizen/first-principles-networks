@@ -235,7 +235,12 @@ assuming either way.
    its own documented source license. `dataset-packaging/`'s staged copies (from stage 2) are now
    redundant with these live repos and have been removed from `perceptron` to avoid two sources of
    truth that could drift.
-4. Add the fetch script + `./cli` wiring in `perceptron`, pinned to the tags above.
+4. ✅ Add the fetch script (`scripts/fetch_datasets.py`, pinned to the `v2026-09-16` tags above) +
+   `./cli fetch-data` / `./cli setup` wiring in `perceptron`. Verified end-to-end: the
+   presence+checksum check short-circuits with zero network calls against an already-populated
+   checkout, and a genuinely missing file is fetched from the pinned tag and checksum-verified
+   byte-identical to the original. Scoped to MNIST only, matching the actual CI blocker - UCI
+   digits' `digits.csv` stays committed directly, per the resolved open question above.
 5. Add the CI workflow itself (GitHub Actions running `pytest` on push/PR), now unblocked -
    including the `actions/cache` step from "CI-side caching" above, since it's a small addition
    once the workflow exists at all, not a separate follow-on piece of work.
