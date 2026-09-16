@@ -4,8 +4,8 @@
 
 This document exists because it's easy to let a project like this drift toward "add more
 capability" as a default, without ever asking what the capability is *for*. It states plainly
-what this project is trying to be, what it explicitly isn't trying to be, and how to tell the
-difference when a new piece of work is proposed.
+what this project is trying to be, and how to tell the difference when a new piece of work is
+proposed.
 
 ## what this project actually is
 
@@ -29,8 +29,7 @@ That combination - genuine first-principles construction plus an honest, checked
 worked and what didn't - is the asset. It's pedagogical and demonstrative value: a place to
 actually understand how these algorithms work, including the numerical subtleties (float64
 summation order, RNG non-reproducibility across backends, IEEE-754 FMA semantics) that using a
-real framework would hide. It is not competitive ML value - nothing here is a novel algorithm or
-a better model than what already exists off the shelf.
+real framework would hide.
 
 ## what success looks like here
 
@@ -59,31 +58,11 @@ fit:
    open measurement question already on record) rather than adding a structurally new one.
 3. **Infrastructure that removes friction from doing (1) and (2) honestly** - protects the rigor
    (a change can't silently break the numbers a decision was based on, a measurement stays
-   reproducible from a fresh checkout) - worth doing for that reason, not to make the project look
-   more like a product.
+   reproducible from a fresh checkout).
 
 See [structure](structure.md#possible-next-steps) for the concrete, current candidates in each
 tier - kept there, alongside the architecture they'd extend, rather than duplicated here where the
 two lists could drift out of sync with each other.
-
-## anti-goals: what this project does not chase
-
-Explicitly rejecting the "close the gap with a real ML framework" framing an earlier audit in this
-project's history proposed:
-
-- **Not competing on model capability.** Attention/transformer blocks, recurrent layers,
-  distributed/multi-GPU training - these are solved problems in PyTorch/JAX, and hand-rolling them
-  here would be a slow reimplementation of something that already exists and works better, not a
-  learning exercise anymore past a certain point. If sequence or attention modeling ever gets
-  added, it should be because there's something specific to learn from building it by hand, not
-  because "real" ML projects have it.
-- **Not building a serving/production deployment story** (REST API, model registry, monitoring,
-  containerization) unless a concrete use case actually needs one. Building serving
-  infrastructure for a system with no user is infrastructure for its own sake.
-- **Not chasing feature parity with a framework as a goal in itself.** "numpy/PyTorch has X" is
-  never sufficient justification for adding X here - see [vectorization](vectorization.md#why-not-just-adopt-real-numpy)
-  and [the Rust core](rust-array-core.md#why-not-just-keep-using-real-numpy) for the same reasoning
-  already applied to *not* adopting numpy as a runtime dependency, which generalizes to this.
 
 ## how to evaluate a proposed addition
 
@@ -95,10 +74,6 @@ Before starting work on something new, it should be able to answer:
 - **Can it be measured, and will the measurement be recorded honestly either way?** If a proposed
   addition can't be checked against a reference or a baseline, it doesn't fit this project's own
   practice, regardless of how useful it sounds.
-- **Is it solving a problem this project actually has, or a problem "a production system" is
-  assumed to need?** CI solved a real, named problem this way (nothing protected 845 tests from
-  regressing - see [dataset sourcing](dataset-sourcing-proposal.md), now shipped). A Kubernetes
-  deployment doesn't solve a problem this project has today.
 - **Would explaining it in [research and analysis](research-and-analysis.md) actually be
   interesting to read?** If the honest write-up would just be "we added X because other libraries
   have X," that's a signal it doesn't belong here.

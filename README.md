@@ -10,8 +10,8 @@ retrofit - so it can represent targets (like XOR) the discrete model structurall
 
 ## docs
 
-- [goals and strategy](docs/goals-and-strategy.md) — what this project is actually for, what it
-  deliberately doesn't chase, and how to evaluate a proposed addition
+- [goals and strategy](docs/goals-and-strategy.md) — what this project is actually for, and how to
+  evaluate a proposed addition
 - [structure](docs/structure.md) — module layout, and how each network composes
 - [setup](docs/setup.md) — requirements, install, and running the tests
 - [dataset sourcing proposal](docs/dataset-sourcing-proposal.md) — fetching real MNIST/UCI digits
