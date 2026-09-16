@@ -643,7 +643,8 @@ ranked.
   the existing SGD/momentum baseline the same way every other backprop sibling was (see "backprop
   siblings" above). Momentum itself measured as a null on every scenario tried; a per-parameter
   adaptive learning rate is a different enough mechanism to be worth its own measurement rather
-  than assumed to fare the same way. Not yet started.
+  than assumed to fare the same way. See [Adam optimizer](adam-optimizer.md) for the design and
+  measurement plan. Not yet started.
 - **A learning-rate schedule** (decay/warmup) - every training loop here uses one fixed
   `learning_rate` for all epochs; untested whether a schedule changes convergence or final
   accuracy on any of this codebase's targets. Now has a concrete motivating case, not just a
