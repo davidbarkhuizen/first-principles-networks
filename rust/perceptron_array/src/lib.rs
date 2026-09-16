@@ -2,11 +2,15 @@ use pyo3::prelude::*;
 
 mod array;
 mod linalg;
+mod mnist;
 mod ops;
+mod random;
 mod ufuncs;
 
 use array::RustArray;
 use linalg::outer;
+use mnist::decode_mnist_pixels;
+use random::uniform;
 use ufuncs::{argmax, exp, sum_axis0};
 
 /// Proves the PyO3/maturin toolchain works end to end - importable and callable from Python,
@@ -24,6 +28,8 @@ fn perceptron_array(_py: Python<'_>, m: &PyModule) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(outer, m)?)?;
     m.add_function(wrap_pyfunction!(sum_axis0, m)?)?;
     m.add_function(wrap_pyfunction!(argmax, m)?)?;
+    m.add_function(wrap_pyfunction!(uniform, m)?)?;
+    m.add_function(wrap_pyfunction!(decode_mnist_pixels, m)?)?;
     m.add_class::<RustArray>()?;
     Ok(())
 }

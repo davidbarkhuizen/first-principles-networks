@@ -12,7 +12,7 @@ pub enum Shape {
 }
 
 impl Shape {
-    fn size(&self) -> usize {
+    pub(crate) fn size(&self) -> usize {
         match *self {
             Shape::Vector(n) => n,
             Shape::Matrix(rows, cols) => rows * cols,
@@ -20,7 +20,7 @@ impl Shape {
     }
 }
 
-fn parse_shape(shape: &PyAny) -> PyResult<Shape> {
+pub(crate) fn parse_shape(shape: &PyAny) -> PyResult<Shape> {
     if let Ok((rows, cols)) = shape.extract::<(usize, usize)>() {
         Ok(Shape::Matrix(rows, cols))
     } else if let Ok(n) = shape.extract::<usize>() {
