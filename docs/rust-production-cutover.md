@@ -95,28 +95,67 @@ it reaches parity.
 
 ### 0b. fuse each layer operation into one Rust call
 
-Add fused per-layer operations to the crate - new `#[pyfunction]`s doing the *entire* computation
-in one Rust function, returning one `Array`, instead of composing it from several `Array`
-operator calls in Python:
+**Done.** Fused per-layer operations added to the crate (`fused.rs`) - `#[pyfunction]`s doing the
+*entire* computation in one Rust function, returning one `Array`, instead of composing it from
+several `Array` operator calls in Python:
 
-| new function (naming TBD during implementation) | replaces this Python-level composition |
+| function | replaces this Python-level composition |
 |---|---|
-| `layer_forward(W, x, b) -> Array` | `sigmoid(W @ x + b)` (4 Python-level ops: matmul, add, negate, exp, add, divide) |
+| `layer_forward(W, x, b) -> Array` | `sigmoid(W @ x + b)`, single-example |
 | `layer_forward_batch(W, X, b) -> Array` | `sigmoid(X @ W.T + b)`, batched |
-| `layer_output_delta(a, reference) -> Array` | `(a - reference) * a * (1 - a)` |
-| `layer_hidden_delta(next_W, next_delta, a) -> Array` | `(next_W.T @ next_delta) * a * (1 - a)` |
-| `layer_accumulate_gradient(delta, input_activation, grad_W, grad_b) -> (Array, Array)` | `grad_W += outer(delta, input_activation); grad_b += delta` |
-| `layer_apply_accumulated_gradient(W, b, grad_W, grad_b, learning_rate, batch_size) -> (Array, Array)` | `W -= lr * grad_W / batch_size; b -= lr * grad_b / batch_size` |
+| `layer_output_delta(a, reference) -> Array` | `(a - reference) * a * (1 - a)` - one formula, used for both single-example and batched (shape-agnostic) |
+| `layer_hidden_delta(next_W, next_delta, a) -> Array` | `(next_W.T @ next_delta) * a * (1 - a)`, single-example |
+| `layer_hidden_delta_batch(next_W, next_delta_batch, a_batch) -> Array` | `(next_delta_batch @ next_W) * A * (1 - A)`, batched - a genuinely different call shape from the single-example version above (no transpose on `next_W`, operand order swapped), not just a shape-agnostic reuse, so it needed its own function (added beyond the plan's original table, which only sketched the single-example case) |
+| `layer_accumulate_gradient(delta, input_activation, grad_W, grad_b) -> (Array, Array)` | `grad_W += outer(delta, input_activation); grad_b += delta`, single-example |
+| `layer_accumulate_gradient_batch(delta_batch, input_activation_batch, grad_W, grad_b) -> (Array, Array)` | `grad_W += delta_batch.T @ input_activation_batch; grad_b += delta_batch.sum(axis=0)` (added beyond the plan's original table for the same reason as `layer_hidden_delta_batch`) |
+| `layer_apply_accumulated_gradient(W, b, grad_W, grad_b, learning_rate, batch_size) -> (Array, Array)` | `W -= lr * grad_W / batch_size; b -= lr * grad_b / batch_size` - shape-agnostic, covers both |
 
 This directly targets cause 1 above (FFI-crossing count), and sidesteps needing `__neg__`/
-`__radd__`/`__rtruediv__` on `Array` at all - see "operators the current `Array` is missing"
-below for why those matter if this fused approach is *not* taken. Each new function gets the same
-parity-test treatment as every existing operation in this crate (a randomized sweep against the
-numpy/pure-Python reference formula, three-way where both exist) before being trusted - this is
-new, untested Rust code, not a refactor of already-proven pieces.
+`__radd__`/`__rtruediv__` on `Array` at all (`fused.rs` inlines its own `1.0 / (1.0 + (-z).exp())`
+sigmoid rather than composing it from `Array` operators) - see "operators the current `Array` is
+missing" below for why those matter if this fused approach is *not* taken. Each function has the
+same parity-test treatment as every existing operation in this crate
+(`tests/test_fused_layer_ops.py`): a randomized sweep checked directly against
+`perceptron/model/array_layer.py`'s own `ArrayLayer` methods, the actual production reference
+these functions replace, not just against a formula written independently.
 
-Re-run the full benchmark suite (batch sizes 1/8/32/128, at minimum) after 0a **and** 0b are both
-in, before deciding whether phase 1 is worth starting. **This is the actual go/no-go gate.**
+**The go/no-go benchmark, on the corrected release-build baseline** (see "the decisive finding"
+above): `layer_forward_batch` alone vs. numpy, same architecture (`dimension=784, hidden=16`):
+
+| batch size | numpy | fused Rust | ratio |
+|---|---|---|---|
+| 1 | 14.4 us | 27.7 us | 1.9x slower |
+| 8 | 21.9 us | 45.1 us | 2.1x slower |
+| 32 | 57.6 us | 135.1 us | 2.4x slower |
+| 128 | 154.2 us | 666.4 us | 4.3x slower |
+| 512 | 489.1 us | 2082.5 us | 4.3x slower |
+
+Fusing closed some further ground over 0a alone but not much - matmul, still a naive triple loop,
+is now the dominant remaining cost at these batch sizes, and fusing doesn't touch it. A fuller
+comparison - one whole mini-batch training step (`layer_forward_batch` + `layer_output_delta` +
+`layer_accumulate_gradient_batch` + `layer_apply_accumulated_gradient`, `dimension=784,
+hidden=10`, this codebase's real output-layer shape) vs. the equivalent numpy `ArrayLayer` method
+sequence, tells a more textured story:
+
+| batch size | numpy | fused Rust | ratio |
+|---|---|---|---|
+| 1 | 68.0 us | 30.5 us | **0.45x - Rust is faster** |
+| 8 | 67.2 us | 64.6 us | ~parity |
+| 32 | 108.3 us | 189.6 us | 1.75x slower |
+| 128 | 201.5 us | 798.9 us | 4.03x slower |
+| 512 | 1740.3 us | 3478.3 us | 2.00x slower |
+
+(Correctness held throughout both tables - max weight difference ≤ 5e-16, float64 noise.) This is
+the split outcome "risks and open questions" below already flagged as a real possibility before
+it was measured: **the fused Rust core beats numpy for per-example training (`batch_size=1`,
+`ArrayLayer.learn`'s own shape) but loses to it, by a widening margin, for realistic mini-batch
+training (`batch_size >= 32`, `learn_batch`'s shape)** - the opposite split from what the risks
+section guessed (it expected batching to be Rust's strength and per-example its weakness). See
+[research and analysis](research-and-analysis.md#the-rust-array-cores-65-335x-slower-than-numpy-finding-was-a-debug-build-artifact)
+for the full numbers and how they were produced. What this means for phase 1 - build it for the
+per-example path only, build it anyway as a correctness-first standalone (the same treatment
+momentum/L2/Xavier-Glorot got), or not build it - is recorded as an open decision, not resolved by
+this document alone.
 
 ### operators the current `Array` is missing (relevant only if phase 0's fused approach is skipped)
 
@@ -230,13 +269,19 @@ built-and-shipped plan in this codebase has been folded into `structure.md`.
    debug mode, which is what made the original gate benchmark read as 65-335x slower than numpy
    instead of the real ~3-10x - see "the decisive finding" above and
    [research and analysis](research-and-analysis.md#the-rust-array-cores-65-335x-slower-than-numpy-finding-was-a-debug-build-artifact).
-2. Fused forward functions (`layer_forward`, `layer_forward_batch`) + parity tests.
-3. Fused backward/gradient functions (`layer_output_delta`, `layer_hidden_delta`,
-   `layer_accumulate_gradient`, `layer_apply_accumulated_gradient`) + parity tests.
-4. Go/no-go benchmark re-run against numpy at realistic batch sizes; decision recorded in
-   [research and analysis](research-and-analysis.md) either way.
-5. *(if go)* `RustArrayLayer`/`RustArrayMultiClassBackpropClassifierNetwork` + tier-1 exact
-   parity tests.
+2. **Done.** Fused forward functions (`layer_forward`, `layer_forward_batch`) + parity tests.
+3. **Done.** Fused backward/gradient functions (`layer_output_delta`, `layer_hidden_delta`,
+   `layer_hidden_delta_batch`, `layer_accumulate_gradient`, `layer_accumulate_gradient_batch`,
+   `layer_apply_accumulated_gradient`) + parity tests - delivered together with stage 2 rather
+   than as a separate PR, since both were built in the same pass once the debug-build fix (stage
+   1) reset the whole gate's premise.
+4. **Done.** Go/no-go benchmark re-run against numpy at realistic batch sizes; recorded in "0b.
+   fuse each layer operation into one Rust call" above and
+   [research and analysis](research-and-analysis.md#the-rust-array-cores-65-335x-slower-than-numpy-finding-was-a-debug-build-artifact) -
+   a split result (faster at `batch_size=1`, slower and widening from `batch_size=32` up), not a
+   clean go or no-go, left as an open decision rather than forced into either bucket.
+5. *(pending the phase-1 decision above)* `RustArrayLayer`/
+   `RustArrayMultiClassBackpropClassifierNetwork` + tier-1 exact parity tests.
 6. Tier-2 statistical parity + accuracy validation (UCI digits first, then real MNIST).
 7. The benchmark demo(s) (phase 3).
 8. `structure.md`/`vectorization.md` updated to describe the shipped result.

@@ -10,7 +10,7 @@ use crate::array::{RustArray, Shape};
 /// `self.delta_batch.T @ input_activation_batch`). A naive triple loop, not a BLAS-competitive
 /// routine - see docs/rust-array-core.md's own "expected performance" for why that gap is
 /// expected and accepted at this stage.
-fn matmul(a: &RustArray, b: &RustArray) -> PyResult<RustArray> {
+pub(crate) fn matmul(a: &RustArray, b: &RustArray) -> PyResult<RustArray> {
     match (a.shape, b.shape) {
         (Shape::Matrix(rows, cols), Shape::Vector(n)) => {
             if cols != n {
