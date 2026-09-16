@@ -676,25 +676,7 @@ ranked.
 
 ### infrastructure that protects the rigor
 
-No open items in this tier right now - see below for what closed the three that used to be here
-(matmul performance, CI, and the Python packaging/pinning gap).
-
-Matmul performance is no longer on this list: both gaps this codebase's real training paths could
-hit (the `batch_size >= 32` 2D×2D case and the `batch_size=1` `Matrix @ Vector`/`Vector @ Matrix`
-cases actually used in production) were closed via cache-blocking, threading, and AVX2+FMA SIMD -
-see [vectorized array-based classes](#vectorized-array-based-classes) above for the current
-numbers and [research and
-analysis](research-and-analysis.md#simd-for-the-matvec-production-path-a-bigger-win-than-the-batch32-work-it-followed)
-(and the four entries preceding it) for the full investigation.
-
-CI is no longer on this list either: [`.github/workflows/ci.yml`](../.github/workflows/ci.yml) now
-runs the full test suite (320 top-level Python tests plus 525 more running the Rust crate's own
-parity suite) on every push to `main` and every pull request, unblocked by [the
-`indrajala-datasets-*` dataset sourcing work](dataset-sourcing-proposal.md) - see [setup](setup.md#ci)
-for how it fetches and caches the real MNIST data it needs.
-
-Neither is the Python packaging/pinning gap: `pyproject.toml` now makes this package installable
-and versioned (`pip install -e .`), and `requirements.txt` is a real pip-compile-generated lock
-file - every direct and transitive Python dependency pinned to the exact version this codebase's
-test suite is validated against, not left to resolve to whatever's newest on PyPI at install time -
-see [setup](setup.md#dependencies) for the full dependency-bumping procedure.
+No open items in this tier. The three that used to be here - matmul performance (see [research
+and analysis](research-and-analysis.md#simd-for-the-matvec-production-path-a-bigger-win-than-the-batch32-work-it-followed)),
+CI (see [setup](setup.md#ci)), and Python packaging/pinning (see
+[setup](setup.md#dependencies)) - are all closed; follow those links for the detail.
