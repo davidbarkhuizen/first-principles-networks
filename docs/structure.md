@@ -660,17 +660,17 @@ ranked.
 
 ### new model primitives, measured the existing way
 
-- **An optimizer beyond plain SGD/momentum** (Adam, RMSprop) - hand-derived and checked against
-  the existing SGD/momentum baseline the same way every other backprop sibling was (see "backprop
-  siblings" above). Momentum itself measured as a null on every scenario tried; a per-parameter
-  adaptive learning rate is a different enough mechanism to be worth its own measurement rather
-  than assumed to fare the same way. See [Adam optimizer](adam-optimizer.md) for the design,
-  measurement plan, and current stage-by-stage status. In progress: `AdamBackpropClassifierNetwork`
-  is built (stage 2); the tuned-XOR measurement (stage 3) found it needs its own retuned learning
-  rate the same way ReLU/cross-entropy do, then modestly beats the sigmoid baseline once retuned;
-  the real-MNIST-proxy batch-size sweep (stage 4) found a much bigger, cleaner win - at a fixed
-  learning rate Adam stays robust across batch sizes where sigmoid collapses, and (the reverse of
-  SGD/momentum's own linear scaling rule) scaling Adam's rate with batch size actively hurts it.
+- **RMSprop** (Adam minus its momentum-like first-moment term) - flagged in [Adam
+  optimizer](adam-optimizer.md#scope) as a cheap follow-on ablation once Adam's own
+  `AdamBackpropNode` existed, worth doing only if Adam's result said something worth isolating
+  further. Adam itself is now done (see [Adam optimizer](adam-optimizer.md) for the full
+  workplan, [research and analysis](research-adam-optimizer.md) for the measurements): adopted as
+  a real capability, not a default - like every other weight-update-rule sibling here it needs its
+  own retuned `learning_rate` to avoid actively hurting - with a modest win on the tuned-XOR scale
+  and a substantial one under large-batch training (a fixed `learning_rate` keeps Adam robust
+  across `batch_size`, where sigmoid collapses, at both proxy and real-MNIST-ensemble scale) -
+  exactly the positive result that makes RMSprop worth revisiting as an ablation, per the
+  workplan's own flagged condition. Not yet started.
 - **A learning-rate schedule** (decay/warmup) - every training loop here uses one fixed
   `learning_rate` for all epochs; untested whether a schedule changes convergence or final
   accuracy on any of this codebase's targets. Now has a concrete motivating case, not just a
