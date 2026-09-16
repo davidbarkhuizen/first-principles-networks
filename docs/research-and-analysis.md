@@ -848,3 +848,64 @@ replacement for sigmoid+quadratic's own tuned `learning_rate` without retuning. 
 batch-size sweep (stage 4) is where Adam's actual per-parameter-adaptive-rate selling point -
 smoothing per-example-noisy gradients, specifically at `batch_size=1` where momentum failed - has
 room to show a larger effect than this small, already near-ceiling toy problem could.
+
+## Adam under batch size: a much bigger, cleaner win (stage 4 of the Adam optimizer workplan)
+
+The real-MNIST-proxy batch-size sweep the previous entry deferred to: same scale as the
+momentum-under-mini-batch-gradients investigations (fan-in-aware init, `[16]` hidden, 5 epochs,
+`batch_size` in 1/8/32/128, 10 seeds each), on a freshly-built 320-example real-MNIST digit-3
+proxy (200 positive/200 negative examples, an 80/20 train/test split, fixed once rather than
+resampled per seed - not the exact same proxy instance the original momentum sweeps used, since
+that script was never committed, but the same construction procedure/scale). Sigmoid (no Adam)
+and Adam run in the same script against the same proxy and seeds for a directly paired comparison,
+crossed with both learning-rate regimes the earlier momentum sweep used - a fixed base rate, and
+that rate linearly scaled by `batch_size` (`learning_rate = base_lr * batch_size`) - rather than
+trusting the earlier sweep's own numbers out of context:
+
+| config | batch_size=1 | batch_size=8 | batch_size=32 | batch_size=128 |
+|---|---|---|---|---|
+| sigmoid, fixed lr=0.5 | 89.62% ± 3.87% | 87.00% ± 1.88% | 83.62% ± 2.79% | 71.50% ± 13.33% |
+| sigmoid, scaled lr=0.5×batch | 89.62% ± 3.87% | 87.62% ± 2.97% | 88.88% ± 2.24% | 57.12% ± 12.82% |
+| Adam, fixed lr=0.01 | 90.50% ± 2.65% | 90.38% ± 1.87% | 89.38% ± 1.35% | **86.75% ± 1.05%** |
+| Adam, scaled lr=0.01×batch | 90.50% ± 2.65% | 84.75% ± 12.95% | 76.00% ± 18.31% | 50.00% ± 3.95% |
+
+The sigmoid rows are a genuine reproducibility check, not a rerun of the same numbers: on an
+independently-constructed proxy subset, they qualitatively reproduce the
+[learning-rate-vs-batch-size follow-up](#the-learning-rate-vs-batch-size-follow-up-the-confound-was-real-and-momentum-still-doesnt-help)'s
+own shape - a fixed rate degrades steadily as batch size grows (fewer update steps/epoch), scaling
+the rate compensates at `batch_size=32`, and scaling diverges outright at `batch_size=128`
+(high-variance collapse).
+
+Adam's numbers are a materially bigger, cleaner result than stage 3's modest XOR edge:
+
+- **A fixed learning rate barely degrades Adam at all across two orders of magnitude of batch
+  size** (90.50% -> 86.75%, `batch_size=1` to `128`), while sigmoid's fixed rate collapses over the
+  same range (89.62% -> 71.50%, with the variance exploding to ±13.33% as training destabilizes).
+  At `batch_size=128` specifically, Adam beats *every* sigmoid regime tried, fixed or scaled
+  (86.75% vs. 71.50%/57.12%), with roughly a tenth of the variance (±1.05% vs. ±13.33%/±12.82%).
+  This is Adam's selling point showing up for real - not primarily at `batch_size=1`'s
+  per-example-noisy regime as the workplan expected to look first (Adam and sigmoid are close
+  there, 90.50% vs. 89.62%), but at the large-batch end, where sigmoid/momentum's shared weakness
+  (needing a compensating learning-rate bump for fewer update steps/epoch) doesn't apply to Adam at
+  all.
+- **Scaling Adam's rate with batch size - the fix that helps sigmoid at `batch_size=32` - actively
+  destroys Adam instead.** By `batch_size=128` (`lr=0.01*128=1.28`), Adam collapses to a
+  coin-flip 50.00% with high, unstable variance across seeds. This directly answers the workplan's
+  flagged open question ("whether Adam's adaptive per-parameter scaling interacts with
+  `batch_size=128`'s linear-scaling-rule divergence"): yes, and the interaction is that the linear
+  scaling rule is actively the *wrong* prescription for Adam, not merely unnecessary. Mechanism,
+  consistent with stage 3's own finding: Adam's per-step move is already `~learning_rate` in scale
+  regardless of gradient magnitude or batch size (the `m_hat/(sqrt(v_hat)+epsilon)` term stays
+  roughly unit-scaled once `t` is a few steps in), so there's no "fewer, larger raw-gradient steps"
+  problem for the linear scaling rule to compensate for in the first place - scaling `learning_rate`
+  by `batch_size` just makes an already-appropriately-sized step 128x too large.
+
+**Decision:** Adam should be used with a **fixed** `learning_rate` across batch sizes, the opposite
+prescription from SGD/momentum's linear scaling rule - and, at this proxy's scale, that fixed rate
+gives Adam a real, substantial robustness advantage over sigmoid at every batch size tested, most
+dramatically at `batch_size=128` where sigmoid's training destabilizes regardless of which
+learning-rate regime is used. This is the clearest positive result the Adam workplan has produced
+so far, and directly validates the "worth its own measurement" rationale in
+[Adam optimizer](adam-optimizer.md)'s opening motivation: unlike momentum, Adam's per-parameter
+adaptive scaling genuinely does something SGD-with-momentum's single shared velocity term
+couldn't, once gradients come from batches rather than single examples.

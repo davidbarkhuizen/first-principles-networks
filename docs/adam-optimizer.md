@@ -127,13 +127,12 @@ used) - a real added step, not assumed away.
 
 ## risks and open questions
 
-- **beta1/beta2/epsilon as defaults vs. required arguments** - see "hyperparameters" above; not
-  resolved here, deliberately left as a call to make (or revisit) during stage 1.
+- **beta1/beta2/epsilon as defaults vs. required arguments** - resolved during stage 2 (see
+  "hyperparameters" above and delivery stage 2 below): defaulted to Kingma & Ba's published values.
 - **Whether Adam's adaptive per-parameter scaling interacts with `batch_size=128`'s
-  linear-scaling-rule divergence** (see the learning-rate-vs-batch-size writeup) is itself an
-  interesting side question stage 2 could surface, without being this workplan's main goal -
-  worth noting in the writeup either way, not chasing as a separate stage unless it comes up for
-  free.
+  linear-scaling-rule divergence** - resolved during stage 4: yes, and the interaction is that the
+  linear scaling rule actively hurts Adam rather than merely being unneeded - see [research and
+  analysis](research-and-analysis.md#adam-under-batch-size-a-much-bigger-cleaner-win-stage-4-of-the-adam-optimizer-workplan).
 - **RMSprop as a follow-on ablation** - out of scope here (see "scope" above), noted so it isn't
   silently forgotten if Adam's result makes it worth doing.
 
@@ -158,8 +157,15 @@ used) - a real added step, not assumed away.
    0.75-1.14% vs. 1.66% stdev) - a real but modest edge on this small, near-ceiling toy problem,
    not a dramatic win the way ReLU's retuned result was, and not a null the way momentum's own
    retuned sweep was.
-4. The real-MNIST-proxy batch-size sweep, written up (reusing the learning-rate-vs-batch-size
-   sweep's own script skeleton).
+4. ✅ The real-MNIST-proxy batch-size sweep, written up in [research and
+   analysis](research-and-analysis.md#adam-under-batch-size-a-much-bigger-cleaner-win-stage-4-of-the-adam-optimizer-workplan).
+   A materially bigger, cleaner win than stage 3's XOR result: at a **fixed** `learning_rate`, Adam
+   barely degrades across `batch_size` 1-128 (90.50% -> 86.75%) while sigmoid collapses over the
+   same range (89.62% -> 71.50%, variance exploding); at `batch_size=128` Adam beats every sigmoid
+   regime tried with roughly a tenth of the variance. Resolves the flagged open question below:
+   linearly scaling `learning_rate` with `batch_size` (the fix SGD/momentum need) actively destroys
+   Adam instead (collapses to a coin-flip 50.00% at `batch_size=128`) - the opposite prescription
+   from SGD/momentum's own linear scaling rule.
 5. Conditional: real-MNIST-ensemble-scale validation, only if stage 4's result justifies the
    ~30-minute-run cost.
 6. Docs closeout: `structure.md`'s possible-next-steps entry updated to reflect the actual result
