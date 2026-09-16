@@ -32,3 +32,5 @@ retrofit - so it can represent targets (like XOR) the discrete model structurall
   and the momentum re-test they unblocked
 - [convolutional layers](docs/convolutional-layers.md) — a from-scratch conv layer, local
   receptive fields and weight sharing, measured against the dense baseline on UCI digits
+- [Adam optimizer](docs/adam-optimizer.md) — a per-parameter adaptive-learning-rate sibling,
+  proposed and not yet started
