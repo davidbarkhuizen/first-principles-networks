@@ -492,3 +492,34 @@ per-call-overhead advantage that dominates at UCI digits' smaller `dimension=64`
 genuine, positive speedup, with test accuracy within 0.3 points, comparable to each network's own
 seed-to-seed spread. Both figures are honest, measured numbers from real training runs on real
 data, not extrapolated from the synthetic phase 0b benchmark.
+
+## build-flag tuning measured as a null
+
+First candidate tried for closing the naive matmul's remaining `batch_size >= 32` gap (see
+[structure](structure.md#possible-next-steps)): release-profile/codegen tuning, the cheapest
+possible lever since it changes no algorithm - motivated directly by this same document's own
+debug-vs-release discovery, which showed build configuration can matter more than assumed here.
+Two variants measured against the same full mini-batch training-step benchmark phase 0b used
+(`layer_forward_batch` + `layer_output_delta` + `layer_accumulate_gradient_batch` +
+`layer_apply_accumulated_gradient`, `dimension=784, hidden=10`), each run twice to separate a
+real effect from noise:
+
+| variant | batch 1 | batch 8 | batch 32 | batch 128 | batch 512 |
+|---|---|---|---|---|---|
+| baseline (`--release`) | 0.39x, 0.50x | 0.99x, 1.09x | 1.79x, 1.79x | 3.28x, 3.77x | 2.23x, 1.80x |
+| `+ lto=true, codegen-units=1` | 0.43x | 1.08x | 1.76x | 4.14x | 1.93x |
+| `+ RUSTFLAGS="-C target-cpu=native"` (AVX2 available) | 0.37x, 0.52x | 1.14x, 1.06x | 1.55x, 1.63x | 3.88x, 3.70x | 2.15x, 2.09x |
+
+(ratio = Rust wall-clock / numpy wall-clock; lower is better for Rust.) Every variant's numbers
+fall inside the baseline's own run-to-run spread (e.g. batch 128 alone ranges 3.28x-4.14x across
+runs of the *identical* binary) - neither `lto`/`codegen-units` nor `target-cpu=native` produced a
+change distinguishable from noise, at any batch size. **Decision: not adopted** - the
+`Cargo.toml`/`RUSTFLAGS` changes were reverted rather than kept for no measured benefit, the same
+"correctness-validated, not adopted for performance reasons" treatment momentum/L2/Xavier-Glorot
+got. Plausible reason: this crate is small enough (~900 lines) that a normal `--release` build's
+default codegen-unit count already gives LLVM everything it needs to inline across module
+boundaries, so `lto`/`codegen-units=1` had nothing further to unlock; `target-cpu=native`'s lack
+of effect suggests the matmul inner loop (`linalg.rs`, indexed slice access,
+`out_row[col] += a_value * b_row[col]`) isn't auto-vectorizing even with AVX2 available - the next
+candidates (blocking, threading, explicit SIMD intrinsics) target that directly instead of hoping
+the compiler finds it unassisted.

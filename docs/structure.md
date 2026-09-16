@@ -647,8 +647,13 @@ ordered roughly by how directly each follows from an existing finding here, not 
   plan](rust-production-cutover.md) is done through phase 2: `RustArrayMultiClassBackpropClassifierNetwork`
   is built, parity-checked, and measured as a genuine 3.40x (UCI digits)/1.31x (real MNIST) win
   over numpy on this codebase's actual `learn()`-shaped (`batch_size=1`) training paths. What's
-  left is optimizing the crate's still-naive triple-loop matmul (SIMD intrinsics, a blocked/tiled
-  layout, threading), which currently still loses to numpy's BLAS at `batch_size >= 32` - not a
-  problem for either existing production path today, but the thing that would need fixing before
-  a `learn_batch`-shaped mini-batch training path could adopt the Rust core with the same
-  confidence. Not yet started.
+  left is optimizing the crate's still-naive triple-loop matmul, which currently still loses to
+  numpy's BLAS at `batch_size >= 32` - not a problem for either existing production path today,
+  but the thing that would need fixing before a `learn_batch`-shaped mini-batch training path
+  could adopt the Rust core with the same confidence. **Build-flag tuning measured as a null**
+  (2026-09-16, see [research and
+  analysis](research-and-analysis.md#build-flag-tuning-measured-as-a-null)): neither `lto=true`+
+  `codegen-units=1` nor `RUSTFLAGS="-C target-cpu=native"` moved the needle beyond normal
+  run-to-run noise. Still open: a blocked/tiled matmul layout, multithreading (`std::thread::scope`
+  row-splitting), and explicit SIMD intrinsics (AVX2 is available on this machine) - in that
+  order, per the reasoning in [the production cutover plan](rust-production-cutover.md).
