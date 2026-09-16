@@ -253,15 +253,19 @@ accuracy and wall-clock together. Add a third column, not a new pattern:
 
 ## phase 4: the actual cutover
 
-Only `demo_vectorized_uci_digit_recognition.py` and `demo_vectorized_mnist_recognition.py`
-currently instantiate the array-based classes (checked directly - nothing else in `perceptron/`
-does), so "production" concretely means: whichever of those two demos' roles becomes the primary,
-recommended path switches its default network to `RustArrayMultiClassBackpropClassifierNetwork`,
-with the numpy-backed class kept alongside as the explicit, permanent comparison point per the
-user's own requirement - not removed, not deprecated. `structure.md`'s "vectorized array-based
-classes" section gets rewritten once this lands, to describe the Rust class as the primary path
-and numpy as the comparison, replacing this plan document's own role the same way every prior
-built-and-shipped plan in this codebase has been folded into `structure.md`.
+**Done.** Before this phase, only `demo_vectorized_uci_digit_recognition.py` and
+`demo_vectorized_mnist_recognition.py` instantiated the array-based classes (checked directly -
+nothing else in `perceptron/` did), so "production" had to concretely mean something about those
+two demos' role. Resolved via phase 3's own new demos rather than by mutating the old ones:
+`demo_rust_vs_vectorized_uci_digit_recognition.py`/`demo_rust_vs_vectorized_mnist_recognition.py`
+now train/save/interactively-demo `RustArrayMultiClassBackpropClassifierNetwork` as the primary
+network (with both pure-Python and numpy trained alongside for comparison, one column further
+than the demos they extend), which already *is* "the default network is Rust, numpy kept as the
+explicit, permanent comparison" - stage 9's own goal - without needing to also rewrite the
+original two-way demos, which stay exactly as they are (numpy-specific historical record, not
+deprecated, same "kept alongside, never removed" treatment numpy itself gets). `structure.md`'s
+"vectorized array-based classes" section is rewritten to describe the Rust class as the primary
+path and numpy as the comparison - see [structure](structure.md#vectorized-array-based-classes).
 
 ## risks and open questions
 
@@ -301,6 +305,14 @@ built-and-shipped plan in this codebase has been folded into `structure.md`.
    end.
 6. **Done.** Tier-2 statistical parity + accuracy validation (UCI digits first, then real
    MNIST) - see phase 2 above.
-7. The benchmark demo(s) (phase 3).
-8. `structure.md`/`vectorization.md` updated to describe the shipped result.
-9. Retarget the two vectorized demos' primary path to the Rust-backed class.
+7. **Done.** The benchmark demo(s) (phase 3) - real measured results: 3.30x faster at UCI digits,
+   1.39x faster at real MNIST.
+8. **Done.** `structure.md`/`vectorization.md`/`rust-array-core.md`/`README.md` updated to
+   describe the shipped result.
+9. **Done, via phase 3's new demos rather than mutating the old ones** - see phase 4 above.
+
+**All nine delivery stages are done as of 2026-09-16.** `RustArrayMultiClassBackpropClassifierNetwork`
+is this codebase's production array-backed network; `VectorizedMultiClassBackpropClassifierNetwork`
+(numpy) remains permanently as the benchmark comparison. Open follow-on work, not part of this
+plan: closing the naive matmul's remaining gap at `batch_size >= 32` (see
+[structure](structure.md#possible-next-steps)).
