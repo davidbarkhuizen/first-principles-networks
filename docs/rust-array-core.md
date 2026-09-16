@@ -19,8 +19,11 @@ never reproduce numpy's Mersenne Twister bit-for-bit, so its tests check statist
 `perceptron/model/` calls this core yet - see [vectorization](vectorization.md#decision) for why
 it's the intended production array backend, and [structure](structure.md#vectorized-array-based-classes)
 for the numpy-backed classes it would eventually replace as production, not supersede (numpy
-stays on permanently as the benchmarking mirror). Retargeting those classes (or building new ones
-against `perceptron_array.Array` directly) is a separate, not-yet-started step.
+stays on permanently as the benchmarking mirror). [A workplan](rust-production-cutover.md) covers
+this, gated on a measured prerequisite that workplan's own first section covers in detail:
+composing a forward pass from individual `Array` calls the way a naive port would is currently
+65-335x *slower* than numpy at this codebase's real layer sizes, so the cutover needs a
+performance fix in this crate first, not just new Python classes calling it.
 
 ## why not just keep using real NumPy
 

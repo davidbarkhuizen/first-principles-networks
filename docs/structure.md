@@ -628,6 +628,9 @@ ordered roughly by how directly each follows from an existing finding here, not 
   built and parity-tested, but nothing in `perceptron/model/` calls it yet -
   [the vectorized classes](structure.md#vectorized-array-based-classes) still run on `numpy`,
   which is correct (that's their permanent benchmarking-mirror role, not a gap to fix), but no
-  production path exists that uses the Rust core instead - either retargeting those classes or
-  building new ones against `perceptron_array.Array` directly, then a fresh parity/wall-clock
-  comparison against both the numpy-backed and pure-Python baselines. Not yet started.
+  production path exists that uses the Rust core instead. [A workplan](rust-production-cutover.md)
+  exists for this, gated on a measured prerequisite: composing a forward pass from individual
+  `Array` operator calls the way a line-for-line port would is currently 65-335x *slower* than
+  numpy at this codebase's real layer sizes (FFI-crossing count and a cache-hostile matmul loop
+  order, not raw compute), so the Rust core needs a performance fix before "primary in
+  production" is achievable at all, not just a call-site swap. Not yet started.

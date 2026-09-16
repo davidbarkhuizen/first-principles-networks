@@ -19,6 +19,8 @@ retrofit - so it can represent targets (like XOR) the discrete model structurall
 - [vectorization](docs/vectorization.md) — numpy-backed array classes (kept as a permanent
   benchmarking mirror) and a hand-built Rust array core (the intended production backend, not
   yet wired in)
+- [Rust production cutover](docs/rust-production-cutover.md) — workplan for making the Rust core
+  primary in production, gated on a measured performance fix it currently needs first
 - [mini-batch gradient descent](docs/mini-batch-gradient-descent.md) — batched gradient updates,
   and the momentum re-test they unblocked
 - [convolutional layers](docs/convolutional-layers.md) — a from-scratch conv layer, local
