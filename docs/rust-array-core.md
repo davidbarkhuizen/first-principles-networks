@@ -2,6 +2,32 @@
 
 [← back to vectorization](vectorization.md)
 
+## status: built and parity-tested; not yet wired into production
+
+PR 0 through PR 9 of the workplan below are built: `rust/perceptron_array/` (a standalone PyO3
+crate, `pyo3` as the only dependency, ~740 lines across `array.rs`/`ops.rs`/`linalg.rs`/
+`ufuncs.rs`/`random.rs`/`mnist.rs`/`lib.rs`) implements every operation in
+[the numpy interface subset](numpy-interface-subset.md)'s table - `Array` construction/shape/
+`.T`/slicing/`.copy()`/`.reshape()`/`.tolist()`, single-element read/write at both the 1D
+scalar-index and 2D tuple-index shapes, elementwise `+ - * /` with both scoped broadcasting cases
+and scalar operands, `__iadd__`/`__isub__`, `exp`, `__matmul__` (all three shape combinations),
+`outer`, `sum_axis0`, `argmax`, a hand-rolled xorshift128+ `uniform`, and `decode_mnist_pixels` -
+across 10 merged PRs (#174-#183), one per workplan stage, each with its own parity tests before
+merging. 254 tests in `rust/perceptron_array/tests/`, checked against real numpy (and, where a
+pure-Python reference exists independent of numpy itself, against that too - a three-way match)
+at every stage, plus PR 9's own consolidated sweep covering the whole subset in one file. The one
+documented exception is `uniform`: a hand-rolled PRNG can never reproduce numpy's Mersenne
+Twister bit-for-bit, so its own tests check statistical plausibility (range, mean, variance), not
+per-draw equality - see `random.rs`'s own doc comment. All 311 pre-existing pure-Python tests
+still pass unchanged throughout - purely additive, nothing in `perceptron/` touched.
+
+**What isn't done**: per "what stays explicitly out of scope" below, retargeting
+[vectorized array-based model classes](vectorized-array-classes.md)'s own classes from `numpy` to
+this core - the actual production cutover - is a separate, later step this workplan deliberately
+doesn't include. This core exists and is proven correct; nothing yet calls it from
+`perceptron/model/`. The rest of this document is kept as written before any of this was built -
+**only this status section reflects present-tense reality**.
+
 Part 3 of 3 in the [vectorization](vectorization.md) workplan split: a plan for implementing
 [the numpy interface subset](numpy-interface-subset.md)'s exact operation list as a hand-built,
 tightly-scoped array core in Rust, wrapped for Python via PyO3/maturin - this codebase's decided
@@ -330,10 +356,13 @@ gets checked instead.
 
 ## what this document is not
 
-Still an analysis and a workplan, not an implementation and not a migration plan - none of the
-PR-staged plan above has been built yet. What's no longer true: "not a decision to build." Per
-[vectorization](vectorization.md#decision-numpy-stays-permanently-as-a-benchmark-mirror-the-rust-core-becomes-production)'s
-own recorded decision, this core is greenlit as this codebase's production array backend, kept
-alongside (not instead of) [vectorized array-based model classes](vectorized-array-classes.md)'s
-numpy-backed classes, which remain a permanent benchmarking mirror. What's still open is only the
-*how and when* of the build itself - the PR-staged plan above - not whether it happens.
+As of PR #183 (the consolidated parity suite), no longer purely an analysis and a workplan - see
+"status" at the top: the crate exists, every operation in the interface subset is implemented and
+parity-tested. Still not a migration plan - `perceptron/model/`'s existing classes are completely
+untouched, and [vectorized array-based model classes](vectorized-array-classes.md)'s own
+numpy-backed classes remain the permanent benchmarking mirror they were decided to be (see
+[vectorization](vectorization.md#decision-numpy-stays-permanently-as-a-benchmark-mirror-the-rust-core-becomes-production)),
+not superseded by this core's existence. What's still open: the actual production cutover -
+retargeting those classes (or building new ones) to call this core instead of `numpy` - which
+this document's own "what stays explicitly out of scope" section deliberately left for a separate
+follow-on, not something building the core did automatically.

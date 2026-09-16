@@ -533,6 +533,15 @@ priority.
   conv, 8 seeds each): mean test accuracy came out statistically indistinguishable (96.69%
   dense vs. 96.52% conv) - a clean null, not a win, honestly reported. See
   `research-and-analysis.md`'s "convolutional layers on UCI digits" entry.
+- ~~The Rust array core~~ - built per [the Rust implementation plan](rust-array-core.md)'s own
+  PR-staged workplan (PR 0 through PR 9, 10 merged PRs, #174-#183): `rust/perceptron_array/`, a
+  standalone PyO3 crate implementing every operation in
+  [the numpy interface subset](numpy-interface-subset.md)'s table, parity-tested against real
+  numpy (and a pure-Python reference, where one exists independent of numpy) across 254 tests.
+  Per [vectorization](vectorization.md#decision-numpy-stays-permanently-as-a-benchmark-mirror-the-rust-core-becomes-production)'s
+  own decision this is the intended production array backend, but nothing in `perceptron/model/`
+  calls it yet - see that document's own "status" for exactly what's built vs. what's still a
+  separate, later step.
 
 **Still open:**
 
@@ -557,16 +566,12 @@ priority.
   first deciding how a fresh checkout gets that data (a public mirror to fetch from? a repo
   secret + private download step? committing a small stratified subset instead of the full
   dataset?) means shipping CI that quietly can't protect part of the suite, not a real fix.
-- **The Rust array core's own build** - would meaningfully speed up production training (the
-  ~30-minute MNIST ensemble runs are pure-Python-bound), and is no longer an open values question:
-  [vectorization](vectorization.md#decision-numpy-stays-permanently-as-a-benchmark-mirror-the-rust-core-becomes-production)
-  records the decision that `numpy` is kept permanently but scoped to a performance-benchmarking
-  role, while [the Rust implementation plan](rust-array-core.md) - a hand-built, tightly-scoped
-  array core in Rust, wrapped for Python via PyO3, implementing
-  [the numpy interface subset](numpy-interface-subset.md)'s exact contract - is greenlit as this
-  codebase's production array backend. [Vectorized array-based model classes](vectorized-array-classes.md)
-  (`perceptron/model/array_layer.py`, `vectorized_multiclass_backprop_classifier_network.py` - see
-  that document's own "measured results") is the numpy-backed half of that decision, already built
-  and kept indefinitely as the benchmark mirror. What's still open, and still real work: the Rust
-  core itself hasn't been built yet - see that document's own PR-staged workplan for what building
-  it actually looks like.
+- **Retargeting production code to the Rust array core.** The core itself is built and
+  parity-tested (see the "built" entry above), but nothing in `perceptron/model/` calls it yet -
+  [vectorized array-based model classes](vectorized-array-classes.md)'s classes still run on
+  `numpy`, which is correct (that's their now-permanent benchmarking-mirror role, not a gap to
+  fix), but no production path exists that uses the Rust core instead. [the Rust implementation
+  plan](rust-array-core.md)'s own "what stays explicitly out of scope" deliberately left this
+  cutover as a separate, later step from building the core - either retargeting those classes or
+  building new ones against `perceptron_array.Array` directly, then a fresh parity/wall-clock
+  comparison against both the numpy-backed and pure-Python baselines. Not yet started.
