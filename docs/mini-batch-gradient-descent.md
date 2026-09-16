@@ -32,7 +32,7 @@ replace the base formula rather than adjusting its result.
 `_apply_accumulated_gradients(learning_rate, batch_size)` (one pass calling
 `apply_accumulated_gradient`, run once per batch). Each classifier network gained
 `learn_batch(learning_rate, batch)`: `for example in batch: forward, backward, accumulate` then
-one `_apply_accumulated_gradients` call. `perceptron/train.py`'s existing
+one `_apply_accumulated_gradients` call. `indrajala_ml/train.py`'s existing
 `train_linear_classifier_network` (shared with `LinearClassifierNetwork`, which has no batch
 concept at all) was **not** retrofitted in place - `train_backprop_network_mini_batch` is its own
 function for gradient-based students, with its own batch-construction chunking (a final

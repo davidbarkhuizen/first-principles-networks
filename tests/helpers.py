@@ -4,8 +4,8 @@ from typing import Callable
 import numpy as np
 import pytest
 
-from perceptron.model.linear_classifier_network import LinearClassifierNetwork
-from perceptron.model.multiclass_backprop_classifier_network import MultiClassBackpropClassifierNetwork
+from indrajala_ml.model.linear_classifier_network import LinearClassifierNetwork
+from indrajala_ml.model.multiclass_backprop_classifier_network import MultiClassBackpropClassifierNetwork
 
 
 def assert_save_and_load_round_trip(network, load_fn, tmp_path, filename: str, states):

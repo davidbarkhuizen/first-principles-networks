@@ -1,6 +1,6 @@
 import pytest
 
-from perceptron.mnist_capture import (
+from indrajala_ml.mnist_capture import (
     CANVAS_SIZE,
     CAPTURE_BRUSH_RADIUS,
     CAPTURE_GRID_SIZE,

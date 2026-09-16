@@ -3,11 +3,11 @@ import random
 import numpy as np
 import pytest
 
-from perceptron.model.array_layer import ArrayLayer, sigmoid
-from perceptron.model.backprop_layer import BackpropLayer
-from perceptron.model.backprop_node import BackpropNode
-from perceptron.model.backprop_node import sigmoid as node_sigmoid
-from perceptron.model.state_layer import StateLayer
+from indrajala_ml.model.array_layer import ArrayLayer, sigmoid
+from indrajala_ml.model.backprop_layer import BackpropLayer
+from indrajala_ml.model.backprop_node import BackpropNode
+from indrajala_ml.model.backprop_node import sigmoid as node_sigmoid
+from indrajala_ml.model.state_layer import StateLayer
 
 
 def test_sigmoid_matches_node_sigmoid_across_a_random_sweep_including_the_overflow_boundary():

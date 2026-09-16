@@ -1,8 +1,8 @@
 import pytest
 
-from perceptron.model.backprop_node import BackpropNode
-from perceptron.model.relu_layer import ReLULayer
-from perceptron.model.state_layer import StateLayer
+from indrajala_ml.model.backprop_node import BackpropNode
+from indrajala_ml.model.relu_layer import ReLULayer
+from indrajala_ml.model.state_layer import StateLayer
 
 
 def _relu_node(weight: float, bias: float, x: float):

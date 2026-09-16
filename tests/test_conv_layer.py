@@ -2,8 +2,8 @@ import random
 
 import pytest
 
-from perceptron.model.conv_layer import ConvLayer
-from perceptron.model.state_layer import StateLayer
+from indrajala_ml.model.conv_layer import ConvLayer
+from indrajala_ml.model.state_layer import StateLayer
 
 
 def _layer_with_state(

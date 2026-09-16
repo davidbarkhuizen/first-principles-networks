@@ -3,9 +3,9 @@
 [← back to README](../README.md)
 
 All demos run through a single entrypoint, `. cli demo`, which launches
-`perceptron/demos/menu.py` - a small text-based REPL rather than a separate CLI command per
+`indrajala_ml/demos/menu.py` - a small text-based REPL rather than a separate CLI command per
 demo. It prints a numbered table of every demo (name + one-line summary, sourced from
-`perceptron/demos/registry.py`), prompts for a number, then prints that demo's longer
+`indrajala_ml/demos/registry.py`), prompts for a number, then prints that demo's longer
 description before importing its module and calling its `main()`. Once the demo finishes (its
 windows are closed, or it was headless/console-only to begin with), the menu loops back to the
 table so you can run another one or type `q` to quit - so a session can run several demos back
@@ -23,7 +23,7 @@ specific one, or driving it non-interactively) without having to answer a prompt
 
 Select **Minimum-disturbance training** from the menu it prints.
 
-Runs `perceptron/demos/demo_minimum_disturbance_training.py`, which replicates `test_training_of_linear_classifier` outside
+Runs `indrajala_ml/demos/demo_minimum_disturbance_training.py`, which replicates `test_training_of_linear_classifier` outside
 of pytest: trains a classifier against a random reference classifier and pops up three
 windows — the convergence curve on a linear scale, the same curve on a log scale (better for
 seeing how fast it converges, since disagreement tends to drop roughly exponentially — see
@@ -51,7 +51,7 @@ so the whole bounded region stays visible instead of being cropped at the traini
 
 Select **Linear-classifier cardinality sweep** from the menu it prints.
 
-Runs `perceptron/demos/demo_linear_classifier_cardinality_sweep.py`, which trains independent reference/student
+Runs `indrajala_ml/demos/demo_linear_classifier_cardinality_sweep.py`, which trains independent reference/student
 pairs at `cardinality = 1, 2, 3, 4` and overlays their disagreement-rate convergence curves
 on two charts, each built from the series smoothed with a trailing moving average (to see
 the trend through the sampling noise from `class_balanced_disagreement_rate`'s small
@@ -71,7 +71,7 @@ reference (up to 20 times) rather than failing the whole sweep on one unlucky dr
 
 Select **Unreachable-class safety guard** from the menu it prints.
 
-Runs `perceptron/demos/demo_unreachable_class_safety_guard.py`, a headless, console-only demo of
+Runs `indrajala_ml/demos/demo_unreachable_class_safety_guard.py`, a headless, console-only demo of
 `random_alternating_training_data`'s safety guard: it first generates training data from a
 normal, randomly initialised classifier (retrying if an unlucky `randomize()` happens to make
 one class unreachable within the bounds — this alone can occasionally happen), then
@@ -85,7 +85,7 @@ caught instead of hanging forever.
 
 Select **XOR: linear-classifier ceiling** from the menu it prints.
 
-Runs `perceptron/demos/demo_xor_linear_classifier_ceiling.py`. Every other demo's target is a
+Runs `indrajala_ml/demos/demo_xor_linear_classifier_ceiling.py`. Every other demo's target is a
 `LinearClassifierNetwork` of the same architecture the student trains with, so it's always
 representable by construction; this one deliberately isn't. It trains students at
 `cardinality = 1..4`, swept across AND, OR, and (where distinct) majority `required_active`
@@ -111,7 +111,7 @@ mismatch visually.
 
 Select **XOR: backprop convergence** from the menu it prints.
 
-Runs `perceptron/demos/demo_xor_backprop_convergence.py` - the direct counterpart to the demo above, using
+Runs `indrajala_ml/demos/demo_xor_backprop_convergence.py` - the direct counterpart to the demo above, using
 the exact same `XORTarget` (imported from `demo_xor_linear_classifier_ceiling.py`, not reimplemented)
 and the exact same `random_alternating_training_data`/`train_linear_classifier_network` calls,
 but training a `BackpropClassifierNetwork` (see [structure](structure.md#backprop)) instead of a
@@ -129,7 +129,7 @@ region isn't a union of half-planes a line can represent.
 
 Select **Backprop stripes architecture sweep** from the menu it prints.
 
-Runs `perceptron/demos/demo_backprop_stripes_architecture_sweep.py`, which mirrors
+Runs `indrajala_ml/demos/demo_backprop_stripes_architecture_sweep.py`, which mirrors
 `demo_linear_classifier_cardinality_sweep.py`'s pattern (train several configurations against the same target,
 overlay smoothed convergence curves) but compares `BackpropClassifierNetwork` architectures -
 `[4]`, `[8]`, `[4, 4]`, `[8, 8]` - instead of `LinearClassifierNetwork` cardinalities. `[8]` and
@@ -148,7 +148,7 @@ or width is definitively better.
 
 Select **Backprop circular boundary** from the menu it prints.
 
-Runs `perceptron/demos/demo_backprop_circular_boundary.py`. Every other demo's target boundary,
+Runs `indrajala_ml/demos/demo_backprop_circular_boundary.py`. Every other demo's target boundary,
 representable or not, is built from straight edges - `LinearClassifierNetwork`'s positive
 region is always a polygon (an intersection of half-planes, see
 `geometry.reference_positive_region_polygon`), so it can only ever facet a curve with more and
@@ -163,7 +163,7 @@ data, visibly showing a smooth, rounded decision boundary rather than a faceted 
 
 Select **Backprop vs linear parity check** from the menu it prints.
 
-Runs `perceptron/demos/demo_backprop_linear_parity_check.py`. Every other backprop demo picks a target no
+Runs `indrajala_ml/demos/demo_backprop_linear_parity_check.py`. Every other backprop demo picks a target no
 `LinearClassifierNetwork` can represent well (XOR, stripes, a circle); this one is the opposite
 check - a single half-plane (`cardinality=1`), the easiest possible target and squarely within
 `LinearClassifierNetwork`'s own representational sweet spot. Trains a `LinearClassifierNetwork`
@@ -179,7 +179,7 @@ the harder targets the other backprop demos focus on.
 
 Select **UCI digit recognition** from the menu it prints.
 
-Runs `perceptron/demos/demo_uci_digit_recognition.py` - classic-style handwritten digit recognition,
+Runs `indrajala_ml/demos/demo_uci_digit_recognition.py` - classic-style handwritten digit recognition,
 using `MultiClassBackpropClassifierNetwork` (see [structure](structure.md#multi-class)) instead
 of any 2D geometric target. Loads the bundled UCI ML hand-written digits dataset
 (`data/digits/digits.csv` via `digits_data.load_digits_dataset`, 8x8 pixel images, 10 classes,
@@ -198,7 +198,7 @@ retraining. Plots a training-accuracy-by-epoch curve, a confusion matrix
 
 Select **Vectorized UCI digit recognition (numpy)** from the menu it prints.
 
-Runs `perceptron/demos/demo_vectorized_uci_digit_recognition.py` - trains
+Runs `indrajala_ml/demos/demo_vectorized_uci_digit_recognition.py` - trains
 `MultiClassBackpropClassifierNetwork` and its numpy-array-backed sibling
 `VectorizedMultiClassBackpropClassifierNetwork` (see
 [structure](structure.md#vectorized-array-based-classes)) on the same UCI digits split, same seed
@@ -215,7 +215,7 @@ confusion matrix, and sample test predictions for the vectorized network.
 
 Select **Rust vs vectorized UCI digit recognition** from the menu it prints.
 
-Runs `perceptron/demos/demo_rust_vs_vectorized_uci_digit_recognition.py` - the demo above's own
+Runs `indrajala_ml/demos/demo_rust_vs_vectorized_uci_digit_recognition.py` - the demo above's own
 scenario extended with a third network: `RustArrayMultiClassBackpropClassifierNetwork` (see
 [the production cutover plan](rust-production-cutover.md)), the Rust-array-core-backed sibling
 that replaces numpy as the production backend (numpy stays on permanently as the benchmark
@@ -240,7 +240,7 @@ for the Rust network.
 
 Select **UCI digit capture** from the menu it prints.
 
-Runs `perceptron/demos/demo_uci_digit_capture.py` - an interactive companion to the digit-recognition
+Runs `indrajala_ml/demos/demo_uci_digit_capture.py` - an interactive companion to the digit-recognition
 demo above. Loads the model that demo trains and saves (`data/digits/trained_model.json` via
 `MultiClassBackpropClassifierNetwork.load`; run `. cli demo` and choose **UCI digit recognition** first if that file
 doesn't exist yet), then opens two canvases: a 32x32 grid you paint with the mouse (click or
@@ -269,7 +269,7 @@ coordinate-mapping/downsampling/brush logic behind it, not the tkinter UI itself
 
 Select **MNIST ensemble recognition** from the menu it prints.
 
-Runs `perceptron/demos/demo_mnist_ensemble_recognition.py` - the same shape as the digit-recognition demo
+Runs `indrajala_ml/demos/demo_mnist_ensemble_recognition.py` - the same shape as the digit-recognition demo
 above, but on the real, full-scale MNIST dataset (28x28 pixel images, 60000 train / 10000 test)
 instead of the small bundled UCI set, and using `EnsembleBackpropClassifierNetwork` (see
 [structure](structure.md#multi-class)) instead of `MultiClassBackpropClassifierNetwork`: 10
@@ -300,7 +300,7 @@ and a grid of sample test predictions.
 
 Select **Vectorized MNIST recognition (numpy)** from the menu it prints.
 
-Runs `perceptron/demos/demo_vectorized_mnist_recognition.py` - headless, console-only. Trains
+Runs `indrajala_ml/demos/demo_vectorized_mnist_recognition.py` - headless, console-only. Trains
 `MultiClassBackpropClassifierNetwork` and `VectorizedMultiClassBackpropClassifierNetwork` for one
 real epoch each over the full 60000-example MNIST training set (`[30]`-node hidden layer, the
 same architecture [research and analysis](research-and-analysis.md#parallelizing-mnist-training)'s
@@ -317,7 +317,7 @@ run, mostly the pure-Python epoch.
 
 Select **Rust vs vectorized MNIST recognition** from the menu it prints.
 
-Runs `perceptron/demos/demo_rust_vs_vectorized_mnist_recognition.py` - headless, console-only.
+Runs `indrajala_ml/demos/demo_rust_vs_vectorized_mnist_recognition.py` - headless, console-only.
 The demo above's own scenario extended with a third network:
 `RustArrayMultiClassBackpropClassifierNetwork` (see [the production cutover
 plan](rust-production-cutover.md)), the Rust-array-core-backed sibling that replaces numpy as the
@@ -340,7 +340,7 @@ entry's own measurement, not re-captured here in full per-network detail. Takes 
 
 Select **MNIST ensemble capture** from the menu it prints.
 
-Runs `perceptron/demos/demo_mnist_ensemble_capture.py` - an interactive companion to the MNIST-recognition
+Runs `indrajala_ml/demos/demo_mnist_ensemble_capture.py` - an interactive companion to the MNIST-recognition
 demo above, the same overall interaction as `demo_uci_digit_capture.py` but against MNIST's own
 reference preprocessing instead of the UCI dataset's block-counting downsample. Loads the model
 the recognition demo trains and saves (`data/mnist/trained_model.json` via
@@ -378,7 +378,7 @@ crop/scale/center-of-mass/brush logic behind it, not the tkinter UI itself).
 
 Select **Backprop variant comparison** from the menu it prints.
 
-Runs `perceptron/demos/demo_backprop_variant_comparison.py`, which reproduces three A/B
+Runs `indrajala_ml/demos/demo_backprop_variant_comparison.py`, which reproduces three A/B
 comparisons [research and analysis](research-and-analysis.md) documents from one-off,
 never-saved investigation scripts - as a permanent, re-runnable demo instead of numbers you can
 only read about. Trains all seven variants fresh (no new library code beyond the demo itself -

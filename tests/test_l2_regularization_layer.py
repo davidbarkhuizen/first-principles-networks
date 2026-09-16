@@ -1,9 +1,9 @@
 import pytest
 
-from perceptron.model.backprop_node import BackpropNode
-from perceptron.model.l2_regularization_layer import make_l2_layer_cls, make_l2_node_cls
-from perceptron.model.state_layer import StateLayer
-from perceptron.model.state_node import StateNode
+from indrajala_ml.model.backprop_node import BackpropNode
+from indrajala_ml.model.l2_regularization_layer import make_l2_layer_cls, make_l2_node_cls
+from indrajala_ml.model.state_layer import StateLayer
+from indrajala_ml.model.state_node import StateNode
 
 
 def _l2_node(l2_lambda: float, weight: float, bias: float):

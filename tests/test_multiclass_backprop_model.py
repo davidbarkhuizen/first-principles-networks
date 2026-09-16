@@ -1,8 +1,8 @@
 import pytest
 
 from helpers import assert_randomize_breaks_symmetry, assert_save_and_load_round_trip, assert_snapshot_restore_round_trip
-from perceptron.geometry import square_bounds
-from perceptron.model.multiclass_backprop_classifier_network import MultiClassBackpropClassifierNetwork
+from indrajala_ml.geometry import square_bounds
+from indrajala_ml.model.multiclass_backprop_classifier_network import MultiClassBackpropClassifierNetwork
 
 
 def _fixed_network() -> MultiClassBackpropClassifierNetwork:

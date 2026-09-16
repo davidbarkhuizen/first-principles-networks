@@ -3,7 +3,7 @@
 [← back to README](../README.md)
 
 ```
-perceptron/
+indrajala_ml/
   model/
     base_node.py                    AbstractNode — value() interface; WeightedInputNode — the
                                      weighted-sum/z() machinery AssociationNode and BackpropNode
@@ -452,7 +452,7 @@ sigmoid + quadratic loss - the canonical treatment for a mutually-exclusive mult
 like digit classification (see `docs/research-and-analysis.md`'s "softmax/cross-entropy
 re-alignment" entry for the full derivation and measured comparison). Structurally it's a single
 class-attribute override (`output_layer_cls = SoftmaxOutputLayer`, see
-`perceptron/model/softmax_output_layer.py`) - softmax's cross-node coupling only touches the
+`indrajala_ml/model/softmax_output_layer.py`) - softmax's cross-node coupling only touches the
 forward pass (each node's activation needs every sibling's pre-activation `z`), so
 `BackpropNetworkBase`'s existing backward-pass plumbing needed no changes at all; the
 softmax+cross-entropy output delta (`activation - target`) is exactly as per-node-independent
@@ -595,12 +595,12 @@ numbers and parity methodology.
 
 `numpy` is kept permanently here, scoped specifically to this role: a performance-benchmarking
 mirror any array backend's speed claim gets measured against, not this codebase's production
-array backend. [A hand-built Rust core](rust-array-core.md) (`rust/perceptron_array/`, wrapped
+array backend. [A hand-built Rust core](rust-array-core.md) (`rust/indrajala_ml_array/`, wrapped
 via PyO3) implements the same operation subset ([the numpy interface
 subset](numpy-interface-subset.md)) this class needs, is parity-tested against real numpy across
 525 tests, and backs `RustArrayLayer`/`RustArrayMultiClassBackpropClassifierNetwork`
-(`perceptron/model/rust_array_layer.py`,
-`perceptron/model/rust_array_multiclass_backprop_classifier_network.py`) - the actual production
+(`indrajala_ml/model/rust_array_layer.py`,
+`indrajala_ml/model/rust_array_multiclass_backprop_classifier_network.py`) - the actual production
 path, per [the production cutover plan](rust-production-cutover.md)'s now-completed phases 0-2:
 a mechanical loop-reorder and fused-per-layer-call fix to the Rust core itself, then a class
 mirroring `VectorizedMultiClassBackpropClassifierNetwork`'s exact external contract, tier-1

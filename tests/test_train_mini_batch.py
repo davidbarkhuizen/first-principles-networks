@@ -2,10 +2,10 @@ import random
 
 import pytest
 
-from perceptron.geometry import square_bounds
-from perceptron.model.backprop_classifier_network import BackpropClassifierNetwork
-from perceptron.model.multiclass_backprop_classifier_network import MultiClassBackpropClassifierNetwork
-from perceptron.train import (
+from indrajala_ml.geometry import square_bounds
+from indrajala_ml.model.backprop_classifier_network import BackpropClassifierNetwork
+from indrajala_ml.model.multiclass_backprop_classifier_network import MultiClassBackpropClassifierNetwork
+from indrajala_ml.train import (
     _chunk_into_batches,
     reachable_reference_and_training_data,
     train_backprop_network_mini_batch,

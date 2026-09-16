@@ -1,13 +1,13 @@
 import random
 
-from perceptron.geometry import square_bounds
-from perceptron.model.backprop_classifier_network import BackpropClassifierNetwork
-from perceptron.train import random_alternating_training_data, train_linear_classifier_network
+from indrajala_ml.geometry import square_bounds
+from indrajala_ml.model.backprop_classifier_network import BackpropClassifierNetwork
+from indrajala_ml.train import random_alternating_training_data, train_linear_classifier_network
 
 
 class XORTarget:
     # same target as demo_xor_linear_classifier_ceiling.py's XORTarget (not imported from there to
-    # avoid a tests/ -> perceptron/demos/ dependency) - no LinearClassifierNetwork gate can
+    # avoid a tests/ -> indrajala_ml/demos/ dependency) - no LinearClassifierNetwork gate can
     # represent this (see test_train.py's
     # test_train_linear_classifier_network_keeps_the_best_epoch_not_the_last, capped around
     # 0.845 training accuracy at cardinality=3). This is the automated counterpart to that

@@ -3,7 +3,7 @@ import random
 import numpy as np
 import pytest
 
-from perceptron.model.vectorized_multiclass_backprop_classifier_network import (
+from indrajala_ml.model.vectorized_multiclass_backprop_classifier_network import (
     VectorizedMultiClassBackpropClassifierNetwork,
 )
 from tests.helpers import (

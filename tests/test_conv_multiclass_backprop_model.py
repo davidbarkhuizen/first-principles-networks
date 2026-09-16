@@ -3,14 +3,14 @@ import random
 import pytest
 
 from helpers import assert_save_and_load_round_trip, assert_snapshot_restore_round_trip
-from perceptron.digits_data import load_digits_dataset, split_train_test
-from perceptron.model.backprop_layer import BackpropLayer
-from perceptron.model.conv_layer import ConvLayer
-from perceptron.model.conv_multiclass_backprop_classifier_network import (
+from indrajala_ml.digits_data import load_digits_dataset, split_train_test
+from indrajala_ml.model.backprop_layer import BackpropLayer
+from indrajala_ml.model.conv_layer import ConvLayer
+from indrajala_ml.model.conv_multiclass_backprop_classifier_network import (
     ConvMultiClassBackpropClassifierNetwork,
 )
-from perceptron.multiclass_evaluate import accuracy
-from perceptron.train import train_linear_classifier_network
+from indrajala_ml.multiclass_evaluate import accuracy
+from indrajala_ml.train import train_linear_classifier_network
 
 
 def _small_network() -> ConvMultiClassBackpropClassifierNetwork:

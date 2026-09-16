@@ -1,9 +1,9 @@
 import pytest
 
-from perceptron.geometry import square_bounds
-from perceptron.model.backprop_classifier_network import BackpropClassifierNetwork
-from perceptron.model.momentum_backprop_classifier_network import MomentumBackpropClassifierNetwork
-from perceptron.model.multiclass_backprop_classifier_network import MultiClassBackpropClassifierNetwork
+from indrajala_ml.geometry import square_bounds
+from indrajala_ml.model.backprop_classifier_network import BackpropClassifierNetwork
+from indrajala_ml.model.momentum_backprop_classifier_network import MomentumBackpropClassifierNetwork
+from indrajala_ml.model.multiclass_backprop_classifier_network import MultiClassBackpropClassifierNetwork
 
 
 def test_learn_batch_of_one_matches_learn_exactly_for_backprop_classifier_network():

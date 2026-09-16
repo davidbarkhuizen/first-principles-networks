@@ -1,7 +1,7 @@
 import pytest
 
-from perceptron.model.softmax_output_layer import SoftmaxOutputLayer
-from perceptron.model.state_layer import StateLayer
+from indrajala_ml.model.softmax_output_layer import SoftmaxOutputLayer
+from indrajala_ml.model.state_layer import StateLayer
 
 
 def _fixed_layer() -> tuple[StateLayer, SoftmaxOutputLayer]:

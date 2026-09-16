@@ -1,0 +1,94 @@
+from random import uniform
+
+from indrajala_ml.geometry import positive_region_bounding_box
+from indrajala_ml.model.linear_classifier_network import LinearClassifierNetwork
+
+
+def sample_class_balanced_states(
+    classifier: LinearClassifierNetwork, count: int, max_attempts: int = 20_000
+) -> tuple[list[tuple[float, ...]], list[tuple[float, ...]]]:
+    """
+    Returns (positive_states, negative_states), each exactly count states classifier
+    classifies as that class.
+
+    Positive states are drawn from a tight box around classifier's own positive region when
+    one is computable (see geometry.positive_region_bounding_box), rather than
+    classifier.input_bounds - the positive region can be a tiny fraction of input_bounds
+    (verified: often under 1% of the box's area at cardinality 4, as low as 0.02%), making
+    naive uniform rejection sampling over the whole box prohibitively inefficient or outright
+    unreachable within max_attempts. Falls back to input_bounds when no tight box is
+    computable (dimension != 2, a non-AND combination, or the region isn't bounded) - exactly
+    reproducing the previous, unoptimised behaviour for those cases.
+
+    Negative states are always drawn from input_bounds - not currently a bottleneck, since a
+    small positive region implies a large complementary negative one.
+    """
+
+    positive_bounds = positive_region_bounding_box(classifier) or classifier.input_bounds
+
+    def sample(category: float, bounds: list[tuple[float, float]]) -> list[tuple[float, ...]]:
+        collected: list[tuple[float, ...]] = []
+        attempts = 0
+        while len(collected) < count:
+            if attempts >= max_attempts:
+                raise RuntimeError(
+                    f"failed to sample {count} examples of class {category} within "
+                    f"{max_attempts} attempts - the classifier's decision boundary likely "
+                    "doesn't cross its input bounds, making this class unreachable"
+                )
+            attempts += 1
+            state = tuple(uniform(*bound) for bound in bounds)
+            if classifier.classify_state(state) == category:
+                collected.append(state)
+        return collected
+
+    return sample(1.0, positive_bounds), sample(0.0, classifier.input_bounds)
+
+
+def compare_on_random_point(
+    reference: LinearClassifierNetwork, student: LinearClassifierNetwork
+) -> tuple[tuple[float, ...], float, float]:
+
+    state = tuple(uniform(*bounds) for bounds in reference.input_bounds)
+    return state, reference.classify_state(state), student.classify_state(state)
+
+
+def agreement_label(reference_category: float, student_category: float) -> str:
+    """
+    Shared by every demo that reports compare_on_random_point's result - "agree" or "disagree",
+    one place for the wording and the equality check to live instead of a ternary copy-pasted
+    at each call site.
+    """
+    return "agree" if reference_category == student_category else "disagree"
+
+
+def smoothed_series(values: list[float], window: int = 31) -> list[float]:
+
+    # trailing moving average - only ever looks backward, so it stays a fair comparison
+    # against the raw series at every point (no look-ahead)
+    smoothed = []
+    for i in range(len(values)):
+        segment = values[max(0, i - window + 1) : i + 1]
+        smoothed.append(sum(segment) / len(segment))
+    return smoothed
+
+
+def class_balanced_disagreement_rate(
+    reference: LinearClassifierNetwork,
+    student: LinearClassifierNetwork,
+    per_class_sample_count: int = 10,
+    max_attempts: int = 20_000,
+) -> float:
+
+    assert per_class_sample_count >= 1, f"per_class_sample_count must be at least 1; got {per_class_sample_count}"
+
+    # sampling uniformly over the bounding box would weight disagreement by each class's
+    # share of the box's area, which shrinks sharply for the positive class as cardinality
+    # grows - sample an equal number of each class instead, so convergence means the same
+    # thing regardless of cardinality
+    positive_states, negative_states = sample_class_balanced_states(reference, per_class_sample_count, max_attempts)
+
+    positive_disagreements = sum(1 for state in positive_states if student.classify_state(state) != 1.0)
+    negative_disagreements = sum(1 for state in negative_states if student.classify_state(state) != 0.0)
+
+    return (positive_disagreements + negative_disagreements) / (2 * per_class_sample_count)

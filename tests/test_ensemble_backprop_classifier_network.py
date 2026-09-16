@@ -1,8 +1,8 @@
 import pytest
 
 from helpers import assert_save_and_load_round_trip, assert_snapshot_restore_round_trip
-from perceptron.model.backprop_classifier_network import BackpropClassifierNetwork
-from perceptron.model.ensemble_backprop_classifier_network import EnsembleBackpropClassifierNetwork
+from indrajala_ml.model.backprop_classifier_network import BackpropClassifierNetwork
+from indrajala_ml.model.ensemble_backprop_classifier_network import EnsembleBackpropClassifierNetwork
 
 
 def _fixed_classifier(output_weight: float, output_bias: float) -> BackpropClassifierNetwork:

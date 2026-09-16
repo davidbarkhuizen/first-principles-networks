@@ -1,12 +1,12 @@
 import pytest
 
-from perceptron.geometry import (
+from indrajala_ml.geometry import (
     is_positive_region_bounded,
     positive_region_bounding_box,
     reference_positive_region_polygon,
     square_bounds,
 )
-from perceptron.model.linear_classifier_network import LinearClassifierNetwork
+from indrajala_ml.model.linear_classifier_network import LinearClassifierNetwork
 
 from helpers import classifier_with_bounded_square_region
 

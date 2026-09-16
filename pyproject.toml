@@ -3,7 +3,7 @@ requires = ["setuptools>=68"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "perceptron"
+name = "indrajala-ml"
 version = "0.1.0"
 description = "A from-scratch, hand-derived implementation of Rosenblatt's perceptron/MADALINE and backprop classifier networks."
 readme = "README.md"
@@ -16,5 +16,5 @@ dependencies = [
 ]
 
 [tool.setuptools.packages.find]
-include = ["perceptron*"]
+include = ["indrajala_ml*"]
 namespaces = true

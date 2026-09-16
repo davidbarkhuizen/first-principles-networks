@@ -1,6 +1,6 @@
 import pytest
 
-from perceptron.digit_capture import (
+from indrajala_ml.digit_capture import (
     BLOCK_SIZE,
     CAPTURE_BRUSH_RADIUS,
     CAPTURE_GRID_SIZE,

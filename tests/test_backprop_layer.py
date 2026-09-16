@@ -1,9 +1,9 @@
 import pytest
 
-from perceptron.geometry import square_bounds
-from perceptron.model.backprop_classifier_network import BackpropClassifierNetwork
-from perceptron.model.backprop_layer import BackpropLayer
-from perceptron.model.state_layer import StateLayer
+from indrajala_ml.geometry import square_bounds
+from indrajala_ml.model.backprop_classifier_network import BackpropClassifierNetwork
+from indrajala_ml.model.backprop_layer import BackpropLayer
+from indrajala_ml.model.state_layer import StateLayer
 
 
 def _layer(size: int, dimension: int, state: tuple[float, ...]) -> BackpropLayer:

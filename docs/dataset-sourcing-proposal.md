@@ -22,7 +22,7 @@ Exactly two exist in this codebase today (checked directly, not assumed):
 
 | dataset | current state | size | blocking anything? |
 |---|---|---|---|
-| **UCI digits** (`data/digits/digits.csv`) | committed directly to `perceptron`, works today | 260 KB | No - included here for consistency, not urgency |
+| **UCI digits** (`data/digits/digits.csv`) | committed directly to `indrajala-ml`, works today | 260 KB | No - included here for consistency, not urgency |
 | **Real MNIST** (`data/mnist/mnist-train.parquet`, `mnist-test.parquet`) | gitignored, supplied locally by hand | ~18 MB total | Yes - the actual CI blocker |
 
 UCI digits' provenance (per [structure](structure.md#multi-class)): a one-time, offline extraction
@@ -36,8 +36,8 @@ input).
 
 Per the structural decision already made: repos under `github.com/davidbarkhuizen/`, not a new
 org - `indrajala-datasets-mnist`, `indrajala-datasets-uci-digits`. Each repo stores its dataset in
-the canonical format the consuming project (`perceptron`) already reads, not a re-derived format -
-the dataset repo is a documented *source*, not a preprocessed cache. This keeps `perceptron`'s own
+the canonical format the consuming project (`indrajala-ml`) already reads, not a re-derived format -
+the dataset repo is a documented *source*, not a preprocessed cache. This keeps `indrajala-ml`'s own
 loader code (`mnist_data.py`, `digits_data.py`) unchanged: they still read Parquet/CSV, just from a
 fetched path instead of a manually-supplied one.
 
@@ -57,7 +57,7 @@ indrajala-datasets-mnist/
 
 `indrajala-datasets-uci-digits` mirrors this exactly, with `data/digits.csv` +
 `data/digits.csv.metadata.json` and no train/test split (UCI digits is one file,
-`perceptron/digits_data.py`'s own `split_train_test` does the split at load time, not the source
+`indrajala_ml/digits_data.py`'s own `split_train_test` does the split at load time, not the source
 data).
 
 ### repo-level `metadata.json`
@@ -96,7 +96,7 @@ documented in this codebase and doesn't need re-verifying.
   "schema": {
     "columns": ["image (28x28 uint8)", "label (uint8, 0-9)"]
   },
-  "notes": "Well-known real-MNIST first-5 training labels: 5,0,4,1,9 - a useful load-order sanity check, already relied on by perceptron's own test suite (tests/test_mnist_data.py)."
+  "notes": "Well-known real-MNIST first-5 training labels: 5,0,4,1,9 - a useful load-order sanity check, already relied on by indrajala-ml's own test suite (tests/test_mnist_data.py)."
 }
 ```
 
@@ -106,11 +106,11 @@ downloaded (see below).
 **Correction from stage 2** (checked directly via `pyarrow`, not assumed from this template): the
 real schema is HuggingFace's standard image-dataset layout, `image: struct<bytes: binary, path:
 string>` with `label: int64` - each image is an 8-bit grayscale PNG inside `bytes`, not a raw uint8
-pixel array as guessed above. `perceptron/mnist_data.py`'s `_decode_grayscale_png` already accounts
+pixel array as guessed above. `indrajala_ml/mnist_data.py`'s `_decode_grayscale_png` already accounts
 for this; only this document's template was stale. The real, computed metadata for both MNIST files
 and UCI digits lives in `dataset-packaging/` (staged there pending stage 3's repo creation).
 
-## how `perceptron` would consume it
+## how `indrajala-ml` would consume it
 
 ### the fetch mechanism, and why it only fetches once locally
 
@@ -143,7 +143,7 @@ is added.
 
 ### CI-side caching
 
-`perceptron` is a **public** GitHub repo (confirmed directly, not assumed) - public repos get
+`indrajala-ml` is a **public** GitHub repo (confirmed directly, not assumed) - public repos get
 unlimited free minutes on standard GitHub-hosted runners, and fetching from another GitHub repo
 isn't billed as network egress either. So caching here **isn't a cost-saving measure in any dollar
 sense today** - there's no bill to reduce. What it does buy: faster CI feedback (skipping an
@@ -171,15 +171,15 @@ beyond that), with entries evicted after about a week of no access - MNIST's ~18
 to ~70 MB parquet+derived `.bin`) fits comfortably inside that with room to spare.
 
 **The one scenario where this stops being purely a speed optimization and becomes a real cost
-lever**: if `perceptron` or `indrajala-datasets-*` ever go private. Private-repo Actions minutes
+lever**: if `indrajala-ml` or `indrajala-datasets-*` ever go private. Private-repo Actions minutes
 are metered from a monthly free quota, then billed - at that point, skipping an 18 MB download and
 conversion step on every run would directly reduce billed minutes, not just wall-clock time.
 
 ### pinning
 
 Fetches a specific tag/commit of the dataset repo, not `main`/`latest` - a future change to
-`indrajala-datasets-mnist` shouldn't silently change what `perceptron`'s CI tests against between
-one PR and the next. The pinned reference lives in `perceptron`'s own config (e.g. a constant in
+`indrajala-datasets-mnist` shouldn't silently change what `indrajala-ml`'s CI tests against between
+one PR and the next. The pinned reference lives in `indrajala-ml`'s own config (e.g. a constant in
 the fetch script), bumped deliberately when there's a reason to.
 
 ### integration points
@@ -196,7 +196,7 @@ the fetch script), bumped deliberately when there's a reason to.
 Genuinely optional, and not required to unblock CI (which only needs MNIST): `data/digits/digits.csv`
 already works, committed directly, no problem to solve. `indrajala-datasets-uci-digits` would
 exist for consistency (one place with proper metadata for every dataset this codebase uses) but
-`digits.csv` could stay committed directly in `perceptron` regardless - the fetch mechanism doesn't
+`digits.csv` could stay committed directly in `indrajala-ml` regardless - the fetch mechanism doesn't
 require removing the committed copy, and given the file is 260 KB with zero blocker attached to
 it, there's no urgency to change what already works. This is a call worth making explicitly, not
 assuming either way.
@@ -207,7 +207,7 @@ assuming either way.
   `TODO` in the metadata template above rather than asserted, consistent with this codebase's own
   standard of checking rather than guessing at facts it can't independently confirm.
 - **Single point of failure, but one you control**: `indrajala-datasets-mnist` being unavailable
-  would block `perceptron`'s CI the same way a third-party mirror would - the difference from the
+  would block `indrajala-ml`'s CI the same way a third-party mirror would - the difference from the
   "public mirror" option considered earlier is that you own its availability, not a stranger's, but
   it's still a real external dependency at fetch time, not eliminated entirely.
 - **Checksum computed once, at publish time** - if the dataset repo's own file is ever
@@ -216,7 +216,7 @@ assuming either way.
   silent - but worth knowing it'll happen if the source file changes without a metadata bump).
 - ~~**Whether to also migrate `digits.csv`**~~ - resolved during stage 2: yes, `indrajala-datasets-uci-digits`
   gets real metadata alongside MNIST, for consistency (one place with proper metadata for every
-  dataset this codebase uses). `digits.csv` itself still stays committed directly in `perceptron`
+  dataset this codebase uses). `digits.csv` itself still stays committed directly in `indrajala-ml`
   per the "what changes for UCI digits" section above - only its metadata is now prepared.
 
 ## delivery stages (each its own PR, per this repo's practice)
@@ -235,10 +235,10 @@ assuming either way.
 
    Each repo's own packaging (README, directory layout) is MIT-licensed; the dataset content keeps
    its own documented source license. `dataset-packaging/`'s staged copies (from stage 2) are now
-   redundant with these live repos and have been removed from `perceptron` to avoid two sources of
+   redundant with these live repos and have been removed from `indrajala-ml` to avoid two sources of
    truth that could drift.
 4. ✅ Add the fetch script (`scripts/fetch_datasets.py`, pinned to the `v2026-09-16` tags above) +
-   `./cli fetch-data` / `./cli setup` wiring in `perceptron`. Verified end-to-end: the
+   `./cli fetch-data` / `./cli setup` wiring in `indrajala-ml`. Verified end-to-end: the
    presence+checksum check short-circuits with zero network calls against an already-populated
    checkout, and a genuinely missing file is fetched from the pinned tag and checksum-verified
    byte-identical to the original. Scoped to MNIST only, matching the actual CI blocker - UCI
