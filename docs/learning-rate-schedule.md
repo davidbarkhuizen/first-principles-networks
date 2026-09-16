@@ -2,11 +2,14 @@
 
 [← back to README](../README.md)
 
-**Status: proposed, not started.** Written up front as a design/measurement plan before any of it
-exists, per this repo's own practice (see [Adam optimizer](adam-optimizer.md),
-[mini-batch gradient descent](mini-batch-gradient-descent.md) for precedent) - to be updated with
-stage-by-stage status notes, and corrected against whatever the actual build/measurements turn up,
-as it's executed.
+**Status: all five stages done.** Written up front as a design/measurement plan before any of it
+existed, per this repo's own practice (see [Adam optimizer](adam-optimizer.md),
+[mini-batch gradient descent](mini-batch-gradient-descent.md) for precedent) - updated here with
+stage-by-stage status notes as it was executed. Warmup confirmed to fix the documented
+`batch_size=128` divergence, most cleanly paired with `momentum=0.9` at `warmup_steps>=25` - see
+[research and
+analysis](research-backprop-siblings.md#the-batch_size128-divergence-retested-with-warmup) for
+the full measurement.
 
 ## why this, and why now
 
@@ -111,12 +114,19 @@ that closes materially back toward `batch_size=32`'s own stable ~91-92% band, no
 
 ## delivery stages (each its own PR, per this repo's practice)
 
-1. This design document.
-2. `lr_schedule.py` (`linear_warmup`) + `test_lr_schedule.py`'s isolated regression tests - the
+1. ✅ This design document.
+2. ✅ `lr_schedule.py` (`linear_warmup`) + `test_lr_schedule.py`'s isolated regression tests - the
    schedule function itself, buildable and mergeable independent of the training-loop wiring.
-3. Widen `train_linear_classifier_network`/`train_backprop_network_mini_batch`'s `learning_rate`
-   type + the integration tests above - the actual capability, independent of any measurement
+3. ✅ Widened `train_linear_classifier_network`/`train_backprop_network_mini_batch`'s
+   `learning_rate` type + the integration tests above - the actual capability, independent of any
+   measurement result.
+4. ✅ The `batch_size=128` warmup-step sweep, written up in [research and
+   analysis](research-backprop-siblings.md#the-batch_size128-divergence-retested-with-warmup) (its
+   own themed sub-doc, per the split convention - the same doc the original
+   learning-rate-vs-batch-size follow-up this retests already lives in). Warmup confirmed to fix
+   the divergence, most cleanly at `momentum=0.9`/`warmup_steps>=25` (90.25% ± 2.00% at
+   `warmup_steps=50`, closing back to the documented `batch_size=32` stable band) - `momentum=0.0`
+   improves too but less cleanly (81.38% ± 13.42% at the same `warmup_steps`), an unexpected
+   asymmetry flagged but not chased further.
+5. ✅ Docs closeout: `structure.md`'s possible-next-steps entry updated to reflect the actual
    result.
-4. The `batch_size=128` warmup-step sweep, written up in `research-and-analysis.md` (or its own
-   themed sub-doc, per the split convention - see [research and analysis](research-and-analysis.md)).
-5. Docs closeout: `structure.md`'s possible-next-steps entry updated to reflect the actual result.

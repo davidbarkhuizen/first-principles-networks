@@ -662,15 +662,6 @@ ranked.
 
 ### new model primitives, measured the existing way
 
-- **A learning-rate schedule** (decay/warmup) - every training loop here uses one fixed
-  `learning_rate` for all epochs; untested whether a schedule changes convergence or final
-  accuracy on any of this codebase's targets. Now has a concrete motivating case, not just a
-  general gap: the learning-rate-vs-batch-size sweep (see [research and
-  analysis](research-backprop-siblings.md#the-learning-rate-vs-batch-size-follow-up-the-confound-was-real-and-momentum-still-doesnt-help))
-  found that naive linear learning-rate scaling diverges completely at `batch_size=128` - a
-  gradual warmup is the standard fix in the literature, and this codebase now has a real, reachable
-  failure case to test it against rather than a hypothetical one. See [a learning-rate
-  schedule](learning-rate-schedule.md) for the design/measurement plan. Not yet started.
 - **Dropout** - no regularization beyond L2 exists (L2 itself a measured null - see "backprop
   siblings"); dropout is structurally different (stochastic, applied at the activation, not a
   gradient penalty), so it isn't assumed to land the same way. Not yet started.
@@ -688,6 +679,19 @@ robustness win, its first-moment term adding nothing measurable. Not adopted as 
 capability; Adam remains the recommended choice. See [research and
 analysis](research-adam-optimizer.md#rmsprop-the-second-moment-term-alone-accounts-for-adams-batch-size-win-stage-7-of-the-adam-optimizer-workplan)
 for the full measurement.
+
+**A learning-rate schedule** (decay/warmup), that used to be listed here, is also now closed -
+[a learning-rate schedule](learning-rate-schedule.md)'s all-five-stages workplan: `lr_schedule.
+linear_warmup`, wired into both training loops via a widened `learning_rate: float |
+Callable[[int], float]`, then retested against the documented `batch_size=128`/`lr=64.0`
+divergence ([the learning-rate-vs-batch-size
+follow-up](research-backprop-siblings.md#the-learning-rate-vs-batch-size-follow-up-the-confound-was-real-and-momentum-still-doesnt-help)).
+Warmup fixes the divergence, most cleanly at `momentum=0.9`/`warmup_steps>=25` (closing back to
+the documented `batch_size=32` stable band with tight variance) - see [research and
+analysis](research-backprop-siblings.md#the-batch_size128-divergence-retested-with-warmup) for the
+full measurement, including a flagged asymmetry (momentum benefits from warmup more than plain SGD
+does) not chased further. Scoped to warmup only - decay remains out of scope, no equivalently
+concrete failure case motivates it yet.
 
 ### deepening what's already here
 

@@ -32,6 +32,7 @@ layers.
 - [L2 weight regularization: closes the overfitting gap, doesn't improve it](research-backprop-siblings.md#l2-weight-regularization-closes-the-overfitting-gap-doesnt-improve-it)
 - [momentum under mini-batch gradients](research-backprop-siblings.md#momentum-under-mini-batch-gradients)
 - [the learning-rate-vs-batch-size follow-up](research-backprop-siblings.md#the-learning-rate-vs-batch-size-follow-up-the-confound-was-real-and-momentum-still-doesnt-help)
+- [the batch_size=128 divergence, retested with warmup](research-backprop-siblings.md#the-batch_size128-divergence-retested-with-warmup)
 - [convolutional layers on UCI digits](research-backprop-siblings.md#convolutional-layers-on-uci-digits)
 
 ## [Rust core performance](research-rust-performance.md)
@@ -55,3 +56,5 @@ The measurement results for [the Adam optimizer workplan](adam-optimizer.md).
 
 - [Adam: tuned-XOR measurement (stage 3)](research-adam-optimizer.md#adam-tuned-xor-measurement-stage-3-of-the-adam-optimizer-workplan)
 - [Adam under batch size: a much bigger, cleaner win (stage 4)](research-adam-optimizer.md#adam-under-batch-size-a-much-bigger-cleaner-win-stage-4-of-the-adam-optimizer-workplan)
+- [Adam at real-MNIST-ensemble scale: the proxy result holds (stage 5)](research-adam-optimizer.md#adam-at-real-mnist-ensemble-scale-the-proxy-result-holds-stage-5-of-the-adam-optimizer-workplan)
+- [RMSprop: the second-moment term alone accounts for Adam's batch-size win (stage 7)](research-adam-optimizer.md#rmsprop-the-second-moment-term-alone-accounts-for-adams-batch-size-win-stage-7-of-the-adam-optimizer-workplan)
