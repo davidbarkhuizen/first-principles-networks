@@ -616,3 +616,46 @@ matmul case at all; the other two stay below the flops threshold at this archite
 **Decision: adopted**, with the rows-per-thread refinement explicitly rejected per the
 measurement above. Explicit SIMD intrinsics remain the one open candidate left for the rest of
 this gap.
+
+## explicit SIMD intrinsics: a real further win, with fused multiply-add kept consistent across every path
+
+Fourth and (per docs/rust-production-cutover.md's original reasoning) last candidate for the
+`batch_size >= 32` gap: `linalg.rs::matmul_2d_row_range`'s innermost accumulate step
+(`out_row[col] += a_value * b_row[col]`) is a textbook AXPY pattern, vectorizable 4 `f64` lanes at
+a time on this machine's AVX2. Rather than rely on LLVM's autovectorizer opportunistically doing
+this (which the earlier `target-cpu=native` build-flag experiment, measured as a null, gave no
+evidence was happening reliably), the accumulate step was factored into one shared helper
+(`axpy_row`, called from both the blocked and unblocked loops - previously duplicated 3-line
+loops) with an explicit AVX2 path using `std::arch::x86_64::_mm256_fmadd_pd`, runtime-gated by
+`is_x86_feature_detected!("avx2", "fma")` with a portable scalar fallback for machines without it.
+
+**The design question this raised**: `_mm256_fmadd_pd` is a genuine fused multiply-add (one
+rounding for `a*b+c`), not a separate multiply-then-add (two roundings) like the old `+=` loop.
+Used naively, that would have made the AVX2 path produce different last-bit results than the
+scalar fallback - silently breaking the bit-identical invariant that blocking (above) and
+threading (above) were both explicitly built to preserve, and that a machine without AVX2 would
+then train slightly different numbers than one with it, given enough steps. **Resolved by making
+FMA the accumulate semantics on *every* path**, not just the new one: the scalar fallback
+(`axpy_row_scalar`) now uses `f64::mul_add` (Rust's portable FMA, lowering to the same hardware
+instruction when available) instead of `+=`, so the AVX2 path is a wider version of what the
+scalar path already does, not a numerically different one.
+
+**Verified directly, not just argued**: this crate has no native `cargo test` support (`pyo3`'s
+`extension-module` feature doesn't link libpython, so a `cargo test` binary fails at link time -
+this codebase's whole correctness suite runs through pytest instead, which is why nothing
+previously caught this class of regression). Checked empirically instead: built once with the
+AVX2 path forced off, captured `matmul` output as exact IEEE-754 bit patterns (`struct.pack("<d",
+...).hex()`, not `pytest.approx`) across five shapes spanning both the blocked/unblocked and
+remainder/exact-multiple-of-4 boundaries, including this codebase's real `batch_size=512` shape;
+rebuilt with the AVX2 path restored and re-captured - **byte-for-byte identical across all five
+shapes**. All 845 top-level tests (525 crate-level) also pass unchanged on the final build.
+
+**Net result, full training-step benchmark** (`dimension=784, hidden=10`, `batch_size=512`,
+`learn_batch`, three runs, AVX2-forced-off vs AVX2-on): per-step wall time dropped from
+~31.4-33.1ms to ~25.7-26.6ms, roughly a **17-20% reduction** on top of blocking+threading's
+earlier combined win. Measured directly against numpy on the same shape (three trials): the
+Rust/numpy ratio moved to **0.84x-1.04x** - Rust now matches or beats numpy at `batch_size=512` in
+most trials, versus the 1.19x-1.21x (Rust slower) recorded after threading alone. **Decision:
+adopted** - this was the last candidate docs/rust-production-cutover.md identified for closing
+the `batch_size >= 32` gap, and unlike blocking/threading it closes it in Rust's favor rather than
+just narrowing it.
