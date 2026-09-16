@@ -675,3 +675,6 @@ ordered roughly by how directly each follows from an existing finding here, not 
   IEEE-754 bit-pattern comparison across five shapes, not just `pytest.approx`. `batch_size=512`'s
   Rust/numpy ratio moved to 0.84x-1.04x, matching or beating numpy in most trials. This was the
   last candidate from [the production cutover plan](rust-production-cutover.md)'s reasoning.
+  **AVX-512 checked and ruled out**: this machine's CPU (AMD Ryzen 7 3700U, Zen+) has no
+  `avx512*` flags at all - AMD didn't add AVX-512 until Zen 4 (2022) - so AVX2's 4-lane `f64`
+  width is this hardware's actual ceiling, not a further optimization candidate here.
