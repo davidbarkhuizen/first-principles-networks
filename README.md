@@ -40,3 +40,4 @@ retrofit - so it can represent targets (like XOR) the discrete model structurall
 - [an array-based Adam sibling](docs/adam-array-layer.md) — a Rust-matmul-backed Adam, built and
   measured: both array-based backends 70x-794x faster per example than the per-node path,
   batch-size robustness confirmed to survive the port
+- [dropout](docs/dropout.md) — stochastic hidden-unit regularization, proposed and not yet started
