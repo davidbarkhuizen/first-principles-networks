@@ -664,7 +664,8 @@ ranked.
 
 - **Dropout** - no regularization beyond L2 exists (L2 itself a measured null - see "backprop
   siblings"); dropout is structurally different (stochastic, applied at the activation, not a
-  gradient penalty), so it isn't assumed to land the same way. Not yet started.
+  gradient penalty), so it isn't assumed to land the same way. See [dropout](dropout.md) for the
+  design/measurement plan. Not yet started.
 - **Batch or layer normalization** - no normalization exists at all; likely the highest-value item
   in this group once hidden layers get deeper than 1-2, but also the biggest lift of anything
   here (running statistics, a train/eval-mode split - real complexity beyond the existing
