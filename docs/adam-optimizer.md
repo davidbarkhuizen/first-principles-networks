@@ -136,10 +136,16 @@ used) - a real added step, not assumed away.
 
 ## delivery stages (each its own PR, per this repo's practice)
 
-1. This design document.
-2. `adam_layer.py` (factory) + `adam_backprop_classifier_network.py` + the hand-derived regression
-   test - the actual capability, buildable and mergeable on its own, independent of any
-   measurement result.
+1. ✅ This design document.
+2. ✅ `adam_layer.py` (factory) + `adam_backprop_classifier_network.py` + hand-derived regression
+   tests (`test_adam_layer.py`, isolated node-level; `test_adam_backprop_model.py`, whole-network,
+   the same two-tier convention every prior sibling used) - the actual capability, buildable and
+   mergeable on its own, independent of any measurement result. `beta1`/`beta2`/`epsilon` default
+   to Kingma & Ba's own published values (0.9/0.999/1e-8) - the "hyperparameters" open decision
+   above was resolved this way rather than requiring them explicitly, since they're closer to
+   fixed algorithmic constants in real-world use than a knob momentum's own posture was about.
+   Mini-batch (`learn_batch`) verified working with no extra code, inherited unchanged the same
+   way every prior sibling's did. Full suite (850 tests, up from 845) passes.
 3. The tuned-XOR-scale measurement, written up in `research-and-analysis.md`.
 4. The real-MNIST-proxy batch-size sweep, written up (reusing the learning-rate-vs-batch-size
    sweep's own script skeleton).
