@@ -2,11 +2,16 @@
 
 [← back to README](../README.md)
 
-**Status: proposed, not started.** Written up front as a design/measurement plan before any of it
-exists, per this repo's own practice of writing a plan down before implementation (see
-[dataset sourcing](dataset-sourcing-proposal.md), [the Rust production cutover
-plan](rust-production-cutover.md) for precedent) - to be updated with stage-by-stage status notes,
-and corrected against whatever the actual build/measurements turn up, as it's executed.
+**Status: done.** All six delivery stages complete - built (stage 2), then measured at three
+scales (tuned-XOR, real-MNIST proxy, real-MNIST-ensemble). Adopted, kept as a real capability
+alongside momentum/L2 rather than a default: needs its own retuned `learning_rate` to avoid
+actively hurting (like every other sibling here), but once retuned it's a modest win on the
+tuned-XOR scale and a substantial one under large-batch training, at both proxy and real scale -
+see the delivery-stages list below for the numbers, and [research and
+analysis](research-adam-optimizer.md) for the full write-ups. Originally written up front as a
+design/measurement plan before any of it existed, per this repo's own practice of writing a plan
+down before implementation (see [dataset sourcing](dataset-sourcing-proposal.md), [the Rust
+production cutover plan](rust-production-cutover.md) for precedent).
 
 ## why this, and why now
 
@@ -166,8 +171,16 @@ used) - a real added step, not assumed away.
    linearly scaling `learning_rate` with `batch_size` (the fix SGD/momentum need) actively destroys
    Adam instead (collapses to a coin-flip 50.00% at `batch_size=128`) - the opposite prescription
    from SGD/momentum's own linear scaling rule.
-5. Conditional: real-MNIST-ensemble-scale validation, only if stage 4's result justifies the
-   ~30-minute-run cost.
-6. Docs closeout: `structure.md`'s possible-next-steps entry updated to reflect the actual result
-   (decision either way, the same posture every other sibling investigation here has taken),
-   the same pattern the momentum re-test's own closeout PRs followed.
+5. ✅ Real-MNIST-ensemble-scale validation, written up in [research and
+   analysis](research-adam-optimizer.md#adam-at-real-mnist-ensemble-scale-the-proxy-result-holds-stage-5-of-the-adam-optimizer-workplan).
+   Stage 4's proxy result was judged strong enough to justify the run: at `batch_size=128`, fixed
+   untuned-for-batch-size rates, Adam beats sigmoid by **5.56 points** (94.62% vs. 89.06%) on real
+   full 60000/10000 MNIST via the production ensemble architecture - the proxy-scale gap held up
+   at real scale, if smaller in absolute terms. Adam gives up only 1.39 points versus the
+   documented `batch_size=1` production baseline (96.01%); sigmoid gives up 6.95. No wall-clock win
+   on its own (mini-batching alone doesn't speed up this codebase's per-example forward/backward
+   loop) - the practical payoff is conditional on the array-based Adam sibling flagged in
+   [structure](structure.md#possible-next-steps), which is what would make large batches cheap in
+   wall-clock terms too.
+6. ✅ Docs closeout: `structure.md`'s possible-next-steps entry updated to reflect the actual
+   result, the same pattern the momentum re-test's own closeout PRs followed.

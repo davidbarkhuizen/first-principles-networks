@@ -144,3 +144,50 @@ so far, and directly validates the "worth its own measurement" rationale in
 [Adam optimizer](adam-optimizer.md)'s opening motivation: unlike momentum, Adam's per-parameter
 adaptive scaling genuinely does something SGD-with-momentum's single shared velocity term
 couldn't, once gradients come from batches rather than single examples.
+
+## Adam at real-MNIST-ensemble scale: the proxy result holds (stage 5 of the Adam optimizer workplan)
+
+Stage 4's proxy-scale result was strong enough to justify the ~30-minute-per-config real-scale
+run it was gated on (see the delivery-stages decision in [Adam
+optimizer](adam-optimizer.md#delivery-stages-each-its-own-pr-per-this-repos-practice)). Real full
+60000/10000 MNIST, via the same `EnsembleBackpropClassifierNetwork` architecture (10 independent
+`[16]`-hidden binary sub-networks, one per digit) `demo_mnist_ensemble_recognition.py` uses in
+production, fan-in-aware init, 5 epochs, `batch_size=128` - the batch size stage 4's proxy result
+was most dramatic at - each optimizer at its own fixed, untuned-for-batch-size rate (sigmoid
+`lr=0.5`, Adam `lr=0.01`, both the same per-example rates every other measurement here uses),
+seed=0, single run per config (matching this codebase's own established precedent for real-scale
+runs - each one too costly for a multi-seed sweep, see [the ensemble/real-MNIST
+investigation](research-multiclass-and-loss.md#the-ensemblereal-mnist-investigation)):
+
+`ensemble_train.py`'s own parallel-training path doesn't wire `batch_size` through its worker
+functions (only `train_linear_classifier_network`'s per-example path) - measuring this needed a
+small hand-rolled script mirroring `train_ensemble_parallel_from_indices`'s job/worker structure
+but calling `train_backprop_network_mini_batch` instead, the "hand-rolled ad hoc parallel-training
+script" alternative [Adam optimizer](adam-optimizer.md)'s own scope section named up front, rather
+than extending the production module for a one-off measurement.
+
+| config | test accuracy | wall-clock |
+|---|---|---|
+| sigmoid, fixed lr=0.5, batch_size=128 | 89.06% | 30.5 min |
+| Adam, fixed lr=0.01, batch_size=128 | **94.62%** | 34.9 min |
+
+Adam beats sigmoid by **5.56 points** at this batch size, real scale - the proxy-scale gap
+(86.75% vs. 71.50%, a 15.25-point gap on the 320-example proxy) held up qualitatively, if smaller
+in absolute terms, on the real dataset. Both numbers sit below the documented `batch_size=1`
+production baseline (96.01%, see [the ensemble/real-MNIST
+investigation](research-multiclass-and-loss.md#the-ensemblereal-mnist-investigation)) - batching
+at all costs *some* accuracy at this architecture/epoch count regardless of optimizer, consistent
+with every batch-size sweep in this codebase so far - but Adam recovers almost all of it (1.39
+points off the `batch_size=1` baseline) while sigmoid gives up nearly 7 points (6.95) doing the
+same.
+
+**Decision:** the stage 4 finding is confirmed at real production scale, not just the toy proxy -
+Adam at a fixed `learning_rate` is the more batch-size-robust optimizer, real MNIST included. This
+doesn't yet translate into a wall-clock win on its own (both configs cost about the same ~30-35
+minutes - `learn_batch`'s own docs already establish that mini-batching alone "does not by itself
+speed anything up," only changes when the weight write happens, see [mini-batch gradient
+descent](mini-batch-gradient-descent.md)) - the practical payoff would come from pairing this
+result with the array-based, Rust-matmul-backed Adam sibling flagged in
+[structure](structure.md#possible-next-steps) ("deepening what's already here"): genuine batched
+matmul is what would make large batches actually cheap in wall-clock terms, and this result is
+what says that combination wouldn't cost the accuracy tax sigmoid pays for it.
