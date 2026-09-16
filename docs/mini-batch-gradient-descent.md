@@ -63,7 +63,7 @@ own batched design.
 ## the momentum retest: settled, not just suggestive
 
 `MomentumBackpropClassifierNetwork` exists and is tested, but was measured
-(see [research and analysis](research-and-analysis.md#momentum-measured-not-worth-adopting)) to
+(see [research and analysis](research-backprop-siblings.md#momentum-measured-not-worth-adopting)) to
 *hurt* at its canonical
 coefficient across a learning-rate sweep, and land statistically indistinguishable from plain SGD
 at finer coefficients - a flat null, not a win. The leading explanation: this codebase's
@@ -83,7 +83,7 @@ confound cleanly: at `batch_size=32` with a properly-scaled rate, `momentum=0.0`
 `batch_size=1`'s own baseline accuracy - the earlier "rescue" was the untuned learning rate, not
 momentum. With the confound removed, momentum is flat-to-actively-harmful (lower mean, much higher
 variance) at every batch size that trains stably. See
-[research and analysis](research-and-analysis.md#the-learning-rate-vs-batch-size-follow-up-the-confound-was-real-and-momentum-still-doesnt-help)
+[research and analysis](research-backprop-siblings.md#the-learning-rate-vs-batch-size-follow-up-the-confound-was-real-and-momentum-still-doesnt-help)
 for the full numbers, including the separate finding that naive linear learning-rate scaling
 diverges entirely at `batch_size=128` regardless of momentum. `MomentumBackpropClassifierNetwork`
 remains not adopted as a default - this question is now considered settled rather than open.

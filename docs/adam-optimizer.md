@@ -18,9 +18,9 @@ did: a per-parameter *adaptive* learning rate, driven by running estimates of ea
 gradient mean and variance, rather than a single global velocity term.
 
 Momentum was measured here to actively hurt at its canonical coefficient, and land as a flat null
-otherwise (see [research and analysis](research-and-analysis.md#momentum-measured-not-worth-adopting)),
+otherwise (see [research and analysis](research-backprop-siblings.md#momentum-measured-not-worth-adopting)),
 and the mini-batch retest ([research and
-analysis](research-and-analysis.md#the-learning-rate-vs-batch-size-follow-up-the-confound-was-real-and-momentum-still-doesnt-help))
+analysis](research-backprop-siblings.md#the-learning-rate-vs-batch-size-follow-up-the-confound-was-real-and-momentum-still-doesnt-help))
 found momentum flat-to-actively-harmful even under lower-noise batch gradients, once a real
 learning-rate confound was controlled for. Adam is worth testing independently rather than
 assumed to fare the same way: it doesn't accumulate a single shared velocity the way momentum
@@ -106,13 +106,13 @@ Two stages, cheapest and most comparable to existing results first:
    10-15 seeds) - establishes whether Adam helps or hurts at all on this codebase's smallest,
    most-measured target. Correction, found while executing this stage: momentum's own baseline was
    actually measured on the 320-example real-MNIST proxy, not this XOR scenario (see
-   [research and analysis](research-and-analysis.md#momentum-measured-not-worth-adopting)) - this
+   [research and analysis](research-backprop-siblings.md#momentum-measured-not-worth-adopting)) - this
    stage instead reuses the same pinned XOR scenario the binary-cross-entropy and ReLU
    investigations used.
 2. **The 320-example real-MNIST proxy, crossed with `batch_size`** - reusing the exact scratch-sweep
    pattern from the learning-rate-vs-batch-size sweep (fork-based multiprocessing pool, ~25 minutes
    at this scale, see [research and
-   analysis](research-and-analysis.md#the-learning-rate-vs-batch-size-follow-up-the-confound-was-real-and-momentum-still-doesnt-help)).
+   analysis](research-backprop-siblings.md#the-learning-rate-vs-batch-size-follow-up-the-confound-was-real-and-momentum-still-doesnt-help)).
    This is where Adam's actual selling point (per-parameter adaptive rates smoothing noisy
    gradients) should show up if it's going to, especially at `batch_size=1`'s per-example-noisy
    regime where momentum specifically failed.
@@ -132,7 +132,7 @@ used) - a real added step, not assumed away.
 - **Whether Adam's adaptive per-parameter scaling interacts with `batch_size=128`'s
   linear-scaling-rule divergence** - resolved during stage 4: yes, and the interaction is that the
   linear scaling rule actively hurts Adam rather than merely being unneeded - see [research and
-  analysis](research-and-analysis.md#adam-under-batch-size-a-much-bigger-cleaner-win-stage-4-of-the-adam-optimizer-workplan).
+  analysis](research-adam-optimizer.md#adam-under-batch-size-a-much-bigger-cleaner-win-stage-4-of-the-adam-optimizer-workplan).
 - **RMSprop as a follow-on ablation** - out of scope here (see "scope" above), noted so it isn't
   silently forgotten if Adam's result makes it worth doing.
 
@@ -149,7 +149,7 @@ used) - a real added step, not assumed away.
    Mini-batch (`learn_batch`) verified working with no extra code, inherited unchanged the same
    way every prior sibling's did. Full suite (850 tests, up from 845) passes.
 3. ✅ The tuned-XOR-scale measurement, written up in [research and
-   analysis](research-and-analysis.md#adam-tuned-xor-measurement-stage-3-of-the-adam-optimizer-workplan).
+   analysis](research-adam-optimizer.md#adam-tuned-xor-measurement-stage-3-of-the-adam-optimizer-workplan).
    At the demo-tuned `learning_rate=1.0` Adam collapses badly (58.27% vs. sigmoid's 97.80% mean,
    10 seeds) - the same "no default is safe without retuning" pattern cross-entropy/ReLU/momentum
    all showed. Retuned to `learning_rate=0.01-0.05`, Adam modestly beats the sigmoid baseline's
@@ -158,7 +158,7 @@ used) - a real added step, not assumed away.
    not a dramatic win the way ReLU's retuned result was, and not a null the way momentum's own
    retuned sweep was.
 4. ✅ The real-MNIST-proxy batch-size sweep, written up in [research and
-   analysis](research-and-analysis.md#adam-under-batch-size-a-much-bigger-cleaner-win-stage-4-of-the-adam-optimizer-workplan).
+   analysis](research-adam-optimizer.md#adam-under-batch-size-a-much-bigger-cleaner-win-stage-4-of-the-adam-optimizer-workplan).
    A materially bigger, cleaner win than stage 3's XOR result: at a **fixed** `learning_rate`, Adam
    barely degrades across `batch_size` 1-128 (90.50% -> 86.75%) while sigmoid collapses over the
    same range (89.62% -> 71.50%, variance exploding); at `batch_size=128` Adam beats every sigmoid
