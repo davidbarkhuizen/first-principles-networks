@@ -58,12 +58,19 @@ smaller scale than first measured:
 
 **Consequence for this plan:** "retarget production to the Rust core" cannot mean "swap `numpy` →
 `Array` call-for-call carelessly" - but the corrected baseline means that bar may already be much
-closer than this plan originally assumed. Phase 0 remains a required, measured gate before any
-class is built: finish fusing (0b), re-measure, and only proceed to building
-`RustArrayMultiClassBackpropClassifierNetwork` if the result actually beats numpy at realistic
-sizes. If it doesn't, the honest outcome is the same kind of measured null this codebase already
-has several of (momentum, L2, Xavier/Glorot) - correctness-validated, not adopted, recorded as
-such rather than forced through.
+closer than this plan originally assumed. Phase 0 remains required regardless: fix what can
+cheaply be fixed (0a, 0b) and measure honestly, so phase 1 is built on top of the best cheap
+version of this core, not the accidentally-debug one.
+
+**Adoption is unconditional, not gated on this benchmark - clarified 2026-09-16.** The original
+framing below ("only proceed... if it beats numpy," "if phase 0 doesn't close the gap") predates
+this clarification and is kept only as a record of the plan's own evolving reasoning, not as the
+live decision rule. The actual intent: the Rust core replaces numpy as the production backend
+*always*, regardless of the current benchmark split; numpy stays on permanently as the benchmark
+comparison point (unchanged from the original decision); and any remaining performance gap (see
+phase 0b's split result below - naive matmul losing to numpy's BLAS at `batch_size >= 32`) is
+closed incrementally over time (SIMD, blocking/tiling, threading), not resolved before shipping
+phase 1. Phase 1 proceeds on that basis.
 
 ## scope decision: a new sibling class, not a retrofit
 
@@ -152,10 +159,11 @@ it was measured: **the fused Rust core beats numpy for per-example training (`ba
 training (`batch_size >= 32`, `learn_batch`'s shape)** - the opposite split from what the risks
 section guessed (it expected batching to be Rust's strength and per-example its weakness). See
 [research and analysis](research-and-analysis.md#the-rust-array-cores-65-335x-slower-than-numpy-finding-was-a-debug-build-artifact)
-for the full numbers and how they were produced. What this means for phase 1 - build it for the
-per-example path only, build it anyway as a correctness-first standalone (the same treatment
-momentum/L2/Xavier-Glorot got), or not build it - is recorded as an open decision, not resolved by
-this document alone.
+for the full numbers and how they were produced. **Resolved 2026-09-16 (see "the decisive
+finding" above): phase 1 is built in full** (both `learn` and `learn_batch`), not scoped to only
+the per-example path this benchmark currently favors - adoption is unconditional, and the
+`batch_size >= 32` gap is tracked as follow-on optimization work, not a reason to withhold the
+batched path.
 
 ### operators the current `Array` is missing (relevant only if phase 0's fused approach is skipped)
 
@@ -170,15 +178,15 @@ Python-side formula rewritten to avoid them (`0.0 - z` instead of `-z`; restruct
 `e.__add__(1.0).__rtruediv__`-style workarounds, which is exactly the kind of awkward code the
 fused approach in 0b avoids needing at all).
 
-### if phase 0 doesn't close the gap
+### the matmul gap that remains
 
-A real possible outcome, not to be argued away: if a reordered loop plus fused per-layer calls
-still don't beat numpy at realistic batch sizes, that's the answer, recorded honestly in
-[research and analysis](research-and-analysis.md) the same way momentum/L2/Xavier-Glorot's null
-results are - "correctness-validated, not adopted for performance reasons" - rather than shipped
-as a production regression to satisfy this plan's original premise. A follow-on decision (SIMD
-intrinsics, a blocked/tiled matmul, batching every operation across the whole training set instead
-of per-layer) would be a separate, later piece of work, not assumed as part of this one.
+A real, measured outcome, not argued away: even after 0a and 0b, `batch_size >= 32` training
+still loses to numpy, by a widening margin, because matmul is still a naive triple loop with no
+SIMD/blocking/threading (see phase 0b's benchmark table above). Per the 2026-09-16 clarification
+above, this is not a reason to withhold adoption - it's tracked as follow-on optimization work
+(SIMD intrinsics, a blocked/tiled matmul, batching every operation across the whole training set
+instead of per-layer), a separate, later piece of work from phase 1 itself, recorded honestly in
+[research and analysis](research-and-analysis.md) rather than glossed over.
 
 ## phase 1: `RustArrayLayer` / `RustArrayMultiClassBackpropClassifierNetwork`
 
@@ -278,11 +286,11 @@ built-and-shipped plan in this codebase has been folded into `structure.md`.
 4. **Done.** Go/no-go benchmark re-run against numpy at realistic batch sizes; recorded in "0b.
    fuse each layer operation into one Rust call" above and
    [research and analysis](research-and-analysis.md#the-rust-array-cores-65-335x-slower-than-numpy-finding-was-a-debug-build-artifact) -
-   a split result (faster at `batch_size=1`, slower and widening from `batch_size=32` up), not a
-   clean go or no-go, left as an open decision rather than forced into either bucket.
-5. *(pending the phase-1 decision above)* `RustArrayLayer`/
-   `RustArrayMultiClassBackpropClassifierNetwork` + tier-1 exact parity tests.
+   a split result (faster at `batch_size=1`, slower and widening from `batch_size=32` up).
+   Per the 2026-09-16 clarification above, adoption is unconditional, so this data is a progress
+   record, not a gate phase 1 had to clear.
+5. `RustArrayLayer`/`RustArrayMultiClassBackpropClassifierNetwork` + tier-1 exact parity tests.
 6. Tier-2 statistical parity + accuracy validation (UCI digits first, then real MNIST).
 7. The benchmark demo(s) (phase 3).
 8. `structure.md`/`vectorization.md` updated to describe the shipped result.
-9. *(only if adopted)* Retarget the two vectorized demos' primary path to the Rust-backed class.
+9. Retarget the two vectorized demos' primary path to the Rust-backed class.
