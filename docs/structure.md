@@ -707,19 +707,14 @@ ranked.
   with multi-channel input and `'same'` padding - the current design needs no
   backprop-through-convolution since nothing before its one layer is ever trained; stacking would
   change that. Not yet started.
-- **An array-based (Rust-matmul-backed) Adam sibling** - `AdamBackpropClassifierNetwork` (see
-  [Adam optimizer](adam-optimizer.md)) is still built on the per-node `BackpropNode` object graph,
-  not `VectorizedMultiClassBackpropClassifierNetwork`'s own `ArrayLayer`/batched-matmul design
-  (`forward_batch`/`compute_hidden_delta_batch`/`accumulate_gradient_batch`, backed by the Rust
-  `indrajala_ml_array` crate's AVX2 matmul kernels - see "vectorized array-based classes" above).
-  See [an array-based Adam sibling](adam-array-layer.md) for the design/measurement plan. Both the
-  numpy-backed half (`AdamArrayLayer`/`AdamVectorizedMultiClassBackpropClassifierNetwork`, that
-  doc's stage 2) and the Rust-matmul-backed counterpart
-  (`AdamRustArrayLayer`/`AdamRustArrayMultiClassBackpropClassifierNetwork`, stage 5 - one fused
-  `layer_adam_apply_accumulated_gradient` Rust call per layer, mirroring `RustArrayLayer`'s own
-  fused-op design) are now built and parity-validated against the per-node reference; the
-  wall-clock/robustness follow-on measurement (stage 3) and docs closeout (stage 4) remain not
-  started.
+The array-based (Rust-matmul-backed) Adam sibling that used to be listed here - both the
+numpy-backed half (`AdamArrayLayer`/`AdamVectorizedMultiClassBackpropClassifierNetwork`) and the
+Rust-matmul-backed counterpart (`AdamRustArrayLayer`/`AdamRustArrayMultiClassBackpropClassifierNetwork`)
+- is now closed, all five stages done including the wall-clock/robustness measurement: both
+array-based backends measured 70x-794x faster per example than the per-node path (widening with
+batch size), and Adam's batch-size accuracy-robustness result confirmed to survive the array/Rust
+port unchanged. See [an array-based Adam sibling](adam-array-layer.md) for the full plan and
+measured results.
 
 ### infrastructure that protects the rigor
 
