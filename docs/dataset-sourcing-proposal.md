@@ -129,9 +129,42 @@ verified instead of manual and unverified.
 **In CI**, this is a different context, not a violation of the same guarantee: an ephemeral
 GitHub Actions runner starts with no cached filesystem, so the check always misses and one fetch
 happens - once per CI run (not once per test inside that run, since the fetch step runs once
-before `pytest` starts, exactly like `./cli setup` does locally). A later optimization (GitHub
-Actions' own dependency-cache action, keyed on the file's expected sha256) could turn "once per
-run" into "once per cache key," but that's a genuine future refinement, not part of this proposal.
+before `pytest` starts, exactly like `./cli setup` does locally), *unless* CI-side caching (below)
+is added.
+
+### CI-side caching
+
+`perceptron` is a **public** GitHub repo (confirmed directly, not assumed) - public repos get
+unlimited free minutes on standard GitHub-hosted runners, and fetching from another GitHub repo
+isn't billed as network egress either. So caching here **isn't a cost-saving measure in any dollar
+sense today** - there's no bill to reduce. What it does buy: faster CI feedback (skipping an
+~18 MB download and, if the derived `.bin` files are cached too, the `convert_parquet_to_binary`
+step, on every run) and less load on `indrajala-datasets-mnist` itself.
+
+Implemented via GitHub Actions' first-party `actions/cache`, keyed on the pinned
+`indrajala-datasets-mnist` reference *plus* the file's expected `sha256` from its metadata (not a
+static key) - so bumping the pinned commit/tag automatically invalidates the cache and forces a
+fresh fetch+verify, rather than risking a stale cache silently serving old data forever:
+
+```yaml
+- uses: actions/cache@v4
+  with:
+    path: data/mnist
+    key: mnist-${{ env.PINNED_REF }}-${{ env.EXPECTED_SHA256 }}
+- run: ./cli fetch-data   # short-circuits per-file if the cache already restored a verified copy -
+                          # the same presence+checksum check above covers this case for free
+```
+
+No new logic needed beyond what `ensure_dataset_file` above already does: a cache hit just means
+the presence+checksum check succeeds without `fetch()` ever running, exactly like the local-dev
+case. Quota/lifecycle, for context: GitHub's per-repo Actions cache quota is 10 GB (LRU-evicted
+beyond that), with entries evicted after about a week of no access - MNIST's ~18 MB parquet (or up
+to ~70 MB parquet+derived `.bin`) fits comfortably inside that with room to spare.
+
+**The one scenario where this stops being purely a speed optimization and becomes a real cost
+lever**: if `perceptron` or `indrajala-datasets-*` ever go private. Private-repo Actions minutes
+are metered from a monthly free quota, then billed - at that point, skipping an 18 MB download and
+conversion step on every run would directly reduce billed minutes, not just wall-clock time.
 
 ### pinning
 
@@ -184,6 +217,8 @@ assuming either way.
    push the data + metadata - a real, visible, public action requiring explicit go-ahead, not
    bundled into an automated step.
 4. Add the fetch script + `./cli` wiring in `perceptron`.
-5. Add the CI workflow itself (GitHub Actions running `pytest` on push/PR), now unblocked.
+5. Add the CI workflow itself (GitHub Actions running `pytest` on push/PR), now unblocked -
+   including the `actions/cache` step from "CI-side caching" above, since it's a small addition
+   once the workflow exists at all, not a separate follow-on piece of work.
 6. Update `docs/setup.md`/`docs/structure.md` to describe the shipped result, closing out the CI
    item in [structure](structure.md#possible-next-steps).
