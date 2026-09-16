@@ -113,12 +113,19 @@ class ConvergenceSeries(list):
 def train_linear_classifier_network(
     student: LinearClassifierNetwork,
     training_data: list[tuple[tuple[float, ...], float]],
-    learning_rate: float = 0.25,
+    learning_rate: float | Callable[[int], float] = 0.25,
     epochs: int = 1,
     reference_classifier: LinearClassifierNetwork | None = None,
 ) -> ConvergenceSeries:
     """
     Trains student in place over training_data for the given number of epochs.
+
+    learning_rate is either a plain float (every existing caller) or a schedule function from
+    the current iteration index to a rate (e.g. lr_schedule.linear_warmup) - resolved once per
+    learn() call, using the same iterations counter this function already tracks for its
+    convergence series. See docs/learning-rate-schedule.md for why iterations (not epoch_index)
+    is the right step index: a schedule targets per-step instability, and batch_size already
+    determines how many steps an epoch contains.
 
     There's no guarantee this converges (see docs/structure.md) - training accuracy can
     oscillate rather than settle, especially once the target isn't exactly representable at
@@ -153,7 +160,8 @@ def train_linear_classifier_network(
     for epoch_index in range(epochs):
         for datum in training_data:
             (reference_state, reference_category) = datum
-            student.learn(learning_rate, reference_state, reference_category)
+            current_lr = learning_rate(iterations) if callable(learning_rate) else learning_rate
+            student.learn(current_lr, reference_state, reference_category)
             iterations += 1
 
             if reference_classifier:
@@ -186,7 +194,7 @@ def train_backprop_network_mini_batch(
     student: BackpropClassifierNetwork,
     training_data: list[tuple[tuple[float, ...], float]],
     batch_size: int,
-    learning_rate: float = 0.25,
+    learning_rate: float | Callable[[int], float] = 0.25,
     epochs: int = 1,
     reference_classifier: LinearClassifierNetwork | None = None,
     reshuffle_each_epoch: bool = True,
@@ -200,6 +208,11 @@ def train_backprop_network_mini_batch(
     across every learn_batch-supporting sibling (MultiClassBackpropClassifierNetwork included,
     not just BackpropClassifierNetwork itself), despite the type hint naming only the most
     common case - the same looseness train_linear_classifier_network's own hint already has.
+
+    learning_rate accepts the same float-or-schedule-function widening as
+    train_linear_classifier_network above, resolved once per learn_batch call against
+    iterations - here counting batches, not examples (see this function's own "iterations"
+    note below), the per-step index a schedule like linear_warmup ramps against.
 
     Reshuffles training_data at the start of every epoch by default (unlike
     train_linear_classifier_network's fixed per-example order across epochs) - standard
@@ -233,7 +246,8 @@ def train_backprop_network_mini_batch(
             shuffle(epoch_data)
 
         for batch in _chunk_into_batches(epoch_data, batch_size):
-            student.learn_batch(learning_rate, batch)
+            current_lr = learning_rate(iterations) if callable(learning_rate) else learning_rate
+            student.learn_batch(current_lr, batch)
             iterations += 1
 
             if reference_classifier:
