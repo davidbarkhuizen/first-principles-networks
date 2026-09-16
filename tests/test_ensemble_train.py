@@ -4,7 +4,7 @@ import random
 
 import pytest
 
-from perceptron.ensemble_train import (
+from indrajala_ml.ensemble_train import (
     _available_memory_bytes,
     _estimate_bytes_per_example,
     _select_worker_count,
@@ -13,8 +13,8 @@ from perceptron.ensemble_train import (
     train_ensemble_parallel,
     train_ensemble_parallel_from_indices,
 )
-from perceptron.geometry import square_bounds
-from perceptron.model.fan_in_aware_backprop_classifier_network import FanInAwareBackpropClassifierNetwork
+from indrajala_ml.geometry import square_bounds
+from indrajala_ml.model.fan_in_aware_backprop_classifier_network import FanInAwareBackpropClassifierNetwork
 
 
 def _synthetic_dataset(counts: dict[int, int]) -> list[tuple[tuple[float, ...], int]]:
@@ -382,7 +382,7 @@ def test_select_worker_count_is_limited_by_available_memory(monkeypatch):
     # 1000 examples * 1000 bytes/example * 2.0x safety multiplier = 2,000,000 bytes/worker ->
     # floor(50_000_000 / 2_000_000) = 25 workers by memory alone - but cpu_count/class_count
     # below are set high enough not to bind, isolating the memory limit specifically
-    monkeypatch.setattr("perceptron.ensemble_train._available_memory_bytes", lambda: 100_000_000)
+    monkeypatch.setattr("indrajala_ml.ensemble_train._available_memory_bytes", lambda: 100_000_000)
     monkeypatch.setattr("os.cpu_count", lambda: 64)
 
     worker_count = _select_worker_count(
@@ -394,7 +394,7 @@ def test_select_worker_count_is_limited_by_available_memory(monkeypatch):
 
 def test_select_worker_count_is_limited_by_cpu_count_when_memory_is_abundant(monkeypatch):
 
-    monkeypatch.setattr("perceptron.ensemble_train._available_memory_bytes", lambda: 10_000_000_000)
+    monkeypatch.setattr("indrajala_ml.ensemble_train._available_memory_bytes", lambda: 10_000_000_000)
     monkeypatch.setattr("os.cpu_count", lambda: 4)
 
     worker_count = _select_worker_count(
@@ -406,7 +406,7 @@ def test_select_worker_count_is_limited_by_cpu_count_when_memory_is_abundant(mon
 
 def test_select_worker_count_is_limited_by_class_count(monkeypatch):
 
-    monkeypatch.setattr("perceptron.ensemble_train._available_memory_bytes", lambda: 10_000_000_000)
+    monkeypatch.setattr("indrajala_ml.ensemble_train._available_memory_bytes", lambda: 10_000_000_000)
     monkeypatch.setattr("os.cpu_count", lambda: 64)
 
     worker_count = _select_worker_count(
@@ -418,7 +418,7 @@ def test_select_worker_count_is_limited_by_class_count(monkeypatch):
 
 def test_select_worker_count_respects_an_explicit_lower_request(monkeypatch):
 
-    monkeypatch.setattr("perceptron.ensemble_train._available_memory_bytes", lambda: 10_000_000_000)
+    monkeypatch.setattr("indrajala_ml.ensemble_train._available_memory_bytes", lambda: 10_000_000_000)
     monkeypatch.setattr("os.cpu_count", lambda: 64)
 
     worker_count = _select_worker_count(
@@ -430,7 +430,7 @@ def test_select_worker_count_respects_an_explicit_lower_request(monkeypatch):
 
 def test_select_worker_count_never_goes_below_one_even_under_severe_memory_pressure(monkeypatch):
 
-    monkeypatch.setattr("perceptron.ensemble_train._available_memory_bytes", lambda: 1)
+    monkeypatch.setattr("indrajala_ml.ensemble_train._available_memory_bytes", lambda: 1)
     monkeypatch.setattr("os.cpu_count", lambda: 64)
 
     worker_count = _select_worker_count(
@@ -442,7 +442,7 @@ def test_select_worker_count_never_goes_below_one_even_under_severe_memory_press
 
 def test_select_worker_count_falls_back_to_cpu_and_class_count_when_memory_is_undetectable(monkeypatch):
 
-    monkeypatch.setattr("perceptron.ensemble_train._available_memory_bytes", lambda: None)
+    monkeypatch.setattr("indrajala_ml.ensemble_train._available_memory_bytes", lambda: None)
     monkeypatch.setattr("os.cpu_count", lambda: 4)
 
     worker_count = _select_worker_count(

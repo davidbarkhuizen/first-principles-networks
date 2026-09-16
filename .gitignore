@@ -161,7 +161,7 @@ data/digits/trained_model.json
 data/digits/trained_model_vectorized.json
 
 # MNIST source data (supplied locally) and its derived/regenerable artifacts - not committed
-# (large binary data; see perceptron/mnist_data.py's convert_parquet_to_binary)
+# (large binary data; see indrajala_ml/mnist_data.py's convert_parquet_to_binary)
 data/mnist/*.parquet
 data/mnist/*.bin
 data/mnist/trained_model.json

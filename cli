@@ -6,13 +6,13 @@ option="${1:-}"
 
 venv_root=".venv"
 os_packages="python3-tk cargo"
-rust_crate_root="rust/perceptron_array"
+rust_crate_root="rust/indrajala_ml_array"
 
 clean () {
 
     rm -rf .pytest_cache
-    rm -rf perceptron/__pycache__
-    rm -rf perceptron/demos/__pycache__
+    rm -rf indrajala_ml/__pycache__
+    rm -rf indrajala_ml/demos/__pycache__
     rm -rf tests/__pycache__
 }
 
@@ -103,7 +103,7 @@ run_tests () {
 demo () {
 
     activate_venv
-    python3 -m perceptron.demos.menu "$@"
+    python3 -m indrajala_ml.demos.menu "$@"
     deactivate_venv
 }
 

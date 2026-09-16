@@ -3,7 +3,7 @@ import random
 
 import pytest
 
-from perceptron.model.conv_kernel import ConvKernel
+from indrajala_ml.model.conv_kernel import ConvKernel
 
 
 def test_default_weights_are_zero_initialized_with_correct_fan_in():

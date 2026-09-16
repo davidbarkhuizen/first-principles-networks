@@ -3,8 +3,8 @@ import math
 import pytest
 
 from helpers import assert_randomize_breaks_symmetry, assert_snapshot_restore_round_trip, wire_fixed_single_hidden_node
-from perceptron.geometry import square_bounds
-from perceptron.model.fan_in_aware_backprop_classifier_network import FanInAwareBackpropClassifierNetwork
+from indrajala_ml.geometry import square_bounds
+from indrajala_ml.model.fan_in_aware_backprop_classifier_network import FanInAwareBackpropClassifierNetwork
 
 
 def test_predict_probability_is_identical_to_the_default_init_sibling():

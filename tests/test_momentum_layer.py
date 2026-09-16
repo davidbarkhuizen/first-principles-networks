@@ -1,9 +1,9 @@
 import pytest
 
-from perceptron.model.backprop_node import BackpropNode
-from perceptron.model.momentum_layer import make_momentum_layer_cls, make_momentum_node_cls
-from perceptron.model.state_layer import StateLayer
-from perceptron.model.state_node import StateNode
+from indrajala_ml.model.backprop_node import BackpropNode
+from indrajala_ml.model.momentum_layer import make_momentum_layer_cls, make_momentum_node_cls
+from indrajala_ml.model.state_layer import StateLayer
+from indrajala_ml.model.state_node import StateNode
 
 
 def _momentum_node(momentum: float, weight: float, bias: float):

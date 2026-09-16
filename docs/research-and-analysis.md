@@ -433,7 +433,7 @@ shape) tells a more textured story than the forward-pass-only table above:
 (Correctness held throughout both tables - max weight difference after a full training step ≤
 5e-16, float64 noise; every fused function checked against `array_layer.py`'s own `ArrayLayer`
 methods directly, not an independently-written reference formula - see
-`rust/perceptron_array/tests/test_fused_layer_ops.py`.)
+`rust/indrajala_ml_array/tests/test_fused_layer_ops.py`.)
 
 **The split result:** the fused Rust core beats numpy for per-example training (`batch_size=1`,
 `ArrayLayer.learn`'s own call shape) but loses to it, by a widening margin, for realistic

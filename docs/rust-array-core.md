@@ -2,7 +2,7 @@
 
 [← back to vectorization](vectorization.md)
 
-`rust/perceptron_array/` is a standalone PyO3 crate (`pyo3` as the only dependency, ~1030 lines
+`rust/indrajala_ml_array/` is a standalone PyO3 crate (`pyo3` as the only dependency, ~1030 lines
 across `array.rs`/`ops.rs`/`linalg.rs`/`ufuncs.rs`/`random.rs`/`mnist.rs`/`lib.rs` - `linalg.rs`
 alone accounts for over a third of it now, between the 2D×2D blocking/threading/SIMD work and the
 matvec SIMD work below) implementing
@@ -13,7 +13,7 @@ broadcasting cases and scalar operands, `__iadd__`/`__isub__`, `exp`, `__matmul_
 shape combinations), `outer`, `sum_axis0`, `argmax`, a hand-rolled xorshift128+ `uniform`, and
 `decode_mnist_pixels`. It's parity-tested against real numpy (and, where a pure-Python reference
 exists independent of numpy, against that too - a three-way match) across 525 tests in
-`rust/perceptron_array/tests/` (254 covering the operation subset itself, plus 271 covering
+`rust/indrajala_ml_array/tests/` (254 covering the operation subset itself, plus 271 covering
 `fused.rs`'s per-layer functions below). The one documented exception is `uniform`: a hand-rolled
 PRNG can never reproduce numpy's Mersenne Twister bit-for-bit, so its tests check statistical
 plausibility (range, mean, variance), not per-draw equality - see `random.rs`'s own doc comment.
@@ -27,8 +27,8 @@ overhead once that turned out to matter (see "status" below).
 
 **Status: built, parity-tested, and wired into production.** This core backs
 `RustArrayLayer`/`RustArrayMultiClassBackpropClassifierNetwork`
-(`perceptron/model/rust_array_layer.py`,
-`perceptron/model/rust_array_multiclass_backprop_classifier_network.py`) - see
+(`indrajala_ml/model/rust_array_layer.py`,
+`indrajala_ml/model/rust_array_multiclass_backprop_classifier_network.py`) - see
 [structure](structure.md#vectorized-array-based-classes) for the numpy-backed classes it replaced
 as production (numpy stays on permanently as the benchmarking mirror, per
 [vectorization](vectorization.md#decision)). [The production cutover plan](rust-production-cutover.md)
@@ -155,9 +155,9 @@ per-layer shapes keep the crate meaningfully below a from-scratch numpy comparis
 Two items this crate's own PR-staged build deliberately left alone, since resolved by
 [the production cutover plan](rust-production-cutover.md) as separate, later work rather than by
 changing this crate's own scope: **retargeting production code paths to this core** (done -
-`perceptron/model/rust_array_layer.py`/`rust_array_multiclass_backprop_classifier_network.py` are
+`indrajala_ml/model/rust_array_layer.py`/`rust_array_multiclass_backprop_classifier_network.py` are
 a new call path alongside the existing numpy one, not an import swap that removes it) and **any
-change to `perceptron/model/`** (the fused per-layer functions above did require crate changes,
+change to `indrajala_ml/model/`** (the fused per-layer functions above did require crate changes,
 but nothing in the existing pure-Python or numpy-backed classes was touched).
 
 ## what stays explicitly out of scope

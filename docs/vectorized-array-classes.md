@@ -2,8 +2,8 @@
 
 [← back to vectorization](vectorization.md)
 
-`perceptron/model/array_layer.py` and
-`perceptron/model/vectorized_multiclass_backprop_classifier_network.py` rewrite this codebase's
+`indrajala_ml/model/array_layer.py` and
+`indrajala_ml/model/vectorized_multiclass_backprop_classifier_network.py` rewrite this codebase's
 forward/backward/gradient math around whole-layer arrays instead of individual node objects,
 built purely additively (no existing class changed) and validated against real `numpy` as the
 concrete array backend - see [structure](structure.md#vectorized-array-based-classes) for the
@@ -49,7 +49,7 @@ multiplication (`W_next.T @ delta_next`), computed once, not `size` times.
 `BackpropNetworkBase` subclass and not built from `ArrayLayer`/`BackpropLayer` composition. It
 shares only the *external* contract every sibling network in this codebase already shares -
 `learn`, `learn_batch`, `classify_state`, `predict_probabilities`, `snapshot`/`restore`,
-`save`/`load` - not any internal implementation. `perceptron/model/backprop_node.py`/
+`save`/`load` - not any internal implementation. `indrajala_ml/model/backprop_node.py`/
 `backprop_layer.py`/`backprop_network_base.py` themselves are untouched.
 
 ## class design
@@ -132,7 +132,7 @@ not a forward-pass-only microbenchmark.
 
 ## what stays explicitly out of scope
 
-- **Any change to `perceptron/model/backprop_node.py`/`backprop_layer.py`/
+- **Any change to `indrajala_ml/model/backprop_node.py`/`backprop_layer.py`/
   `backprop_network_base.py`, or any existing sibling class.** Purely additive.
 - **Swapping the array backend from `numpy` to the Rust core.** That's
   [the Rust core](rust-array-core.md)'s own eventual follow-on, gated on that core existing and

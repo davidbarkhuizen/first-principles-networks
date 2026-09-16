@@ -2,15 +2,15 @@ import random
 
 import pytest
 
-from perceptron.evaluate import (
+from indrajala_ml.evaluate import (
     class_balanced_disagreement_rate,
     compare_on_random_point,
     sample_class_balanced_states,
     smoothed_series,
 )
-from perceptron.geometry import square_bounds
-from perceptron.model.linear_classifier_network import LinearClassifierNetwork
-from perceptron.train import reachable_reference_and_training_data
+from indrajala_ml.geometry import square_bounds
+from indrajala_ml.model.linear_classifier_network import LinearClassifierNetwork
+from indrajala_ml.train import reachable_reference_and_training_data
 
 from helpers import classifier_with_tiny_bounded_region, unreachable_class_classifier
 

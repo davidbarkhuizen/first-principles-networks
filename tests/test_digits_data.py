@@ -1,6 +1,6 @@
 import pytest
 
-from perceptron.digits_data import load_digits_dataset, split_train_test
+from indrajala_ml.digits_data import load_digits_dataset, split_train_test
 
 
 def test_load_digits_dataset_returns_the_full_bundled_dataset():

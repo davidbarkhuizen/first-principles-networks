@@ -2,18 +2,18 @@
 
 [← back to README](../README.md)
 
-Workplan for making [the Rust array core](rust-array-core.md) (`perceptron_array`) the primary
+Workplan for making [the Rust array core](rust-array-core.md) (`indrajala_ml_array`) the primary
 array backend actual training/demo code uses, per
 [vectorization](vectorization.md#decision)'s own recorded decision - while keeping
 [the numpy-backed vectorized classes](vectorized-array-classes.md) permanently available as the
 comparison point, for both wall-clock performance and, to the extent the RNG mismatch allows,
-trained results. Nothing in `perceptron/` changes as a result of this document itself - it's the
+trained results. Nothing in `indrajala_ml/` changes as a result of this document itself - it's the
 plan, not the implementation.
 
 ## the decisive finding this plan has to answer first
 
 Before any wiring work, a throwaway benchmark measured the *current* Rust core - real
-`perceptron_array.Array`, called from Python exactly the way a line-for-line port of
+`indrajala_ml_array.Array`, called from Python exactly the way a line-for-line port of
 `array_layer.py` would call it (`W @ x + b`, then `1.0 / (1.0 + exp(-z))` built from individual
 `Array` operators) - against the same forward pass in numpy, at this codebase's real production
 layer size (`dimension=784`, `hidden=16`):
@@ -123,7 +123,7 @@ sigmoid rather than composing it from `Array` operators) - see "operators the cu
 missing" below for why those matter if this fused approach is *not* taken. Each function has the
 same parity-test treatment as every existing operation in this crate
 (`tests/test_fused_layer_ops.py`): a randomized sweep checked directly against
-`perceptron/model/array_layer.py`'s own `ArrayLayer` methods, the actual production reference
+`indrajala_ml/model/array_layer.py`'s own `ArrayLayer` methods, the actual production reference
 these functions replace, not just against a formula written independently.
 
 **The go/no-go benchmark, on the corrected release-build baseline** (see "the decisive finding"
@@ -190,19 +190,19 @@ instead of per-layer), a separate, later piece of work from phase 1 itself, reco
 
 ## phase 1: `RustArrayLayer` / `RustArrayMultiClassBackpropClassifierNetwork`
 
-**Done** (`perceptron/model/rust_array_layer.py`, `perceptron/model/rust_array_multiclass_backprop_classifier_network.py`),
+**Done** (`indrajala_ml/model/rust_array_layer.py`, `indrajala_ml/model/rust_array_multiclass_backprop_classifier_network.py`),
 built unconditionally per the 2026-09-16 clarification above, not gated on phase 0's benchmark
 split. Mirrors `ArrayLayer`/
 `VectorizedMultiClassBackpropClassifierNetwork`'s design exactly (same method names, same
 external contract: `learn`, `learn_batch`, `randomize`/`randomized`, `classify_state`,
 `predict_probabilities`, `snapshot`/`restore`, `save`/`load`), but every method body is a single
 call into one of phase 0's fused Rust functions instead of a composition of `Array` operators.
-Reuses `perceptron/train.py`'s `train_linear_classifier_network`/`train_backprop_network_mini_batch`
+Reuses `indrajala_ml/train.py`'s `train_linear_classifier_network`/`train_backprop_network_mini_batch`
 completely unchanged - both already work via duck typing against exactly this contract, the same
 way every prior sibling network (including `VectorizedMultiClassBackpropClassifierNetwork`
 itself) plugs in.
 
-- `randomize()` calls `perceptron_array.uniform` - the RNG-non-reproducibility caveat
+- `randomize()` calls `indrajala_ml_array.uniform` - the RNG-non-reproducibility caveat
   ([the Rust core](rust-array-core.md#the-rng-exception)) applies directly here and shapes the
   parity strategy below.
 - `save()`/`load()`: own JSON envelope via `Array.tolist()`/`Array(nested_list)`, the same
@@ -255,7 +255,7 @@ accuracy and wall-clock together. Add a third column, not a new pattern:
 
 **Done.** Before this phase, only `demo_vectorized_uci_digit_recognition.py` and
 `demo_vectorized_mnist_recognition.py` instantiated the array-based classes (checked directly -
-nothing else in `perceptron/` did), so "production" had to concretely mean something about those
+nothing else in `indrajala_ml/` did), so "production" had to concretely mean something about those
 two demos' role. Resolved via phase 3's own new demos rather than by mutating the old ones:
 `demo_rust_vs_vectorized_uci_digit_recognition.py`/`demo_rust_vs_vectorized_mnist_recognition.py`
 now train/save/interactively-demo `RustArrayMultiClassBackpropClassifierNetwork` as the primary

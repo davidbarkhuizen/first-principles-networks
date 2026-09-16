@@ -6,9 +6,9 @@ is missing or doesn't match its expected SHA-256.
 Presence+checksum is checked first, network only as a last resort: a repeated `./cli setup`/
 `./cli fetch-data` against an unchanged local checkout performs zero network calls after the
 first successful fetch. Only MNIST is fetched here - UCI digits' digits.csv stays committed
-directly in `perceptron` (see the proposal's "what changes for UCI digits" section), with its own
+directly in `indrajala-ml` (see the proposal's "what changes for UCI digits" section), with its own
 `indrajala-datasets-uci-digits` packaging existing for metadata consistency, not because
-perceptron needs to fetch it.
+indrajala-ml needs to fetch it.
 
 Also regenerates each file's derived `.bin` (via `mnist_data.convert_parquet_to_binary`) if it's
 missing - a gap a CI dry run surfaced: `tests/test_mnist_data.py` reads the `.bin` files directly,
@@ -22,7 +22,7 @@ import os
 import sys
 import urllib.request
 
-# so `perceptron.mnist_data` imports regardless of cwd - this script is invoked as
+# so `indrajala_ml.mnist_data` imports regardless of cwd - this script is invoked as
 # `python scripts/fetch_datasets.py` from the repo root, which puts scripts/ (not the repo root)
 # on sys.path by default.
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -76,7 +76,7 @@ def ensure_binary_conversion(parquet_path: str, binary_path: str) -> None:
         print(f"{binary_path}: already present, skipping conversion")
         return
 
-    from perceptron.mnist_data import convert_parquet_to_binary
+    from indrajala_ml.mnist_data import convert_parquet_to_binary
 
     print(f"{binary_path}: converting from {parquet_path} ...")
     convert_parquet_to_binary(parquet_path, binary_path)

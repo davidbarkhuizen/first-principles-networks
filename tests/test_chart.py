@@ -3,8 +3,8 @@ import pytest
 
 matplotlib.use("Agg")
 
-from perceptron.geometry import square_bounds
-from perceptron.graphics.chart import (
+from indrajala_ml.geometry import square_bounds
+from indrajala_ml.graphics.chart import (
     disagreement_axis_bounds,
     new_axes,
     new_figure,
@@ -12,7 +12,7 @@ from perceptron.graphics.chart import (
     plot_training_data,
     reference_region_bounds,
 )
-from perceptron.model.linear_classifier_network import LinearClassifierNetwork
+from indrajala_ml.model.linear_classifier_network import LinearClassifierNetwork
 
 from helpers import classifier_with_bounded_square_region
 

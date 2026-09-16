@@ -2,10 +2,10 @@ import random
 
 import pytest
 
-from perceptron.model.backprop_node import BackpropNode
-from perceptron.model.l2_regularization_layer import make_l2_node_cls
-from perceptron.model.momentum_layer import make_momentum_node_cls
-from perceptron.model.state_node import StateNode
+from indrajala_ml.model.backprop_node import BackpropNode
+from indrajala_ml.model.l2_regularization_layer import make_l2_node_cls
+from indrajala_ml.model.momentum_layer import make_momentum_node_cls
+from indrajala_ml.model.state_node import StateNode
 
 
 def _plain_node(weight: float, bias: float, x: float) -> BackpropNode:

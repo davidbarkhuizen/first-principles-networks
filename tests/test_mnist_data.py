@@ -1,7 +1,7 @@
 import numpy as np
 import pytest
 
-from perceptron.mnist_data import (
+from indrajala_ml.mnist_data import (
     IMAGE_SIZE,
     RECORD_SIZE,
     convert_parquet_to_binary,

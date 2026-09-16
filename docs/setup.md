@@ -8,7 +8,7 @@
 - `python3-tk` (for the interactive matplotlib `TkAgg` backend used by `. cli demo`; the
   tests themselves are headless and don't need it)
 - `cargo`/`rustc` and `maturin` (for building [the Rust array core](rust-array-core.md),
-  `rust/perceptron_array/`)
+  `rust/indrajala_ml_array/`)
 
 ## install
 
@@ -19,7 +19,7 @@ dependencies (`matplotlib`, `pytest`, `pyarrow`, `numpy`, plus this package itse
 "dependencies" below - and see [vectorized array-based classes](vectorized-array-classes.md) for
 `numpy`'s scoped, benchmark-mirror-only role) from `requirements.txt`, installs `maturin` into
 that venv, builds the Rust array core into it (`maturin develop --release`, run from
-`rust/perceptron_array/` - see [the production cutover plan](rust-production-cutover.md) for why
+`rust/indrajala_ml_array/` - see [the production cutover plan](rust-production-cutover.md) for why
 a debug build isn't good enough here), and fetches the real MNIST dataset (see "MNIST data"
 below).
 `. cli build-rust` re-runs just the Rust build step, and `. cli fetch-data` re-runs just the
@@ -27,7 +27,7 @@ dataset fetch - each independently, without redoing the rest of setup.
 
 ## dependencies
 
-`pyproject.toml` declares this package (`perceptron`, versioned, installable via `pip install -e .`
+`pyproject.toml` declares this package (`indrajala-ml`, versioned, installable via `pip install -e .`
 - previously checkout-and-run only, relying on `python -m`'s implicit cwd-on-`sys.path` behavior)
 and its direct dependencies, unpinned. `requirements.txt` is the actual **pinned lock** `. cli
 setup` installs from (`pip install -r requirements.txt`, which includes `-e .`): every direct and
@@ -52,12 +52,12 @@ matplotlib's `Agg` backend, but never opens a window — so all of it runs unatt
 needed).
 
 This does **not** include [the Rust array core](rust-array-core.md)'s own tests
-(`rust/perceptron_array/tests/`, 525 tests) - those are pytest tests against the built extension,
+(`rust/indrajala_ml_array/tests/`, 525 tests) - those are pytest tests against the built extension,
 kept alongside the standalone crate rather than under the top-level `tests/` directory. Run them
 directly, after `. cli setup`/`. cli build-rust` has built the extension into the venv:
 
     source .venv/bin/activate
-    python -m pytest rust/perceptron_array/tests/
+    python -m pytest rust/indrajala_ml_array/tests/
 
 One exception: `tests/test_mnist_data.py`'s tests need the real MNIST parquet/binary files
 (`data/mnist/*.parquet`, `data/mnist/*.bin` - see `mnist_data.py`). These are deliberately not

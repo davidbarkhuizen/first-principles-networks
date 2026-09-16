@@ -1,11 +1,11 @@
 import random
 
-from perceptron.digits_data import load_digits_dataset, split_train_test
-from perceptron.model.softmax_multiclass_backprop_classifier_network import (
+from indrajala_ml.digits_data import load_digits_dataset, split_train_test
+from indrajala_ml.model.softmax_multiclass_backprop_classifier_network import (
     SoftmaxMultiClassBackpropClassifierNetwork,
 )
-from perceptron.multiclass_evaluate import accuracy
-from perceptron.train import train_linear_classifier_network
+from indrajala_ml.multiclass_evaluate import accuracy
+from indrajala_ml.train import train_linear_classifier_network
 
 
 def test_train_linear_classifier_network_drives_softmax_multiclass_backprop_on_real_digit_data():

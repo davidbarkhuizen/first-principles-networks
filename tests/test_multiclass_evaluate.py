@@ -1,7 +1,7 @@
 import pytest
 
-from perceptron.model.multiclass_backprop_classifier_network import MultiClassBackpropClassifierNetwork
-from perceptron.multiclass_evaluate import accuracy, confusion_matrix
+from indrajala_ml.model.multiclass_backprop_classifier_network import MultiClassBackpropClassifierNetwork
+from indrajala_ml.multiclass_evaluate import accuracy, confusion_matrix
 
 
 def _fixed_network() -> MultiClassBackpropClassifierNetwork:

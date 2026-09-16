@@ -1,9 +1,9 @@
 import pytest
 
-from perceptron.model.backprop_node import BackpropNode
-from perceptron.model.conv_kernel import ConvKernel
-from perceptron.model.conv_unit import ConvUnit
-from perceptron.model.state_node import StateNode
+from indrajala_ml.model.backprop_node import BackpropNode
+from indrajala_ml.model.conv_kernel import ConvKernel
+from indrajala_ml.model.conv_unit import ConvUnit
+from indrajala_ml.model.state_node import StateNode
 
 
 def _conv_unit(weights: list[float], bias: float, values: list[float]) -> ConvUnit:

@@ -1,8 +1,8 @@
 import pytest
 
-from perceptron.geometry import square_bounds
-from perceptron.model.backprop_classifier_network import BackpropClassifierNetwork
-from perceptron.model.multiclass_backprop_classifier_network import MultiClassBackpropClassifierNetwork
+from indrajala_ml.geometry import square_bounds
+from indrajala_ml.model.backprop_classifier_network import BackpropClassifierNetwork
+from indrajala_ml.model.multiclass_backprop_classifier_network import MultiClassBackpropClassifierNetwork
 
 # BackpropNetworkBase's own precondition checks (layer_sizes/dimension/input_bounds - see
 # backprop_network_base.py and bounds.validate_input_bounds), verified identically on both
