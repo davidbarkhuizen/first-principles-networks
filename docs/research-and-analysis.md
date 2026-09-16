@@ -784,3 +784,67 @@ is the more striking one: `dimension=784, hidden=30` is exactly the shape where 
 dominates most, and the Rust/numpy ratio nearly doubled. **Decision: adopted.** Unlike the
 `batch_size >= 32` work above (which targeted a shape no production path uses), this closes a gap
 in the shape *every* production training step actually runs.
+
+## Adam: tuned-XOR measurement (stage 3 of the Adam optimizer workplan)
+
+[`AdamBackpropClassifierNetwork`](adam-optimizer.md) (stage 2, correctness-validated only) measured
+for the first time against a real training run: the same pinned XOR scenario
+`test_backprop_training_pipeline.py` uses (`BackpropClassifierNetwork([8], 2,
+square_bounds(10.0))`, 300 examples, 100 epochs), 10 (data-generation seed, weight-init seed) pairs,
+`beta1`/`beta2`/`epsilon` at their Kingma & Ba defaults. Note: `docs/adam-optimizer.md`'s original
+"same scenario momentum's own baseline used" framing for this stage doesn't hold up - momentum's
+own baseline was actually measured on the 320-example real-MNIST proxy, not XOR (see "momentum:
+measured, not worth adopting" above); this stage instead reuses the pinned XOR scenario the
+binary-cross-entropy and ReLU investigations used, which is what `test_backprop_training_pipeline.py`
+actually pins.
+
+At the demo-tuned `learning_rate=1.0` every other sibling here was first measured at:
+
+| config | mean training accuracy | stdev |
+|---|---|---|
+| sigmoid, no Adam, lr=1.0 (tuned baseline) | 97.80% | 0.92% |
+| Adam, lr=1.0 (untuned) | 58.27% | 9.09% |
+
+Adam collapses badly at this rate - worse than cross-entropy's or ReLU's own untuned-rate dips.
+Mechanism: Adam's effective per-step move is `~learning_rate` regardless of gradient magnitude
+(the `m_hat / (sqrt(v_hat) + epsilon)` term is normalized to roughly unit scale once `t` is a few
+steps in), so a rate tuned for undamped sigmoid+quadratic SGD is far too large once every step is
+already near that scale by construction. Sweeping `learning_rate` down for Adam alone (still 10
+seeds):
+
+| learning_rate | mean training accuracy | stdev |
+|---|---|---|
+| 1.0 | 58.27% | 9.09% |
+| 0.5 | 71.73% | 7.78% |
+| 0.25 | 75.17% | 1.72% |
+| 0.1 | 90.73% | 10.49% |
+| 0.05 | 97.97% | 1.26% |
+| 0.01 | 98.63% | 0.67% |
+
+`lr=0.01` and `lr=0.05` both reach or exceed the sigmoid baseline's mean, with a smaller spread -
+re-measured at 15 seeds to check this wasn't the same small-sample mirage momentum's own re-test
+caught:
+
+| config (n=15) | mean training accuracy | stdev |
+|---|---|---|
+| sigmoid, no Adam, lr=1.0 (tuned baseline) | 97.33% | 1.66% |
+| Adam, lr=0.05 | 98.09% | 1.14% |
+| Adam, lr=0.01 | 98.38% | 0.75% |
+
+The direction holds at n=15: both retuned Adam configs beat the sigmoid baseline's mean by
+~0.8-1.0 points *and* have a visibly tighter spread (0.75-1.14% stdev vs. 1.66%) - one sigmoid
+seed (92.33%) is the kind of outlier Adam's per-parameter normalization looks to be damping out.
+The margin is still small relative to this toy problem's ~97-99% ceiling, so this reads as a real
+but modest edge, not a dramatic win.
+
+**Interpretation:** unlike momentum (hurts at its canonical value, flat-to-harmful once retuned)
+and unlike ReLU (loses badly untuned, then *clearly* wins retuned), Adam lands in between - it
+needs its own small learning rate to avoid actively hurting (the same "no default is safe without
+retuning" pattern cross-entropy/ReLU/momentum all showed at `lr=1.0`), and once retuned it's a
+modest, consistent-direction improvement in both mean and variance, not a null the way momentum's
+retuned sweep was. **Decision:** kept as a real, adopted capability, consistent with stage 2's
+default-`beta1`/`beta2`/`epsilon` posture - but, like ReLU and cross-entropy, not a drop-in
+replacement for sigmoid+quadratic's own tuned `learning_rate` without retuning. The real-MNIST-proxy
+batch-size sweep (stage 4) is where Adam's actual per-parameter-adaptive-rate selling point -
+smoothing per-example-noisy gradients, specifically at `batch_size=1` where momentum failed - has
+room to show a larger effect than this small, already near-ceiling toy problem could.
