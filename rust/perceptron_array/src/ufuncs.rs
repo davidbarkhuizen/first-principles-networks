@@ -1,6 +1,7 @@
+use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
 
-use crate::array::RustArray;
+use crate::array::{RustArray, Shape};
 
 /// Elementwise `e^x` over a whole array - mirrors `array_layer.sigmoid`'s own reliance on
 /// `exp`'s overflow behavior (a large negative `z` drives `exp(-z)` to `f64::INFINITY`, and
@@ -14,5 +15,29 @@ pub fn exp(arr: &RustArray) -> RustArray {
     RustArray {
         data: arr.data.iter().map(|value| value.exp()).collect(),
         shape: arr.shape,
+    }
+}
+
+/// Sums a 2D array's rows into a 1D vector - the one fixed-axis (`axis=0`) reduction
+/// docs/numpy-interface-subset.md's table actually requires
+/// (`accumulate_gradient_batch`'s batched bias gradient, `self._grad_b += self.delta_batch.sum(axis=0)`),
+/// added after cross-checking the real implementation - see that document's own "re-checked
+/// against the built implementation" note. General axis-parameterized reduction stays out of
+/// scope; this is the one fixed case, not a general `axis=` parameter.
+#[pyfunction]
+pub fn sum_axis0(arr: &RustArray) -> PyResult<RustArray> {
+    match arr.shape {
+        Shape::Matrix(rows, cols) => {
+            let mut out = vec![0.0; cols];
+            for row in 0..rows {
+                for col in 0..cols {
+                    out[col] += arr.data[row * cols + col];
+                }
+            }
+            Ok(RustArray::from_vector(out))
+        }
+        Shape::Vector(_) => Err(PyValueError::new_err(
+            "sum_axis0 requires a 2D array, got a 1D vector",
+        )),
     }
 }
