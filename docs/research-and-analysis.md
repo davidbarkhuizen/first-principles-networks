@@ -523,3 +523,36 @@ of effect suggests the matmul inner loop (`linalg.rs`, indexed slice access,
 `out_row[col] += a_value * b_row[col]`) isn't auto-vectorizing even with AVX2 available - the next
 candidates (blocking, threading, explicit SIMD intrinsics) target that directly instead of hoping
 the compiler finds it unassisted.
+
+## cache-blocked matmul: a real, shape-dependent win, gated by size
+
+Second candidate for the `batch_size >= 32` gap: cache-block `linalg.rs::matmul`'s 2D×2D case
+over `row` and `k` (fixed-size slabs reused across multiple output rows before moving on),
+instead of the plain `row -> k -> col` loop phase 0a left in place. Measured directly with raw
+matmul calls (not the full training-step benchmark) at three shapes, to isolate the effect from
+noise: two of this codebase's own real matmul shapes, plus one exaggerated size to confirm
+blocking works at all before tuning it for this codebase's scale:
+
+| shape | `b` size | unblocked | unconditionally blocked | ratio |
+|---|---|---|---|---|
+| `forward_batch`-like: `(512,784)@(784,16)` | ~100KB | 1.94ms | 2.21ms | **0.87x - a regression** |
+| `accumulate_gradient_batch`-like: `(10,512)@(512,784)` | ~3.2MB | 1.28ms | 0.96ms | **1.33x faster** |
+| exaggerated: `(2048,2048)@(2048,2048)` | 32MB | 5251ms | 2527ms | **2.08x faster** |
+
+Blocking only helps once `b` (the operand that gets re-streamed once per output row in the
+unblocked loop) is big enough to not already fit in cache - at `dimension=784, hidden=16`, `b` is
+only ~100KB, already cache-resident, so blocking's extra bookkeeping was pure overhead with
+nothing to relieve. **Fix, not abandonment**: gate blocking on `b`'s size
+(`c1 * c2 * size_of::<f64>()`), with a 256KB threshold comfortably below a typical machine's L2
+cache - below it, run the plain unblocked loop (verified back to baseline speed, not just
+"not worse"); at or above it, block. Re-measured on the full training-step benchmark
+(`dimension=784, hidden=10`, 3 runs): `batch_size=512`'s ratio improved from a 1.80x-2.23x range
+(no blocking) to a 1.53x-1.74x range (size-gated blocking) - a real, reproducible ~15-25%
+reduction in that batch size's gap, with `batch_size=1`/`8` unaffected (matches expectation -
+`batch_size=1`'s `learn()` path never even reaches the 2D×2D matmul case; `layer_forward_batch`'s
+own matmul stays under the threshold at this codebase's real `dimension=784` architecture
+regardless of batch size, since `c1`/`c2` there are `dimension`/`hidden`, not `batch`). **Decision:
+adopted** - both branches verified bit-identical to the previous single-path implementation (525
+existing tests unchanged; blocking only restructures loop order, not summation order), and this is
+a genuine, if modest, step in closing docs/structure.md's tracked follow-on gap, not a full
+resolution of it. Threading and SIMD intrinsics remain open next steps for the rest of that gap.
