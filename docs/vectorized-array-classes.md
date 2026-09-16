@@ -83,7 +83,7 @@ shares only the *external* contract every sibling network in this codebase alrea
 
 `load_mnist_dataset`/`load_mnist_records_at_indices` decode into `tuple[float, ...]` per example -
 the "60000 x 784 = 47 million boxed Python float objects" cost
-[research and analysis](research-and-analysis.md#parallelizing-mnist-training) measured and
+[research and analysis](research-multiclass-and-loss.md#parallelizing-mnist-training) measured and
 worked around by lazy per-worker decoding, not fixed at the root. `mnist_data.py`'s
 `load_mnist_dataset_as_array(path, limit=None) -> np.ndarray` (shape `(n, 784)`) addresses the
 root cause directly: `np.frombuffer(data, dtype=np.uint8).reshape(n, 785)[:, :-1]

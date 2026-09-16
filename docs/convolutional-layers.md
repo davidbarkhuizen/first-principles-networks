@@ -100,7 +100,7 @@ At a comparable trainable-parameter budget (2410 dense vs. 2530 conv), 8 seeds e
 accuracy came out statistically indistinguishable (96.69% dense vs. 96.52% conv, well within each
 other's stdev) - no measured win for convolution at this scale, honestly reported rather than
 stretched into one. See
-[research and analysis](research-and-analysis.md#convolutional-layers-on-uci-digits) for the full
+[research and analysis](research-backprop-siblings.md#convolutional-layers-on-uci-digits) for the full
 writeup. `ConvMultiClassBackpropClassifierNetwork` remains a real, correct, tested capability;
 whether a real-MNIST-scale run (more spatial structure for convolution's advantages to
 potentially show up in, at real wall-clock cost) is worth running is an open item - see

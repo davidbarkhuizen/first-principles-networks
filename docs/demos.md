@@ -224,10 +224,10 @@ reports each one's measured accuracy and wall-clock training time side by side. 
 accuracy (99.5%/96.9% pure-Python, 99.5%/96.9% numpy, 99.7%/97.5% Rust train/test) at 68.89s
 (pure-Python) vs. 4.30s (numpy) vs. 1.30s (Rust) - a 3.30x speedup over numpy and 52.89x over
 pure-Python, close to [research and
-analysis](research-and-analysis.md#phase-2-tier-2-real-per-example-training-is-a-genuine-win-at-both-scales-measured)'s
+analysis](research-rust-performance.md#phase-2-tier-2-real-per-example-training-is-a-genuine-win-at-both-scales-measured)'s
 own recorded 3.40x figure (real training runs vary run to run). Both figures above predate
 2026-09-16's later matmul SIMD work (see [research and
-analysis](research-and-analysis.md#simd-for-the-matvec-production-path-a-bigger-win-than-the-batch32-work-it-followed)) -
+analysis](research-rust-performance.md#simd-for-the-matvec-production-path-a-bigger-win-than-the-batch32-work-it-followed)) -
 re-running this demo today would show a faster Rust time and a higher ratio, around 3.6x per that
 entry's own measurement, not re-captured here in full per-network detail. Saves the trained Rust model to
 `data/digits/trained_model_rust.json`, printing how to reload it without retraining. Plots all
@@ -281,14 +281,14 @@ hidden layer and no synchronization between them at all - trained as 10 parallel
 `multiprocessing` jobs (`ensemble_train.train_ensemble_parallel_from_indices`), memory-aware
 worker count included. The design behind this, and a real memory-exhaustion failure hit (and
 genuinely fixed, not just worked around) while building it at full scale, are written up in
-[research and analysis](research-and-analysis.md#parallelizing-mnist-training). One-time setup:
+[research and analysis](research-multiclass-and-loss.md#parallelizing-mnist-training). One-time setup:
 converts the supplied `data/mnist/mnist-{train,test}.parquet` files to a flat binary format
 (`mnist_data.convert_parquet_to_binary`) the first time it's run, so training itself never needs
 `pyarrow`. Measured on this machine: 29.6 minutes wall-clock for the full training run, memory
 stable throughout, 96.01% held-out test accuracy - up from 89.4% before switching to the
 fan-in-aware sibling (a real, +6.6-point improvement from the init fix alone, at the same
 wall-clock cost - see [research and
-analysis](research-and-analysis.md#the-ensemblereal-mnist-investigation)). Saves the trained
+analysis](research-multiclass-and-loss.md#the-ensemblereal-mnist-investigation)). Saves the trained
 model to `data/mnist/trained_model.json` (gitignored, same as the
 digit-recognition demo's), printing how to reload it without retraining. Plots the same chart set
 as the digit-recognition demo: a per-digit training-accuracy-by-epoch curve, a confusion matrix,
@@ -303,7 +303,7 @@ Select **Vectorized MNIST recognition (numpy)** from the menu it prints.
 Runs `indrajala_ml/demos/demo_vectorized_mnist_recognition.py` - headless, console-only. Trains
 `MultiClassBackpropClassifierNetwork` and `VectorizedMultiClassBackpropClassifierNetwork` for one
 real epoch each over the full 60000-example MNIST training set (`[30]`-node hidden layer, the
-same architecture [research and analysis](research-and-analysis.md#parallelizing-mnist-training)'s
+same architecture [research and analysis](research-multiclass-and-loss.md#parallelizing-mnist-training)'s
 own ~12.5-minutes/epoch pure-Python figure used), reporting test accuracy and wall-clock epoch
 time side by side, plus timing `load_mnist_dataset_as_array`'s bulk decode against
 `load_mnist_dataset`'s tuple-per-example decode on the same file. Measured: 32.7s vs. 18.45 min
@@ -326,10 +326,10 @@ training set (`[30]`-node hidden layer, same architecture as the demo above), re
 accuracy and wall-clock epoch time side by side. Measured: matching accuracy (93.4%/93.3% pure-Python,
 93.4%/93.2% numpy, 93.0%/92.9% Rust train/test) at 1128.9s (pure-Python) vs. 15.9s (numpy) vs.
 11.4s (Rust) - a 1.39x speedup over numpy and 98.64x over pure-Python, close to [research and
-analysis](research-and-analysis.md#phase-2-tier-2-real-per-example-training-is-a-genuine-win-at-both-scales-measured)'s
+analysis](research-rust-performance.md#phase-2-tier-2-real-per-example-training-is-a-genuine-win-at-both-scales-measured)'s
 own recorded 1.31x multi-seed figure. Both figures above predate 2026-09-16's later matmul SIMD
 work (see [research and
-analysis](research-and-analysis.md#simd-for-the-matvec-production-path-a-bigger-win-than-the-batch32-work-it-followed)) -
+analysis](research-rust-performance.md#simd-for-the-matvec-production-path-a-bigger-win-than-the-batch32-work-it-followed)) -
 re-running this demo today would show a faster Rust time and a higher ratio, around 2.6x per that
 entry's own measurement, not re-captured here in full per-network detail. Takes on the order of
 15-20 minutes to run, mostly the pure-Python epoch.
@@ -388,15 +388,15 @@ comparison's measured accuracy, and plots a training-accuracy-by-epoch chart per
 - **Multi-class loss function** - `MultiClassBackpropClassifierNetwork` (one-vs-rest, MSE) vs
   `SoftmaxMultiClassBackpropClassifierNetwork` (softmax, cross-entropy) on the full UCI digits
   set, matching `demo_uci_digit_recognition.py`'s own architecture and hyperparameters exactly
-  (see [research and analysis](research-and-analysis.md#softmaxcross-entropy-re-alignment)).
+  (see [research and analysis](research-multiclass-and-loss.md#softmaxcross-entropy-re-alignment)).
 - **Binary loss function** - `BackpropClassifierNetwork` (quadratic) vs
   `BinaryCrossEntropyBackpropClassifierNetwork` (cross-entropy) on the XOR target, at both the
   shared learning rate and cross-entropy's own retuned rate (see
-  [research and analysis](research-and-analysis.md#binary-cross-entropy-for-backpropclassifiernetwork)).
+  [research and analysis](research-multiclass-and-loss.md#binary-cross-entropy-for-backpropclassifiernetwork)).
 - **Weight-init scheme** - this codebase's fan-in-aware production default vs a Xavier/Glorot
   variant implemented only locally in this demo file (not a real library class, since it was
   measured not worth adopting - see
-  [research and analysis](research-and-analysis.md#xavierglorot-init-measured-not-worth-adopting)),
+  [research and analysis](research-backprop-siblings.md#xavierglorot-init-measured-not-worth-adopting)),
   on UCI digits.
 
 Takes about 4 minutes end to end (measured directly). Unlike the other backprop demos, this one

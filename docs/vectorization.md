@@ -67,7 +67,7 @@ now that [the production cutover](rust-production-cutover.md) is done (see "deci
 genuine speedup over numpy on this codebase's actual `learn()`-shaped (`batch_size=1`) training
 paths, first measured at **3.40x** at UCI digits scale and **1.31x** at real MNIST scale (see [the
 Rust core](rust-array-core.md) and [research and
-analysis](research-and-analysis.md#phase-2-tier-2-real-per-example-training-is-a-genuine-win-at-both-scales-measured)),
+analysis](research-rust-performance.md#phase-2-tier-2-real-per-example-training-is-a-genuine-win-at-both-scales-measured)),
 moved to **~3.6x**/**~2.6x** by later matmul SIMD work targeting the `batch_size=1` shape directly
 (see [research and
-analysis](research-and-analysis.md#simd-for-the-matvec-production-path-a-bigger-win-than-the-batch32-work-it-followed)).
+analysis](research-rust-performance.md#simd-for-the-matvec-production-path-a-bigger-win-than-the-batch32-work-it-followed)).

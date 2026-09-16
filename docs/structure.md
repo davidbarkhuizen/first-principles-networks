@@ -470,7 +470,7 @@ network can be reused without retraining.
 `SoftmaxMultiClassBackpropClassifierNetwork` is an additive sibling of
 `MultiClassBackpropClassifierNetwork` using softmax + cross-entropy instead of one-vs-rest
 sigmoid + quadratic loss - the canonical treatment for a mutually-exclusive multi-class target
-like digit classification (see `docs/research-and-analysis.md`'s "softmax/cross-entropy
+like digit classification (see `docs/research-multiclass-and-loss.md`'s "softmax/cross-entropy
 re-alignment" entry for the full derivation and measured comparison). Structurally it's a single
 class-attribute override (`output_layer_cls = SoftmaxOutputLayer`, see
 `indrajala_ml/model/softmax_output_layer.py`) - softmax's cross-node coupling only touches the
@@ -530,11 +530,11 @@ touching any other caller), one per digit, each trained on its own class-balance
 synchronization of any kind between them, dispatched as parallel `multiprocessing` jobs
 (`ensemble_train.train_ensemble_parallel_from_indices`). This design, and the real
 memory-exhaustion bug hit (and fixed) while building it at full scale, is written up in
-[research and analysis](research-and-analysis.md#parallelizing-mnist-training). The switch to
+[research and analysis](research-multiclass-and-loss.md#parallelizing-mnist-training). The switch to
 fan-in-aware init - the same fix "backprop siblings" describes - took this demo's own measured
 result from 89.4% to 96.01% held-out test accuracy at the same wall-clock cost (~30 minutes,
 measured directly at 29.6 minutes for the current configuration - see [research and
-analysis](research-and-analysis.md#the-ensemblereal-mnist-investigation)).
+analysis](research-multiclass-and-loss.md#the-ensemblereal-mnist-investigation)).
 
 `demo_mnist_ensemble_capture.py` classifies a live, mouse-painted digit with `EnsembleBackpropClassifierNetwork.load`
 (the model the demo above trains and saves), the same overall interaction as
@@ -586,7 +586,7 @@ each) for apply/snapshot/restore.
 Validated on UCI digits at a comparable trainable-parameter budget (2410 dense vs. 2530 conv, 8
 seeds each): mean test accuracy came out statistically indistinguishable (96.69% dense vs. 96.52%
 conv) - a clean null, not a win, honestly reported rather than stretched into one (see
-[research and analysis](research-and-analysis.md#convolutional-layers-on-uci-digits)). Stacked
+[research and analysis](research-backprop-siblings.md#convolutional-layers-on-uci-digits)). Stacked
 conv layers, multi-channel input, `'same'` padding, and pooling are all out of scope - a single
 conv layer directly after the non-trainable input needs no backprop-through-convolution, since
 nothing before it is ever trained.
@@ -629,15 +629,15 @@ bit-close parity-checked against the pure-Python reference
 (`tests/test_rust_array_multiclass_backprop_model.py`), then measured on real training runs: a
 genuine speedup over numpy, first measured at 3.40x at UCI digits scale and 1.31x at real MNIST
 scale (see [research and
-analysis](research-and-analysis.md#phase-2-tier-2-real-per-example-training-is-a-genuine-win-at-both-scales-measured)),
+analysis](research-rust-performance.md#phase-2-tier-2-real-per-example-training-is-a-genuine-win-at-both-scales-measured)),
 with statistically indistinguishable accuracy. `demo_rust_vs_vectorized_uci_digit_recognition.py`/
 `demo_rust_vs_vectorized_mnist_recognition.py` run all three (pure-Python, numpy, Rust) side by
 side.
 
 Two further SIMD optimization passes (both 2026-09-16, see [research and
-analysis](research-and-analysis.md#explicit-simd-intrinsics-a-real-further-win-with-fused-multiply-add-kept-consistent-across-every-path)
+analysis](research-rust-performance.md#explicit-simd-intrinsics-a-real-further-win-with-fused-multiply-add-kept-consistent-across-every-path)
 and
-[research and analysis](research-and-analysis.md#simd-for-the-matvec-production-path-a-bigger-win-than-the-batch32-work-it-followed)
+[research and analysis](research-rust-performance.md#simd-for-the-matvec-production-path-a-bigger-win-than-the-batch32-work-it-followed)
 for the full writeups) moved that number since. Neither training path above needs `batch_size >= 32`
 mini-batch matmul performance - both use `learn()`'s per-example (`batch_size=1`) shape
 exclusively - but that gap against numpy's BLAS was closed anyway: cache-blocking, threading, and
@@ -675,7 +675,7 @@ ranked.
   `learning_rate` for all epochs; untested whether a schedule changes convergence or final
   accuracy on any of this codebase's targets. Now has a concrete motivating case, not just a
   general gap: the learning-rate-vs-batch-size sweep (see [research and
-  analysis](research-and-analysis.md#the-learning-rate-vs-batch-size-follow-up-the-confound-was-real-and-momentum-still-doesnt-help))
+  analysis](research-backprop-siblings.md#the-learning-rate-vs-batch-size-follow-up-the-confound-was-real-and-momentum-still-doesnt-help))
   found that naive linear learning-rate scaling diverges completely at `batch_size=128` - a
   gradual warmup is the standard fix in the literature, and this codebase now has a real, reachable
   failure case to test it against rather than a hypothetical one. Not yet started.
@@ -693,7 +693,7 @@ ranked.
   came back a flat null rather than a clear loss - real MNIST has meaningfully more spatial
   structure (28x28 vs. 8x8) for convolution's own advantages to potentially show up in, but a
   full run costs on the order of 30 minutes per architecture per seed (see
-  [research and analysis](research-and-analysis.md#the-ensemblereal-mnist-investigation)), a
+  [research and analysis](research-multiclass-and-loss.md#the-ensemblereal-mnist-investigation)), a
   real wall-clock cost this UCI-digits result alone doesn't settle is worth spending. Not yet
   run.
 - **Stacking conv layers, and pooling** - `conv_layer.py`'s own docs (see "convolutional layer"
@@ -715,6 +715,6 @@ ranked.
 ### infrastructure that protects the rigor
 
 No open items in this tier. The three that used to be here - matmul performance (see [research
-and analysis](research-and-analysis.md#simd-for-the-matvec-production-path-a-bigger-win-than-the-batch32-work-it-followed)),
+and analysis](research-rust-performance.md#simd-for-the-matvec-production-path-a-bigger-win-than-the-batch32-work-it-followed)),
 CI (see [setup](setup.md#ci)), and Python packaging/pinning (see
 [setup](setup.md#dependencies)) - are all closed; follow those links for the detail.

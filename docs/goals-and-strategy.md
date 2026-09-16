@@ -39,7 +39,7 @@ real framework would hide.
   description of current state without cross-checking the source - a standing practice, not a
   one-time cleanup, the same way the matmul SIMD work's own docs got revisited and corrected once
   the code moved past what they said (see [research and
-  analysis](research-and-analysis.md#simd-for-the-matvec-production-path-a-bigger-win-than-the-batch32-work-it-followed)).
+  analysis](research-rust-performance.md#simd-for-the-matvec-production-path-a-bigger-win-than-the-batch32-work-it-followed)).
 - **New capability is added the way existing capability was**: hand-derived, sibling-not-retrofit,
   parity-tested against a reference, with the investigation kept legible. Speed of arrival matters
   less than whether the result can be trusted.

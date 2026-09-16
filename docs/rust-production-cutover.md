@@ -33,7 +33,7 @@ numpy, with the gap widening with batch size.
 
 **Corrected: this benchmark was run against a debug build.** `./cli setup`/`./cli build-rust` ran
 a plain `maturin develop` - a debug (unoptimized) build - and re-measuring during phase 0
-(see [research and analysis](research-and-analysis.md#the-rust-array-cores-65-335x-slower-than-numpy-finding-was-a-debug-build-artifact)
+(see [research and analysis](research-rust-performance.md#the-rust-array-cores-65-335x-slower-than-numpy-finding-was-a-debug-build-artifact)
 for the full four-way table) found that build mode, not the per-op composition itself, was almost
 the entire gap: the *same* pre-fix code under a **release** build was only ~3-10x slower, not
 65-335x. `./cli build-rust`/`./cli setup` now build with `maturin develop --release`; the table
@@ -158,7 +158,7 @@ it was measured: **the fused Rust core beats numpy for per-example training (`ba
 `ArrayLayer.learn`'s own shape) but loses to it, by a widening margin, for realistic mini-batch
 training (`batch_size >= 32`, `learn_batch`'s shape)** - the opposite split from what the risks
 section guessed (it expected batching to be Rust's strength and per-example its weakness). See
-[research and analysis](research-and-analysis.md#the-rust-array-cores-65-335x-slower-than-numpy-finding-was-a-debug-build-artifact)
+[research and analysis](research-rust-performance.md#the-rust-array-cores-65-335x-slower-than-numpy-finding-was-a-debug-build-artifact)
 for the full numbers and how they were produced. **Resolved 2026-09-16 (see "the decisive
 finding" above): phase 1 is built in full** (both `learn` and `learn_batch`), not scoped to only
 the per-example path this benchmark currently favors - adoption is unconditional, and the
@@ -225,7 +225,7 @@ Two tiers, matching what's actually checkable:
   - the honest substitute for "same seed → same weights," which the RNG mismatch makes
   structurally impossible (see [the Rust core](rust-array-core.md#the-rng-exception)). Measured at
   both UCI digits (8 seeds) and real MNIST (3 seeds, 1 epoch each) scale - see [research and
-  analysis](research-and-analysis.md#phase-2-tier-2-real-per-example-training-is-a-genuine-win-at-both-scales-measured):
+  analysis](research-rust-performance.md#phase-2-tier-2-real-per-example-training-is-a-genuine-win-at-both-scales-measured):
   **3.40x faster at UCI digits, 1.31x faster at real MNIST**, both with statistically
   indistinguishable test accuracy. This landed as a genuine, not just unconditionally-accepted,
   win - both of this codebase's actual production training paths use `learn()`'s per-example
@@ -285,7 +285,7 @@ path and numpy as the comparison - see [structure](structure.md#vectorized-array
    issue than the reorder itself: `./cli build-rust`/`./cli setup` were building this crate in
    debug mode, which is what made the original gate benchmark read as 65-335x slower than numpy
    instead of the real ~3-10x - see "the decisive finding" above and
-   [research and analysis](research-and-analysis.md#the-rust-array-cores-65-335x-slower-than-numpy-finding-was-a-debug-build-artifact).
+   [research and analysis](research-rust-performance.md#the-rust-array-cores-65-335x-slower-than-numpy-finding-was-a-debug-build-artifact).
 2. **Done.** Fused forward functions (`layer_forward`, `layer_forward_batch`) + parity tests.
 3. **Done.** Fused backward/gradient functions (`layer_output_delta`, `layer_hidden_delta`,
    `layer_hidden_delta_batch`, `layer_accumulate_gradient`, `layer_accumulate_gradient_batch`,
@@ -294,7 +294,7 @@ path and numpy as the comparison - see [structure](structure.md#vectorized-array
    1) reset the whole gate's premise.
 4. **Done.** Go/no-go benchmark re-run against numpy at realistic batch sizes; recorded in "0b.
    fuse each layer operation into one Rust call" above and
-   [research and analysis](research-and-analysis.md#the-rust-array-cores-65-335x-slower-than-numpy-finding-was-a-debug-build-artifact) -
+   [research and analysis](research-rust-performance.md#the-rust-array-cores-65-335x-slower-than-numpy-finding-was-a-debug-build-artifact) -
    a split result (faster at `batch_size=1`, slower and widening from `batch_size=32` up).
    Per the 2026-09-16 clarification above, adoption is unconditional, so this data is a progress
    record, not a gate phase 1 had to clear.
@@ -317,10 +317,10 @@ is this codebase's production array-backed network; `VectorizedMultiClassBackpro
 closing the naive matmul's remaining gap at `batch_size >= 32` - was never part of this plan, and
 is itself now done too (same day, cache-blocking + threading + explicit SIMD intrinsics, see
 [structure](structure.md#possible-next-steps) and
-[research and analysis](research-and-analysis.md#explicit-simd-intrinsics-a-real-further-win-with-fused-multiply-add-kept-consistent-across-every-path)):
+[research and analysis](research-rust-performance.md#explicit-simd-intrinsics-a-real-further-win-with-fused-multiply-add-kept-consistent-across-every-path)):
 `batch_size=512`'s Rust/numpy ratio moved from a widening multi-x loss to 0.84x-1.04x. A second,
 larger follow-on win landed the same day on the `Matrix @ Vector` matmul case - `self.W @ x`, the
 shape phase 2's own `batch_size=1` benchmark above already runs on every `learn()` call - moving
 the real per-example training-run speedup this phase measured (3.40x/1.31x) to ~3.6x/~2.6x (see
 [research and
-analysis](research-and-analysis.md#simd-for-the-matvec-production-path-a-bigger-win-than-the-batch32-work-it-followed)).
+analysis](research-rust-performance.md#simd-for-the-matvec-production-path-a-bigger-win-than-the-batch32-work-it-followed)).

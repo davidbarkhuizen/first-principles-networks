@@ -41,7 +41,7 @@ functions above to ~2-7x for a synthetic forward pass. On this codebase's actual
 exclusively, not `learn_batch`), the fused Rust core measures as a genuine, real-training-run win,
 first measured at **3.40x faster at UCI digits scale, 1.31x faster at real MNIST scale** (see
 [research and
-analysis](research-and-analysis.md#phase-2-tier-2-real-per-example-training-is-a-genuine-win-at-both-scales-measured)),
+analysis](research-rust-performance.md#phase-2-tier-2-real-per-example-training-is-a-genuine-win-at-both-scales-measured)),
 with statistically indistinguishable accuracy.
 
 Two further optimization passes moved that number since, both 2026-09-16:
@@ -50,14 +50,14 @@ Two further optimization passes moved that number since, both 2026-09-16:
   sizes) was tracked as follow-on work, not a blocker for the `batch_size=1` production paths -
   now **closed**: size-gated cache-blocking, threaded row-splitting, and an AVX2+FMA SIMD path
   (see [structure](structure.md#possible-next-steps) and [research and
-  analysis](research-and-analysis.md#explicit-simd-intrinsics-a-real-further-win-with-fused-multiply-add-kept-consistent-across-every-path))
+  analysis](research-rust-performance.md#explicit-simd-intrinsics-a-real-further-win-with-fused-multiply-add-kept-consistent-across-every-path))
   moved `batch_size=512`'s Rust/numpy ratio from a widening multi-x loss to **0.84x-1.04x**,
   bit-identical to the original naive loop's output at every stage.
 - **The `Matrix @ Vector`/`Vector @ Matrix` cases** (`self.W @ x`-shaped, this codebase's *actual*
   `batch_size=1` production path - initially assumed not to matter at this scale, then measured
   directly and found to be ~97% of a fused forward call's cost) got the same AVX2+FMA treatment
   (see [research and
-  analysis](research-and-analysis.md#simd-for-the-matvec-production-path-a-bigger-win-than-the-batch32-work-it-followed))
+  analysis](research-rust-performance.md#simd-for-the-matvec-production-path-a-bigger-win-than-the-batch32-work-it-followed))
   - bit-identical between the scalar and AVX2 paths, though not to the old naive-sequential-sum
   baseline (a deliberate, documented summation-order change, same accepted-risk category as
   numpy's own internal reduction order). This moved the real, measured, per-example training-run
