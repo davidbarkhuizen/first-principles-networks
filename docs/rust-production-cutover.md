@@ -28,10 +28,19 @@ layer size (`dimension=784`, `hidden=16`):
 
 (Correctness was checked alongside timing - max elementwise difference ≤ 1e-15 at every batch
 size, floating-point noise, not a bug.) This is the opposite of "primary in production": as
-currently composed, the Rust core is two to three orders of magnitude slower than numpy, and the
-gap *widens* with batch size rather than closing. Two separate causes, both already hinted at
-(but not measured) in [the Rust core](rust-array-core.md#expected-vs-measured-performance)'s own
-"a real PyO3 extension also carries its own call-marshaling overhead" caveat:
+currently composed, the Rust core appeared to be two to three orders of magnitude slower than
+numpy, with the gap widening with batch size.
+
+**Corrected: this benchmark was run against a debug build.** `./cli setup`/`./cli build-rust` ran
+a plain `maturin develop` - a debug (unoptimized) build - and re-measuring during phase 0
+(see [research and analysis](research-and-analysis.md#the-rust-array-cores-65-335x-slower-than-numpy-finding-was-a-debug-build-artifact)
+for the full four-way table) found that build mode, not the per-op composition itself, was almost
+the entire gap: the *same* pre-fix code under a **release** build was only ~3-10x slower, not
+65-335x. `./cli build-rust`/`./cli setup` now build with `maturin develop --release`; the table
+above is kept as-recorded (it's what was actually measured, and the debug-build discovery is
+itself a real finding worth keeping legible) rather than silently edited, but it must not be read
+as the current gap. The two causes below are both real and both worth fixing, just at a much
+smaller scale than first measured:
 
 1. **Per-call FFI/marshaling overhead, multiplied by call count.** A line-for-line port composes
    a forward pass from 4-6 separate `Array` method/operator calls (`@`, `+`, a subtraction for
@@ -39,19 +48,22 @@ gap *widens* with batch size rather than closing. Two separate causes, both alre
    `Array`. This is the same granularity mistake vectorization itself was built to fix ("one
    Python object, one method call, per node") recurring one level down ("one Rust array, one FFI
    call, per operation").
-2. **`linalg.rs::matmul`'s 2D×2D loop order is cache-hostile.** It iterates `row -> col -> k`,
+2. **`linalg.rs::matmul`'s 2D×2D loop order was cache-hostile.** It iterated `row -> col -> k`,
    reading `b.data[k*c2+col]` on the innermost loop - a stride-`c2` access, the worst of the six
-   possible loop orderings for cache locality. This compounds with batch size (`ratio` grows from
-   65.7x to 335.4x precisely as the matmul's own share of the work grows), which is why the gap
-   *widens* rather than shrinks as batches get bigger.
+   possible loop orderings for cache locality. **Fixed** (stage 1 below): reordered to
+   `row -> k -> col`, accumulating into a whole output row at once and reading both operands
+   row-contiguously. Re-measured on the corrected release-build baseline: ~3-10x slower before the
+   reorder, ~2-7x slower after it, at batch sizes 1/8/32/128/512 (see research and analysis for
+   the full numbers) - a real improvement, not decisive on its own.
 
 **Consequence for this plan:** "retarget production to the Rust core" cannot mean "swap `numpy` →
-`Array` call-for-call" - that would ship a severe production regression, failing the actual goal
-outright. Phase 0 below is a required, measured gate before any class is built: fix both causes,
-re-measure, and only proceed to building `RustArrayMultiClassBackpropClassifierNetwork` if the
-result actually beats numpy at realistic sizes. If it doesn't, the honest outcome is the same
-kind of measured null this codebase already has several of (momentum, L2, Xavier/Glorot) -
-correctness-validated, not adopted, recorded as such rather than forced through.
+`Array` call-for-call carelessly" - but the corrected baseline means that bar may already be much
+closer than this plan originally assumed. Phase 0 remains a required, measured gate before any
+class is built: finish fusing (0b), re-measure, and only proceed to building
+`RustArrayMultiClassBackpropClassifierNetwork` if the result actually beats numpy at realistic
+sizes. If it doesn't, the honest outcome is the same kind of measured null this codebase already
+has several of (momentum, L2, Xavier/Glorot) - correctness-validated, not adopted, recorded as
+such rather than forced through.
 
 ## scope decision: a new sibling class, not a retrofit
 
@@ -213,7 +225,11 @@ built-and-shipped plan in this codebase has been folded into `structure.md`.
 
 ## delivery stages (each its own PR, per this repo's practice)
 
-1. Matmul loop reorder (0a) + re-benchmark, recorded as data even if inconclusive on its own.
+1. **Done.** Matmul loop reorder (0a) + re-benchmark. Along the way, caught and fixed a bigger
+   issue than the reorder itself: `./cli build-rust`/`./cli setup` were building this crate in
+   debug mode, which is what made the original gate benchmark read as 65-335x slower than numpy
+   instead of the real ~3-10x - see "the decisive finding" above and
+   [research and analysis](research-and-analysis.md#the-rust-array-cores-65-335x-slower-than-numpy-finding-was-a-debug-build-artifact).
 2. Fused forward functions (`layer_forward`, `layer_forward_batch`) + parity tests.
 3. Fused backward/gradient functions (`layer_output_delta`, `layer_hidden_delta`,
    `layer_accumulate_gradient`, `layer_apply_accumulated_gradient`) + parity tests.

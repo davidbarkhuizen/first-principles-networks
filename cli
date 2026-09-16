@@ -64,7 +64,11 @@ install_maturin () {
 build_rust () {
 
     echo "building $rust_crate_root ..."
-    (cd "$rust_crate_root" && maturin develop)
+    # --release, not a plain debug build: a debug build of this crate measured 65-427x slower
+    # than numpy on the same forward pass a release build only measures 2-10x slower on - see
+    # docs/rust-production-cutover.md's "the decisive finding this plan has to answer first" for
+    # the re-measurement that caught this.
+    (cd "$rust_crate_root" && maturin develop --release)
     echo "... built $rust_crate_root"
 }
 

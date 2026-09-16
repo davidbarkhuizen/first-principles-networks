@@ -363,3 +363,38 @@ test-accuracy improvement. **Decision:** not adopted as a demonstrated win at th
 real MNIST's larger spatial structure would separate the two differently is a real, further
 wall-clock cost (~30 minutes per architecture per seed) this result leaves open rather than
 answered - see [structure](structure.md#possible-next-steps).
+
+## the Rust array core's 65-335x-slower-than-numpy finding was a debug-build artifact
+
+[The production cutover plan](rust-production-cutover.md)'s own gating benchmark measured the
+Rust core's naive per-op forward pass (a line-for-line port composed from individual `Array`
+operator calls) as 65.7x-335.4x slower than numpy at this codebase's real layer size
+(`dimension=784, hidden=16`), widening with batch size - the premise phase 0's entire fix-and-
+gate structure was built around. Re-measuring it immediately before starting phase 0a's matmul
+loop reorder surfaced the actual cause: `./cli setup`/`./cli build-rust` built the crate with a
+plain `maturin develop` - a debug (unoptimized) build - and that debug build, not anything
+inherent to the per-op composition approach, was almost the entire gap.
+
+Same forward pass, same architecture, four build/loop-order combinations, batch sizes 1/8/32/128/512
+(ratio = Rust wall-clock / numpy wall-clock; correctness held throughout, max elementwise
+difference 1e-15 to 2e-14, float64 noise at every combination):
+
+| batch | debug build, original loop order | release build, original loop order | release build, after 0a's loop reorder |
+|---|---|---|---|
+| 1 | 71.5x | 3.4x | 2.4x |
+| 8 | 160.2x | 3.8x | 1.7x |
+| 32 | 228.4x | 5.0x | 2.6x |
+| 128 | 427.6x | 10.4x | 6.5x |
+| 512 | 374.9x | 9.5x | 4.7x |
+
+The debug-build column reproduces the plan's original 65.7x-335.4x figures closely, confirming
+the cause. Under a release build - the only build any real deployment would ship - the naive
+per-op composition was already only ~3-10x slower than numpy before any of phase 0's fixes, and
+the matmul loop reorder alone (0a) brings it to ~2-7x, without yet fusing per-layer calls (0b).
+
+**Decision:** `./cli build-rust`/`./cli setup` now build with `maturin develop --release` (a
+one-line fix - see the `cli` script and [setup](setup.md)); [the production cutover
+plan](rust-production-cutover.md) records the corrected baseline and re-evaluates phase 0b's
+fused-call work against it, since the gap it was meant to close turned out much narrower than
+measured - a benchmark's headline number is only as good as the build it was measured against,
+and this one went unquestioned through two doc revisions before being re-run.

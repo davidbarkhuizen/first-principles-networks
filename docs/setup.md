@@ -18,7 +18,9 @@ This installs `python3-tk`/`cargo` via `apt`, creates a `.venv`, installs the Py
 dependencies (`matplotlib`, `pytest`, `pyarrow`, `numpy` - see
 [vectorized array-based classes](vectorized-array-classes.md) for `numpy`'s scoped,
 benchmark-mirror-only role) from `requirements.txt`, installs `maturin` into that venv, and
-builds the Rust array core into it (`maturin develop`, run from `rust/perceptron_array/`).
+builds the Rust array core into it (`maturin develop --release`, run from
+`rust/perceptron_array/` - see [the production cutover plan](rust-production-cutover.md) for why
+a debug build isn't good enough here).
 `. cli build-rust` re-runs just that last step (rebuild after changing Rust source, without
 redoing the rest of setup).
 
