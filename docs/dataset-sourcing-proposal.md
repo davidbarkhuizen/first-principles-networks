@@ -2,17 +2,19 @@
 
 [← back to README](../README.md)
 
-A design proposal, not yet built - per this repo's own practice of writing a plan down before
-implementation (see [the production cutover plan](rust-production-cutover.md) for the precedent).
-Nothing in this document has been created yet: no GitHub repo, no fetch script, no CI workflow.
+**Status: shipped.** All six delivery stages below are done (see each stage's own note for what
+was built and, in two cases, corrected along the way) - originally written as a design proposal
+before any of it existed, per this repo's own practice of writing a plan down before
+implementation (see [the production cutover plan](rust-production-cutover.md) for the precedent),
+kept here as-written (with status notes added) as the record of that design and how it played out.
 
-## the problem this solves
+## the problem this solved
 
-[Structure](structure.md#possible-next-steps)'s CI item is blocked on one unresolved question:
+[Structure](structure.md#possible-next-steps)'s CI item was blocked on one unresolved question:
 where does a fresh checkout get the real MNIST data from? `tests/test_mnist_data.py` needs the
 real `.parquet` files, which are gitignored (large binary data) with no scripted fetch step
 anywhere in this codebase - supplied locally, by hand, whenever a dev checkout needs them. CI
-can't run against a file that only exists because someone once copied it in manually.
+couldn't run against a file that only existed because someone once copied it in manually.
 
 ## datasets in scope
 
@@ -254,5 +256,5 @@ assuming either way.
      `mnist_data.convert_parquet_to_binary` by hand (e.g. via a demo). `scripts/fetch_datasets.py`
      now regenerates a missing `.bin` from its parquet automatically; verified the regenerated
      files are byte-identical to the originals before relying on this.
-6. Update `docs/setup.md`/`docs/structure.md` to describe the shipped result, closing out the CI
-   item in [structure](structure.md#possible-next-steps).
+6. ✅ Update `docs/setup.md`/`docs/structure.md`/`README.md` to describe the shipped result,
+   closing out the CI item in [structure](structure.md#possible-next-steps).
