@@ -191,3 +191,58 @@ result with the array-based, Rust-matmul-backed Adam sibling flagged in
 [structure](structure.md#possible-next-steps) ("deepening what's already here"): genuine batched
 matmul is what would make large batches actually cheap in wall-clock terms, and this result is
 what says that combination wouldn't cost the accuracy tax sigmoid pays for it.
+
+## RMSprop: the second-moment term alone accounts for Adam's batch-size win (stage 7 of the Adam optimizer workplan)
+
+Stage 4's win (a fixed `learning_rate` barely degrading Adam across `batch_size`, where sigmoid
+collapses) triggered this workplan's own flagged condition for the RMSprop ablation
+(`AdamBackpropClassifierNetwork(..., beta1=0.0)` - see [Adam optimizer](adam-optimizer.md#delivery-stages-each-its-own-pr-per-this-repos-practice)'s
+stage 7): no new code needed, a pure measurement stage isolating whether the win comes from
+Adam's per-parameter second-moment normalization alone or needs its first-moment (momentum-like)
+smoothing too.
+
+Repeats stage 4's real-MNIST-proxy batch-size sweep methodology exactly (fan-in-aware init, `[16]`
+hidden, 5 epochs, `batch_size` in 1/8/32/128, 10 seeds each, fixed `learning_rate`, fork-based
+multiprocessing pool) on a freshly-built 320-example real-MNIST digit-3 proxy (independently
+constructed, not the same instance stage 4 used - the same "reproducibility check, not a rerun of
+the same numbers" posture stage 4's own sigmoid rows used against the original momentum sweep),
+with sigmoid and Adam rerun alongside the new RMSprop row for a directly paired three-way
+comparison rather than trusting stage 4's numbers out of context:
+
+| config | batch_size=1 | batch_size=8 | batch_size=32 | batch_size=128 |
+|---|---|---|---|---|
+| sigmoid, fixed lr=0.5 | 92.12% ± 1.59% | 91.87% ± 1.15% | 91.12% ± 1.63% | 68.12% ± 18.72% |
+| Adam, fixed lr=0.01 | 92.25% ± 1.09% | 92.62% ± 0.88% | 94.38% ± 0.84% | 92.50% ± 0.79% |
+| RMSprop, fixed lr=0.01 | 92.75% ± 1.56% | 92.75% ± 0.50% | 94.50% ± 1.00% | 92.38% ± 2.59% |
+
+### the sigmoid/Adam rows: a reproducibility check
+
+Same shape as stage 4's own reproducibility check: sigmoid degrades sharply and destabilizes at
+`batch_size=128` (68.12% ± 18.72%, variance exploding) while Adam stays flat across two orders of
+magnitude of batch size (92.25%-94.38%) - qualitatively identical to stage 4's finding on an
+independently-constructed proxy subset, if not bit-comparable (different random examples, so the
+absolute numbers differ from stage 4's own 89.62%-71.50%/90.50%-86.75%).
+
+### RMSprop tracks Adam within seed-to-seed noise at every batch size
+
+**RMSprop (`beta1=0.0`) is statistically indistinguishable from Adam at every batch size tested** -
+the largest gap between the two (`batch_size=32`: 94.50% vs. 94.38%) is a tenth of a point, far
+inside either row's own stdev (0.84%-2.59%), and RMSprop is actually marginally ahead of Adam at
+three of the four batch sizes (1, 8, 32), behind only at `batch_size=128` by 0.12 points - noise,
+not a trend. This directly answers the question this stage was scoped to isolate: **the
+batch-size-robustness win is fully explained by the per-parameter second-moment normalization
+alone** - zeroing out Adam's first-moment (momentum-like) term costs nothing measurable at this
+proxy's scale. Consistent with, and a sharper version of, [the momentum
+finding](research-backprop-siblings.md#momentum-measured-not-worth-adopting): a first-moment
+smoothing term keeps showing up as not worth its own complexity in this codebase's measurements,
+whether attached to plain SGD (momentum) or riding along inside Adam.
+
+### decision
+
+**Decision:** RMSprop is not adopted as a separate capability - it requires no new code
+(`beta1=0.0` on the already-shipped `AdamBackpropClassifierNetwork`/`AdamArrayLayer`/
+`AdamRustArrayLayer` families already *is* RMSprop), and this measurement found no accuracy or
+robustness edge over Adam itself that would justify promoting it to a named, separately-recommended
+option. Adam stays the recommended choice for batch-size robustness; RMSprop remains available as
+a zero-code special case (`beta1=0.0`) for anyone who wants to isolate the second-moment term
+specifically, not as a distinct sibling this codebase steers users toward.

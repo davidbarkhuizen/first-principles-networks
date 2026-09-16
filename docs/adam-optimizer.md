@@ -2,7 +2,7 @@
 
 [← back to README](../README.md)
 
-**Status: core workplan (stages 1-6) done; stage 7 (RMSprop ablation) planned, not yet run.**
+**Status: all seven stages done.**
 Built (stage 2), then measured at three scales (tuned-XOR, real-MNIST proxy, real-MNIST-ensemble).
 Adopted, kept as a real capability alongside momentum/L2 rather than a default: needs its own
 retuned `learning_rate` to avoid actively hurting (like every other sibling here), but once
@@ -139,8 +139,11 @@ used) - a real added step, not assumed away.
   linear scaling rule actively hurts Adam rather than merely being unneeded - see [research and
   analysis](research-adam-optimizer.md#adam-under-batch-size-a-much-bigger-cleaner-win-stage-4-of-the-adam-optimizer-workplan).
 - **RMSprop as a follow-on ablation** - out of scope for stages 1-6 (see "scope" above); Adam's
-  own result (a real, not-null win) triggers the condition this was flagged under, so it's now
-  planned as stage 7 below.
+  own result (a real, not-null win) triggered the condition this was flagged under, so it was
+  planned as stage 7 below. Resolved: RMSprop (`beta1=0.0`) tracks Adam within seed-to-seed noise
+  at every batch size tested - the second-moment term alone accounts for the win, Adam's
+  first-moment smoothing adds nothing measurable here. See [research and
+  analysis](research-adam-optimizer.md#rmsprop-the-second-moment-term-alone-accounts-for-adams-batch-size-win-stage-7-of-the-adam-optimizer-workplan).
 
 ## delivery stages (each its own PR, per this repo's practice)
 
@@ -185,11 +188,14 @@ used) - a real added step, not assumed away.
    wall-clock terms too.
 6. ✅ Docs closeout: `structure.md`'s possible-next-steps entry updated to reflect the actual
    result, the same pattern the momentum re-test's own closeout PRs followed.
-7. Planned: the RMSprop ablation flagged in "scope" and "risks and open questions" above -
+7. ✅ The RMSprop ablation flagged in "scope" and "risks and open questions" above -
    `AdamBackpropClassifierNetwork(..., beta1=0.0)` already *is* RMSprop (with `beta1=0`,
    `bias_correction1 = 1 - 0**t = 1` for every `t >= 1`, so `m_hat = m = g` - no momentum term,
    no bias-correction effect on it, exactly RMSprop's per-parameter-normalized-by-second-moment
    update with none of Adam's own first-moment smoothing). No new code needed - a pure
-   measurement stage: repeat stage 4's real-MNIST-proxy batch-size sweep (the decisive win) with
-   an added `beta1=0.0` row, to isolate whether that win comes from the second-moment
-   normalization alone or needs Adam's first-moment term too. Not yet run.
+   measurement stage, written up in [research and
+   analysis](research-adam-optimizer.md#rmsprop-the-second-moment-term-alone-accounts-for-adams-batch-size-win-stage-7-of-the-adam-optimizer-workplan):
+   RMSprop tracks Adam within seed-to-seed noise at every batch size tested (1/8/32/128) on a
+   freshly-built real-MNIST-proxy sweep - the second-moment normalization alone accounts for
+   Adam's batch-size-robustness win, its first-moment term adds nothing measurable. Not adopted
+   as a separate capability; Adam remains the recommended choice.
