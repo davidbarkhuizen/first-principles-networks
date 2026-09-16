@@ -44,14 +44,19 @@ fn matmul(a: &RustArray, b: &RustArray) -> PyResult<RustArray> {
             if c1 != r2 {
                 return Err(shape_error(a.shape, b.shape));
             }
+            // `row -> k -> col`, not `row -> col -> k`: accumulates into a whole output row at a
+            // time, reading both `a` and `b` row-contiguously (the previous order read `b` with a
+            // stride-`c2` access on the innermost loop - see docs/rust-production-cutover.md's
+            // phase 0a for the measured cost of that).
             let mut out = vec![0.0; r1 * c2];
             for row in 0..r1 {
-                for col in 0..c2 {
-                    let mut sum = 0.0;
-                    for k in 0..c1 {
-                        sum += a.data[row * c1 + k] * b.data[k * c2 + col];
+                let out_row = &mut out[row * c2..(row + 1) * c2];
+                for k in 0..c1 {
+                    let a_value = a.data[row * c1 + k];
+                    let b_row = &b.data[k * c2..(k + 1) * c2];
+                    for col in 0..c2 {
+                        out_row[col] += a_value * b_row[col];
                     }
-                    out[row * c2 + col] = sum;
                 }
             }
             Ok(RustArray::from_matrix(out, r1, c2))
