@@ -138,6 +138,22 @@ DEMOS: list[DemoInfo] = [
         ),
     ),
     DemoInfo(
+        module="perceptron.demos.demo_rust_vs_vectorized_uci_digit_recognition",
+        title="Rust vs vectorized UCI digit recognition",
+        summary="Trains pure-Python, numpy, and Rust-array-core-backed networks on UCI digits side by side.",
+        description=(
+            "Rust production cutover validation (docs/rust-production-cutover.md). Extends "
+            "demo_vectorized_uci_digit_recognition.py with a third network: "
+            "RustArrayMultiClassBackpropClassifierNetwork, the Rust-array-core-backed sibling that "
+            "replaces numpy as the production backend (numpy stays on permanently as the benchmark "
+            "comparison). Trains all three at the same seed/hyperparameters and reports each one's "
+            "measured accuracy and wall-clock training time - docs/research-and-analysis.md's own "
+            "measured 3.40x speedup, checked here rather than assumed. Then plots all three "
+            "training-accuracy-by-epoch curves overlaid, a confusion matrix, and sample test "
+            "predictions for the Rust network."
+        ),
+    ),
+    DemoInfo(
         module="perceptron.demos.demo_uci_digit_capture",
         title="UCI digit capture",
         summary="Interactive mouse-painted digit capture, classified live by the UCI digit-recognition model.",
@@ -177,6 +193,23 @@ DEMOS: list[DemoInfo] = [
             "docs/vectorized-array-classes.md's own extrapolated speedup ceiling. Also times "
             "load_mnist_dataset_as_array's bulk-decode against load_mnist_dataset's tuple-per-example decode "
             "on the same file. Takes on the order of 15-20 minutes to run (mostly the pure-Python epoch)."
+        ),
+    ),
+    DemoInfo(
+        module="perceptron.demos.demo_rust_vs_vectorized_mnist_recognition",
+        title="Rust vs vectorized MNIST recognition",
+        summary="One real epoch on full MNIST, pure-Python vs. numpy vs. Rust-array-core-backed.",
+        description=(
+            "Rust production cutover validation at real MNIST scale "
+            "(docs/rust-production-cutover.md). Headless, console-only - extends "
+            "demo_vectorized_mnist_recognition.py with a third network: "
+            "RustArrayMultiClassBackpropClassifierNetwork, the Rust-array-core-backed sibling that "
+            "replaces numpy as the production backend. Trains all three for one real epoch each "
+            "over the full 60000-example MNIST training set (same 30-node-hidden-layer "
+            "architecture), then reports each one's test accuracy and wall-clock epoch time side "
+            "by side - the real, measured number behind docs/research-and-analysis.md's own "
+            "recorded 1.31x real-MNIST speedup. Takes on the order of 15-20 minutes to run (mostly "
+            "the pure-Python epoch)."
         ),
     ),
     DemoInfo(

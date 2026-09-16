@@ -198,6 +198,11 @@ perceptron/
     demo_vectorized_mnist_recognition.py         the same pure-Python-vs-numpy comparison, one real epoch
                                                  over the full 60000-example MNIST training set (see
                                                  "vectorized array-based classes")
+    demo_rust_vs_vectorized_uci_digit_recognition.py
+                                                 the UCI digits comparison above, extended with
+                                                 RustArrayMultiClassBackpropClassifierNetwork, the
+                                                 production backend (see "the Rust array core" below)
+    demo_rust_vs_vectorized_mnist_recognition.py the real-MNIST comparison above, extended the same way
 data/
   digits/
     digits.csv                      bundled 8x8 digits dataset (1797 rows, 64 pixels + a
@@ -589,13 +594,27 @@ tuple-per-example decode (0.41s vs. 6.32s) - see
 numbers and parity methodology.
 
 `numpy` is kept permanently here, scoped specifically to this role: a performance-benchmarking
-mirror any future array backend's speed claim gets measured against, not this codebase's
-production array backend. [A hand-built Rust core](rust-array-core.md)
-(`rust/perceptron_array/`, wrapped via PyO3) implements the same operation subset
-([the numpy interface subset](numpy-interface-subset.md)) this class needs and is parity-tested
-against real numpy across 254 tests, and is the intended production array backend per
-[vectorization](vectorization.md#decision) - but nothing in `perceptron/model/` calls it yet;
-retargeting these classes (or building new ones) to it is a separate, not-yet-started step.
+mirror any array backend's speed claim gets measured against, not this codebase's production
+array backend. [A hand-built Rust core](rust-array-core.md) (`rust/perceptron_array/`, wrapped
+via PyO3) implements the same operation subset ([the numpy interface
+subset](numpy-interface-subset.md)) this class needs, is parity-tested against real numpy across
+525 tests, and backs `RustArrayLayer`/`RustArrayMultiClassBackpropClassifierNetwork`
+(`perceptron/model/rust_array_layer.py`,
+`perceptron/model/rust_array_multiclass_backprop_classifier_network.py`) - the actual production
+path, per [the production cutover plan](rust-production-cutover.md)'s now-completed phases 0-2:
+a mechanical loop-reorder and fused-per-layer-call fix to the Rust core itself, then a class
+mirroring `VectorizedMultiClassBackpropClassifierNetwork`'s exact external contract, tier-1
+bit-close parity-checked against the pure-Python reference
+(`tests/test_rust_array_multiclass_backprop_model.py`), then measured on real training runs: a
+genuine **3.40x** speedup over numpy at UCI digits scale and **1.31x** at real MNIST scale (see
+[research and
+analysis](research-and-analysis.md#phase-2-tier-2-real-per-example-training-is-a-genuine-win-at-both-scales-measured)),
+with statistically indistinguishable accuracy. `demo_rust_vs_vectorized_uci_digit_recognition.py`/
+`demo_rust_vs_vectorized_mnist_recognition.py` run all three (pure-Python, numpy, Rust) side by
+side. The naive matmul this crate still uses does lose to numpy's BLAS at larger mini-batch sizes
+(`batch_size >= 32`) - not yet a problem in practice, since both training paths above use
+`learn()`'s per-example (`batch_size=1`) shape exclusively, but a real, tracked follow-on
+optimization target (SIMD, blocked/tiled matmul, threading), not a hidden gap.
 
 ## possible next steps
 
@@ -615,7 +634,7 @@ ordered roughly by how directly each follows from an existing finding here, not 
   real wall-clock cost this UCI-digits result alone doesn't settle is worth spending. Not yet
   run.
 - **CI** (e.g. GitHub Actions running `pytest` on push/PR) - the one item here that's pure
-  engineering, not ML content. Nothing currently protects this test suite (311 tests as of this
+  engineering, not ML content. Nothing currently protects this test suite (320 tests as of this
   writing, many pinned to hand-derived or empirically-measured expected values) from silently
   regressing. **Blocked on solving where the reference MNIST dataset comes from first**:
   `test_mnist_data.py`'s tests need the real MNIST parquet/binary files, which are gitignored
@@ -624,13 +643,12 @@ ordered roughly by how directly each follows from an existing finding here, not 
   fresh checkout gets that data (a public mirror to fetch from? a repo secret + private download
   step? committing a small stratified subset instead of the full dataset?) means shipping CI
   that quietly can't protect part of the suite, not a real fix.
-- **Retargeting production code to the Rust array core.** [The Rust core](rust-array-core.md) is
-  built and parity-tested, but nothing in `perceptron/model/` calls it yet -
-  [the vectorized classes](structure.md#vectorized-array-based-classes) still run on `numpy`,
-  which is correct (that's their permanent benchmarking-mirror role, not a gap to fix), but no
-  production path exists that uses the Rust core instead. [A workplan](rust-production-cutover.md)
-  exists for this, gated on a measured prerequisite: composing a forward pass from individual
-  `Array` operator calls the way a line-for-line port would is currently 65-335x *slower* than
-  numpy at this codebase's real layer sizes (FFI-crossing count and a cache-hostile matmul loop
-  order, not raw compute), so the Rust core needs a performance fix before "primary in
-  production" is achievable at all, not just a call-site swap. Not yet started.
+- **Closing the naive matmul's remaining gap at larger batch sizes.** [The production cutover
+  plan](rust-production-cutover.md) is done through phase 2: `RustArrayMultiClassBackpropClassifierNetwork`
+  is built, parity-checked, and measured as a genuine 3.40x (UCI digits)/1.31x (real MNIST) win
+  over numpy on this codebase's actual `learn()`-shaped (`batch_size=1`) training paths. What's
+  left is optimizing the crate's still-naive triple-loop matmul (SIMD intrinsics, a blocked/tiled
+  layout, threading), which currently still loses to numpy's BLAS at `batch_size >= 32` - not a
+  problem for either existing production path today, but the thing that would need fixing before
+  a `learn_batch`-shaped mini-batch training path could adopt the Rust core with the same
+  confidence. Not yet started.
