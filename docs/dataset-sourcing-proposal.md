@@ -101,6 +101,13 @@ documented in this codebase and doesn't need re-verifying.
 The `sha256` field is load-bearing, not decorative: it's what lets a fetch be verified, not just
 downloaded (see below).
 
+**Correction from stage 2** (checked directly via `pyarrow`, not assumed from this template): the
+real schema is HuggingFace's standard image-dataset layout, `image: struct<bytes: binary, path:
+string>` with `label: int64` - each image is an 8-bit grayscale PNG inside `bytes`, not a raw uint8
+pixel array as guessed above. `perceptron/mnist_data.py`'s `_decode_grayscale_png` already accounts
+for this; only this document's template was stale. The real, computed metadata for both MNIST files
+and UCI digits lives in `dataset-packaging/` (staged there pending stage 3's repo creation).
+
 ## how `perceptron` would consume it
 
 ### the fetch mechanism, and why it only fetches once locally
@@ -205,15 +212,20 @@ assuming either way.
   regenerated/re-exported, its `sha256` must be recomputed and the metadata updated, or every
   consumer's fetch starts failing the integrity check (the correct failure mode - loud, not
   silent - but worth knowing it'll happen if the source file changes without a metadata bump).
-- **Whether to also migrate `digits.csv`** - see above; a genuine open question, not a decision
-  this document makes.
+- ~~**Whether to also migrate `digits.csv`**~~ - resolved during stage 2: yes, `indrajala-datasets-uci-digits`
+  gets real metadata alongside MNIST, for consistency (one place with proper metadata for every
+  dataset this codebase uses). `digits.csv` itself still stays committed directly in `perceptron`
+  per the "what changes for UCI digits" section above - only its metadata is now prepared.
 
 ## delivery stages (each its own PR, per this repo's practice)
 
-1. This design document.
-2. Compute real checksums + write real metadata for the existing local MNIST parquet files (and
-   UCI digits, if that migration is in scope) - a local, no-GitHub-action-required step.
-3. Create `indrajala-datasets-mnist` (and optionally `indrajala-datasets-uci-digits`) on GitHub,
+1. ✅ This design document.
+2. ✅ Compute real checksums + write real metadata for the existing local MNIST parquet files and
+   UCI digits (`dataset-packaging/indrajala-datasets-mnist/`,
+   `dataset-packaging/indrajala-datasets-uci-digits/`) - a local, no-GitHub-action-required step.
+   Along the way, corrected this document's own guessed MNIST schema against the real one (see
+   above), and verified UCI digits' license (CC BY 4.0) directly rather than leaving it a `TODO`.
+3. Create `indrajala-datasets-mnist` and `indrajala-datasets-uci-digits` on GitHub,
    push the data + metadata - a real, visible, public action requiring explicit go-ahead, not
    bundled into an automated step.
 4. Add the fetch script + `./cli` wiring in `perceptron`.

@@ -1,0 +1,13 @@
+{
+  "name": "mnist",
+  "description": "The MNIST handwritten digit database - 60000 train / 10000 test images, packaged as Parquet in HuggingFace's standard MNIST layout.",
+  "source": {
+    "name": "Yann LeCun / Corinna Cortes' MNIST database",
+    "url": "TODO - fill in and verify the canonical source URL",
+    "license": "TODO - verify and state the dataset's own usage terms explicitly, not assumed"
+  },
+  "version": "2026-09-16",
+  "maintainer": "davidbarkhuizen",
+  "format": "Apache Parquet, one row per image",
+  "files": ["data/mnist-train.parquet", "data/mnist-test.parquet"]
+}
