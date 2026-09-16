@@ -443,8 +443,10 @@ open questions" guessed before this was measured (it expected batching to be the
 strength and per-example calls its weakness, on the theory that a single Python↔Rust call still
 costs something no pure-Python-calling-numpy path pays - true, but overwhelmed at larger batches
 by numpy's BLAS-backed matmul pulling further ahead of this crate's still-naive one). **Decision:
-left open, not resolved here** - whether phase 1 (`RustArrayMultiClassBackpropClassifierNetwork`)
-gets built for the per-example path only, gets built anyway as a correctness-first standalone (the
-same treatment momentum/L2/Xavier-Glorot got), or isn't built, is recorded in [the production
-cutover plan](rust-production-cutover.md) as a decision still to be made, not defaulted either
-way.
+build phase 1 in full anyway.** The user clarified (2026-09-16) that adoption of the Rust core as
+the production backend is unconditional, not gated on beating numpy first - numpy stays on
+permanently as the benchmark comparison, and the `batch_size >= 32` gap above is tracked as
+follow-on optimization work (SIMD, blocked/tiled matmul, threading), not a reason to withhold
+`RustArrayMultiClassBackpropClassifierNetwork` or scope it down to the per-example path alone. See
+[the production cutover plan](rust-production-cutover.md#the-decisive-finding-this-plan-has-to-answer-first)
+("adoption is unconditional, not gated on this benchmark") for the full framing change.
