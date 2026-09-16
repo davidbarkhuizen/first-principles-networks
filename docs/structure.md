@@ -654,6 +654,13 @@ ordered roughly by how directly each follows from an existing finding here, not 
   (2026-09-16, see [research and
   analysis](research-and-analysis.md#build-flag-tuning-measured-as-a-null)): neither `lto=true`+
   `codegen-units=1` nor `RUSTFLAGS="-C target-cpu=native"` moved the needle beyond normal
-  run-to-run noise. Still open: a blocked/tiled matmul layout, multithreading (`std::thread::scope`
-  row-splitting), and explicit SIMD intrinsics (AVX2 is available on this machine) - in that
-  order, per the reasoning in [the production cutover plan](rust-production-cutover.md).
+  run-to-run noise. **Cache-blocked matmul: done, a real but partial win** (2026-09-16, see
+  [research and
+  analysis](research-and-analysis.md#cache-blocked-matmul-a-real-shape-dependent-win-gated-by-size)):
+  `linalg.rs::matmul`'s 2D×2D case now blocks over `row`/`k` once the `b` operand exceeds 256KB
+  (below that, blocking was a measured *regression* - the small matmuls this codebase's real
+  architecture uses already fit in cache) - a reproducible ~15-25% reduction in the
+  `batch_size=512` gap, `batch_size=1`/`8` unaffected. Still open: multithreading
+  (`std::thread::scope` row-splitting) and explicit SIMD intrinsics (AVX2 is available on this
+  machine) - in that order, per the reasoning in [the production cutover
+  plan](rust-production-cutover.md).
