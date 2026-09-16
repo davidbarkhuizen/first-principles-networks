@@ -4,6 +4,7 @@ from typing import Callable
 import numpy as np
 import pytest
 
+from indrajala_ml.model.adam_layer import make_adam_layer_cls
 from indrajala_ml.model.linear_classifier_network import LinearClassifierNetwork
 from indrajala_ml.model.multiclass_backprop_classifier_network import MultiClassBackpropClassifierNetwork
 
@@ -99,6 +100,77 @@ def matching_array_backprop_networks(
         layer_sizes, dimension, [(-bounds, bounds)] * dimension, class_count
     )
     array_network = array_network_cls(layer_sizes, dimension, class_count)
+
+    previous_size = dimension
+    for layer_index, size in enumerate([*layer_sizes, class_count]):
+        weights = [[rng.uniform(-2.0, 2.0) for _ in range(previous_size)] for _ in range(size)]
+        biases = [rng.uniform(-2.0, 2.0) for _ in range(size)]
+
+        node_layer = node_network.trainable_layers[layer_index]
+        for node, node_weights, bias in zip(node_layer.nodes, weights, biases):
+            node.update_input_weights(node_weights)
+            node.bias = bias
+
+        array_network.layers[layer_index].W = wrap(weights)
+        array_network.layers[layer_index].b = wrap(biases)
+
+        previous_size = size
+
+    return node_network, array_network
+
+
+class AdamMultiClassBackpropClassifierNetwork(MultiClassBackpropClassifierNetwork):
+    """
+    Test-only per-node Adam reference: MultiClassBackpropClassifierNetwork with its
+    hidden_layer_cls/output_layer_cls extension points (BackpropNetworkBase) set to
+    make_adam_layer_cls's node class, the exact same construction
+    AdamBackpropClassifierNetwork uses for the single-output case. Not a new production class,
+    since this codebase has no per-node multi-class Adam sibling to build against otherwise. Gives
+    every array-based Adam sibling (AdamVectorizedMultiClassBackpropClassifierNetwork,
+    AdamRustArrayMultiClassBackpropClassifierNetwork) a genuine parity reference instead of a
+    hand-derived fixture, per docs/adam-array-layer.md's "correctness validation" section - shared
+    here rather than duplicated per test module, since both siblings need the identical reference.
+    """
+
+    def __init__(
+        self,
+        layer_sizes: list[int],
+        dimension: int,
+        input_bounds: list[tuple[float, float]],
+        class_count: int,
+        beta1: float,
+        beta2: float,
+        epsilon: float,
+    ) -> None:
+        layer_cls = make_adam_layer_cls(beta1, beta2, epsilon)
+        self.hidden_layer_cls = layer_cls
+        self.output_layer_cls = layer_cls
+        super().__init__(layer_sizes, dimension, input_bounds, class_count)
+
+
+def matching_adam_array_backprop_networks(
+    rng: random.Random,
+    array_network_cls,
+    wrap: Callable,
+    layer_sizes: list[int],
+    dimension: int,
+    class_count: int,
+    beta1: float,
+    beta2: float,
+    epsilon: float,
+    bounds: float = 10.0,
+):
+    """
+    The Adam-sibling analogue of matching_array_backprop_networks above: builds an
+    AdamMultiClassBackpropClassifierNetwork per-node reference and an Adam array-backed sibling
+    (AdamVectorizedMultiClassBackpropClassifierNetwork / AdamRustArrayMultiClassBackpropClassifierNetwork,
+    passed as array_network_cls) with identical injected weights - kept separate from the non-Adam
+    helper since the reference class and constructor signature both differ (beta1/beta2/epsilon).
+    """
+    node_network = AdamMultiClassBackpropClassifierNetwork(
+        layer_sizes, dimension, [(-bounds, bounds)] * dimension, class_count, beta1, beta2, epsilon
+    )
+    array_network = array_network_cls(layer_sizes, dimension, class_count, beta1, beta2, epsilon)
 
     previous_size = dimension
     for layer_index, size in enumerate([*layer_sizes, class_count]):

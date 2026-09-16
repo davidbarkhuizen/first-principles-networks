@@ -1,10 +1,10 @@
 import random
 
-import numpy as np
 import pytest
 
-from indrajala_ml.model.adam_vectorized_multiclass_backprop_classifier_network import (
-    AdamVectorizedMultiClassBackpropClassifierNetwork,
+import indrajala_ml_array as pa
+from indrajala_ml.model.adam_rust_array_multiclass_backprop_classifier_network import (
+    AdamRustArrayMultiClassBackpropClassifierNetwork,
 )
 from tests.helpers import (
     assert_array_network_save_load_round_trip,
@@ -20,10 +20,14 @@ BETA1, BETA2, EPSILON = 0.9, 0.999, 1e-8
 
 
 def _matching_networks(rng: random.Random, bounds: float = 10.0):
+    # tier 1 (docs/rust-production-cutover.md's phase 2), applied to the Adam sibling: identical
+    # fixed weights/inputs injected directly, never randomize(), since indrajala_ml_array.uniform's
+    # RNG can never be seed-comparable against Python's random module (see rust-array-core.md's
+    # "the RNG exception").
     return matching_adam_array_backprop_networks(
         rng,
-        AdamVectorizedMultiClassBackpropClassifierNetwork,
-        np.array,
+        AdamRustArrayMultiClassBackpropClassifierNetwork,
+        pa.Array,
         LAYER_SIZES,
         DIMENSION,
         CLASS_COUNT,
@@ -37,23 +41,23 @@ def _matching_networks(rng: random.Random, bounds: float = 10.0):
 def test_predict_probabilities_matches_across_a_random_sweep():
 
     rng = random.Random(0)
-    node_network, array_network = _matching_networks(rng)
+    node_network, rust_network = _matching_networks(rng)
 
     for _ in range(50):
         state = tuple(rng.uniform(-10.0, 10.0) for _ in range(DIMENSION))
         expected = node_network.predict_probabilities(state)
-        actual = array_network.predict_probabilities(state)
-        assert np.allclose(actual, expected, rtol=1e-9, atol=1e-12)
+        actual = rust_network.predict_probabilities(state)
+        assert actual == pytest.approx(expected, rel=1e-9, abs=1e-12)
 
 
 def test_classify_state_matches_across_a_random_sweep():
 
     rng = random.Random(1)
-    node_network, array_network = _matching_networks(rng)
+    node_network, rust_network = _matching_networks(rng)
 
     for _ in range(50):
         state = tuple(rng.uniform(-10.0, 10.0) for _ in range(DIMENSION))
-        assert array_network.classify_state(state) == node_network.classify_state(state)
+        assert rust_network.classify_state(state) == node_network.classify_state(state)
 
 
 def test_learn_matches_after_every_step_not_just_at_the_end():
@@ -62,7 +66,7 @@ def test_learn_matches_after_every_step_not_just_at_the_end():
     # especially important here, since Adam's m/v/t state only actually accumulates across
     # repeated steps
     rng = random.Random(2)
-    node_network, array_network = _matching_networks(rng)
+    node_network, rust_network = _matching_networks(rng)
     learning_rate = 0.1
 
     for step in range(30):
@@ -70,15 +74,15 @@ def test_learn_matches_after_every_step_not_just_at_the_end():
         category = rng.randrange(CLASS_COUNT)
 
         node_network.learn(learning_rate, state, category)
-        array_network.learn(learning_rate, state, category)
+        rust_network.learn(learning_rate, state, category)
 
-        assert_array_network_weights_match(node_network, array_network)
+        assert_array_network_weights_match(node_network, rust_network)
 
 
 def test_learn_batch_matches_after_every_batch_not_just_at_the_end():
 
     rng = random.Random(3)
-    node_network, array_network = _matching_networks(rng)
+    node_network, rust_network = _matching_networks(rng)
     learning_rate = 0.1
     batch_size = 8
 
@@ -89,14 +93,14 @@ def test_learn_batch_matches_after_every_batch_not_just_at_the_end():
         ]
 
         node_network.learn_batch(learning_rate, batch)
-        array_network.learn_batch(learning_rate, batch)
+        rust_network.learn_batch(learning_rate, batch)
 
-        assert_array_network_weights_match(node_network, array_network)
+        assert_array_network_weights_match(node_network, rust_network)
 
 
 def test_randomized_builds_a_usable_network():
 
-    network = AdamVectorizedMultiClassBackpropClassifierNetwork.randomized(LAYER_SIZES, DIMENSION, CLASS_COUNT)
+    network = AdamRustArrayMultiClassBackpropClassifierNetwork.randomized(LAYER_SIZES, DIMENSION, CLASS_COUNT)
     state = tuple(0.1 * i for i in range(DIMENSION))
 
     probabilities = network.predict_probabilities(state)
@@ -108,33 +112,33 @@ def test_randomized_builds_a_usable_network():
 def test_snapshot_restore_round_trips_weights():
 
     assert_array_network_snapshot_restore_round_trip(
-        AdamVectorizedMultiClassBackpropClassifierNetwork, LAYER_SIZES, DIMENSION, CLASS_COUNT
+        AdamRustArrayMultiClassBackpropClassifierNetwork, LAYER_SIZES, DIMENSION, CLASS_COUNT
     )
 
 
 def test_save_load_round_trips_weights_and_predictions(tmp_path):
 
-    network = AdamVectorizedMultiClassBackpropClassifierNetwork.randomized(LAYER_SIZES, DIMENSION, CLASS_COUNT)
+    network = AdamRustArrayMultiClassBackpropClassifierNetwork.randomized(LAYER_SIZES, DIMENSION, CLASS_COUNT)
     state = tuple(0.1 * i for i in range(DIMENSION))
 
     assert_array_network_save_load_round_trip(
         network,
-        AdamVectorizedMultiClassBackpropClassifierNetwork.load,
+        AdamRustArrayMultiClassBackpropClassifierNetwork.load,
         tmp_path,
-        "adam_vectorized_model.json",
+        "adam_rust_array_model.json",
         state,
     )
 
 
 def test_save_load_round_trips_the_adam_hyperparameters(tmp_path):
 
-    network = AdamVectorizedMultiClassBackpropClassifierNetwork.randomized(
+    network = AdamRustArrayMultiClassBackpropClassifierNetwork.randomized(
         LAYER_SIZES, DIMENSION, CLASS_COUNT, beta1=0.8, beta2=0.99, epsilon=1e-6
     )
-    path = str(tmp_path / "adam_vectorized_hyperparams.json")
+    path = str(tmp_path / "adam_rust_array_hyperparams.json")
     network.save(path)
 
-    loaded = AdamVectorizedMultiClassBackpropClassifierNetwork.load(path)
+    loaded = AdamRustArrayMultiClassBackpropClassifierNetwork.load(path)
     assert loaded.beta1 == 0.8
     assert loaded.beta2 == 0.99
     assert loaded.epsilon == 1e-6
@@ -143,17 +147,17 @@ def test_save_load_round_trips_the_adam_hyperparameters(tmp_path):
 def test_construction_rejects_invalid_arguments():
 
     with pytest.raises(AssertionError):
-        AdamVectorizedMultiClassBackpropClassifierNetwork([], DIMENSION, CLASS_COUNT)
+        AdamRustArrayMultiClassBackpropClassifierNetwork([], DIMENSION, CLASS_COUNT)
 
     with pytest.raises(AssertionError):
-        AdamVectorizedMultiClassBackpropClassifierNetwork([0], DIMENSION, CLASS_COUNT)
+        AdamRustArrayMultiClassBackpropClassifierNetwork([0], DIMENSION, CLASS_COUNT)
 
     with pytest.raises(AssertionError):
-        AdamVectorizedMultiClassBackpropClassifierNetwork(LAYER_SIZES, DIMENSION, class_count=1)
+        AdamRustArrayMultiClassBackpropClassifierNetwork(LAYER_SIZES, DIMENSION, class_count=1)
 
 
 def test_learn_batch_rejects_an_empty_batch():
 
-    network = AdamVectorizedMultiClassBackpropClassifierNetwork.randomized(LAYER_SIZES, DIMENSION, CLASS_COUNT)
+    network = AdamRustArrayMultiClassBackpropClassifierNetwork.randomized(LAYER_SIZES, DIMENSION, CLASS_COUNT)
     with pytest.raises(AssertionError):
         network.learn_batch(0.1, [])

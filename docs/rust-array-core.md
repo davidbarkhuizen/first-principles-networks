@@ -12,9 +12,11 @@ both the 1D scalar-index and 2D tuple-index shapes, elementwise `+ - * /` with b
 broadcasting cases and scalar operands, `__iadd__`/`__isub__`, `exp`, `__matmul__` (all three
 shape combinations), `outer`, `sum_axis0`, `argmax`, a hand-rolled xorshift128+ `uniform`, and
 `decode_mnist_pixels`. It's parity-tested against real numpy (and, where a pure-Python reference
-exists independent of numpy, against that too - a three-way match) across 525 tests in
-`rust/indrajala_ml_array/tests/` (254 covering the operation subset itself, plus 271 covering
-`fused.rs`'s per-layer functions below). The one documented exception is `uniform`: a hand-rolled
+exists independent of numpy, against that too - a three-way match) across 618 tests in
+`rust/indrajala_ml_array/tests/` (254 covering the operation subset itself, plus 364 covering
+`fused.rs`'s per-layer functions below - 271 for the plain-SGD path, plus 93 for
+`layer_adam_apply_accumulated_gradient`, [the Adam array-layer sibling](adam-array-layer.md)'s own
+stage 5). The one documented exception is `uniform`: a hand-rolled
 PRNG can never reproduce numpy's Mersenne Twister bit-for-bit, so its tests check statistical
 plausibility (range, mean, variance), not per-draw equality - see `random.rs`'s own doc comment.
 
