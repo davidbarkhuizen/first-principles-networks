@@ -101,3 +101,36 @@ def load_array_model_json(path: str) -> dict:
     """
 
     return load_json(path)
+
+
+def save_single_output_array_model_json(
+    path: str,
+    *,
+    layer_sizes: list[int],
+    dimension: int,
+    snapshot: object,
+    extra: dict | None = None,
+) -> None:
+    """
+    The single-output counterpart to save_array_model_json above - shared by
+    ArrayBackpropClassifierNetwork/RustArrayBackpropClassifierNetwork's own save(): neither has a
+    class_count notion at all (each is one independent binary sub-network, not a multiclass
+    output layer), on top of save_array_model_json's own already-missing input_bounds/StateLayer
+    notion - so this drops that field rather than passing a meaningless class_count=1 through
+    save_array_model_json.
+    """
+
+    state = {
+        "layer_sizes": layer_sizes,
+        "dimension": dimension,
+        "snapshot": [(W.tolist(), b.tolist()) for W, b in snapshot],
+    }
+    if extra:
+        state.update(extra)
+    save_json(path, state)
+
+
+def load_single_output_array_model_json(path: str) -> dict:
+    """The load-side counterpart to save_single_output_array_model_json - reads the envelope back as-is."""
+
+    return load_json(path)

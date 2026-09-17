@@ -6,6 +6,7 @@ import pytest
 
 from indrajala_ml.model.adam_layer import make_adam_layer_cls
 from indrajala_ml.model.dropout_layer import make_dropout_layer_cls
+from indrajala_ml.model.fan_in_aware_backprop_classifier_network import FanInAwareBackpropClassifierNetwork
 from indrajala_ml.model.l2_regularization_layer import make_l2_layer_cls
 from indrajala_ml.model.linear_classifier_network import LinearClassifierNetwork
 from indrajala_ml.model.momentum_layer import make_momentum_layer_cls
@@ -110,6 +111,44 @@ def matching_array_backprop_networks(
 
     previous_size = dimension
     for layer_index, size in enumerate([*layer_sizes, class_count]):
+        weights = [[rng.uniform(-2.0, 2.0) for _ in range(previous_size)] for _ in range(size)]
+        biases = [rng.uniform(-2.0, 2.0) for _ in range(size)]
+
+        node_layer = node_network.trainable_layers[layer_index]
+        for node, node_weights, bias in zip(node_layer.nodes, weights, biases):
+            node.update_input_weights(node_weights)
+            node.bias = bias
+
+        array_network.layers[layer_index].W = wrap(weights)
+        array_network.layers[layer_index].b = wrap(biases)
+
+        previous_size = size
+
+    return node_network, array_network
+
+
+def matching_single_output_array_backprop_networks(
+    rng: random.Random,
+    array_network_cls,
+    wrap: Callable,
+    layer_sizes: list[int],
+    dimension: int,
+    bounds: float = 10.0,
+):
+    """
+    The single-output analogue of matching_array_backprop_networks above, for
+    ArrayBackpropClassifierNetwork/RustArrayBackpropClassifierNetwork: builds a
+    FanInAwareBackpropClassifierNetwork per-node reference (not plain
+    BackpropClassifierNetwork - the array sibling's own randomize() is fan-in-aware only, per its
+    own docstring, so this is the genuinely matching per-node scheme) and an array-backed
+    sibling with identical injected weights, the same "force identical, never rely on
+    randomize()" reasoning matching_array_backprop_networks's own docstring gives.
+    """
+    node_network = FanInAwareBackpropClassifierNetwork(layer_sizes, dimension, [(-bounds, bounds)] * dimension)
+    array_network = array_network_cls(layer_sizes, dimension)
+
+    previous_size = dimension
+    for layer_index, size in enumerate([*layer_sizes, 1]):
         weights = [[rng.uniform(-2.0, 2.0) for _ in range(previous_size)] for _ in range(size)]
         biases = [rng.uniform(-2.0, 2.0) for _ in range(size)]
 
@@ -505,6 +544,41 @@ def assert_array_network_snapshot_restore_round_trip(
     for (W1, b1), (W2, b2) in zip(network.snapshot(), other.snapshot()):
         assert W1.tolist() == W2.tolist()
         assert b1.tolist() == b2.tolist()
+
+
+def assert_single_output_array_network_snapshot_restore_round_trip(
+    array_network_cls, layer_sizes: list[int], dimension: int
+) -> None:
+    """
+    The single-output analogue of assert_array_network_snapshot_restore_round_trip above, for
+    ArrayBackpropClassifierNetwork/RustArrayBackpropClassifierNetwork (no class_count argument).
+    """
+    network = array_network_cls.randomized(layer_sizes, dimension)
+    snapshot = network.snapshot()
+
+    other = array_network_cls(layer_sizes, dimension)
+    other.restore(snapshot)
+
+    for (W1, b1), (W2, b2) in zip(network.snapshot(), other.snapshot()):
+        assert W1.tolist() == W2.tolist()
+        assert b1.tolist() == b2.tolist()
+
+
+def assert_single_output_array_network_save_load_round_trip(network, load_fn, tmp_path, filename: str, state):
+    """
+    The single-output analogue of assert_array_network_save_load_round_trip above, for
+    ArrayBackpropClassifierNetwork/RustArrayBackpropClassifierNetwork: predict_probability, not
+    predict_probabilities, and no class_count field to compare.
+    """
+    path = str(tmp_path / filename)
+    network.save(path)
+    loaded = load_fn(path)
+
+    assert loaded.layer_sizes == network.layer_sizes
+    assert loaded.dimension == network.dimension
+    assert loaded.predict_probability(state) == pytest.approx(network.predict_probability(state))
+
+    return loaded
 
 
 def assert_array_network_save_load_round_trip(network, load_fn, tmp_path, filename: str, state):

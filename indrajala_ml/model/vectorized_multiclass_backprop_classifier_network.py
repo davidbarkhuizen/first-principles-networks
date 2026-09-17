@@ -4,7 +4,7 @@ from typing import Sequence
 
 import numpy as np
 
-from indrajala_ml.model.array_layer import ArrayLayer
+from indrajala_ml.model.array_layer import ArrayLayer, fan_in_aware_random_layer
 from indrajala_ml.model.bounds import validate_batch, validate_class_count, validate_layer_sizes
 from indrajala_ml.model.model_io import load_array_model_json, save_array_model_json
 
@@ -100,9 +100,7 @@ class VectorizedMultiClassBackpropClassifierNetwork:
         # limit = 1/sqrt(fan_in), one array draw per layer instead of a per-node loop
         previous_size = self.dimension
         for layer in self.layers:
-            limit = 1.0 / np.sqrt(previous_size)
-            layer.W = np.random.uniform(-limit, limit, size=(layer.size, previous_size))
-            layer.b = np.random.uniform(-limit, limit, size=(layer.size,))
+            layer.W, layer.b = fan_in_aware_random_layer(layer.size, previous_size)
             previous_size = layer.size
 
     @classmethod
