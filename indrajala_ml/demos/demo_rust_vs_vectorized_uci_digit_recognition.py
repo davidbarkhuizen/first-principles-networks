@@ -1,11 +1,10 @@
-import time
-
 import matplotlib
 
 matplotlib.use("TkAgg")
 
 from matplotlib import pyplot
 
+from indrajala_ml.demos.timing import timed_train
 from indrajala_ml.digits_data import load_digits_dataset, split_train_test
 from indrajala_ml.graphics.chart import new_axes, new_confusion_matrix_figure, new_figure, sample_predictions_figure
 from indrajala_ml.model.multiclass_backprop_classifier_network import MultiClassBackpropClassifierNetwork
@@ -16,7 +15,6 @@ from indrajala_ml.model.vectorized_multiclass_backprop_classifier_network import
     VectorizedMultiClassBackpropClassifierNetwork,
 )
 from indrajala_ml.multiclass_evaluate import accuracy, confusion_matrix
-from indrajala_ml.train import train_linear_classifier_network
 
 DIMENSION = 64
 CLASS_COUNT = 10
@@ -47,17 +45,9 @@ def main() -> None:
     numpy_student = VectorizedMultiClassBackpropClassifierNetwork.randomized([32], DIMENSION, CLASS_COUNT)
     rust_student = RustArrayMultiClassBackpropClassifierNetwork.randomized([32], DIMENSION, CLASS_COUNT)
 
-    node_start = time.perf_counter()
-    node_result = train_linear_classifier_network(node_student, train_data, learning_rate=0.5, epochs=30)
-    node_elapsed = time.perf_counter() - node_start
-
-    numpy_start = time.perf_counter()
-    numpy_result = train_linear_classifier_network(numpy_student, train_data, learning_rate=0.5, epochs=30)
-    numpy_elapsed = time.perf_counter() - numpy_start
-
-    rust_start = time.perf_counter()
-    rust_result = train_linear_classifier_network(rust_student, train_data, learning_rate=0.5, epochs=30)
-    rust_elapsed = time.perf_counter() - rust_start
+    node_result, node_elapsed = timed_train(node_student, train_data, learning_rate=0.5, epochs=30)
+    numpy_result, numpy_elapsed = timed_train(numpy_student, train_data, learning_rate=0.5, epochs=30)
+    rust_result, rust_elapsed = timed_train(rust_student, train_data, learning_rate=0.5, epochs=30)
 
     node_diagnostic = node_result.diagnostic
     numpy_diagnostic = numpy_result.diagnostic
