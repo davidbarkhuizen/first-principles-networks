@@ -41,3 +41,26 @@ retrofit - so it can represent targets (like XOR) the discrete model structurall
   measured: both array-based backends 70x-794x faster per example than the per-node path,
   batch-size robustness confirmed to survive the port
 - [dropout](docs/dropout.md) — stochastic hidden-unit regularization, proposed and not yet started
+- [an array-based momentum sibling](docs/momentum-array-layer.md) — proposed, not started:
+  vectorizing momentum's own weight-update rule, to re-test its measured null at a scale/seed
+  count the per-node path couldn't afford
+- [an array-based L2 sibling](docs/l2-array-layer.md) — proposed, not started: the same idea for
+  L2's own overfitting-gap measurement, and the escalation dropout's own workplan proposed but
+  never got to run
+- [an array-based ReLU sibling](docs/relu-array-layer.md) — proposed, not started: vectorizing
+  ReLU's own genuine, adopted win, to check whether it holds at UCI-digits/real-MNIST scale, not
+  just the toy XOR scenario it was measured on
+- [an array-based softmax sibling](docs/softmax-array-layer.md) — proposed, not started:
+  vectorizing softmax, to finally afford the real-MNIST learning-rate retune its own per-node
+  investigation explicitly declined to run due to cost
+- [an array-based dropout sibling](docs/dropout-array-layer.md) — proposed, not started: the
+  direct fix for dropout's own abandoned, 40+-minute overfitting-gap sweep on the per-node path
+- [an array-based binary cross-entropy sibling](docs/binary-cross-entropy-array-layer.md) —
+  proposed, not started; depends on the array-based ensemble sibling's own single-output array
+  network
+- [an array-based ensemble sibling](docs/ensemble-array-layer.md) — proposed, not started:
+  vectorizing this codebase's own best-performing, production-facing real-MNIST capability
+  (96.01% held-out accuracy), which has never been vectorized at all
+- [an array-based convolutional layer](docs/conv-array-layer.md) — proposed, not started:
+  vectorizing conv layers to finally afford the real-MNIST-scale validation the per-node path's
+  ~30-minute-per-run cost has left unrun
