@@ -716,12 +716,34 @@ concrete failure case motivates it yet.
   full run costs on the order of 30 minutes per architecture per seed (see
   [research and analysis](research-multiclass-and-loss.md#the-ensemblereal-mnist-investigation)), a
   real wall-clock cost this UCI-digits result alone doesn't settle is worth spending. Not yet
-  run.
+  run. [An array-based convolutional layer](conv-array-layer.md) is the proposed, not-started
+  workplan for finally affording this run.
 - **Stacking conv layers, and pooling** - `conv_layer.py`'s own docs (see "convolutional layer"
   above) name both as explicitly out of scope for the current single-conv-layer design, along
   with multi-channel input and `'same'` padding - the current design needs no
   backprop-through-convolution since nothing before its one layer is ever trained; stacking would
   change that. Not yet started.
+- **Array-based (numpy/Rust-matmul-backed) counterparts for the remaining per-node-only
+  siblings** - a full audit (this entry's own occasion) found every sibling in this codebase
+  except Adam still per-node-only, the same constraint dropout's own abandoned 40+-minute
+  overfitting-gap sweep already confirmed directly is a real, not just theoretical, cost.
+  Vectorizing is now understood as the cheap way to get a well-powered measurement, not an
+  expensive follow-on reserved for siblings already known to win - so each of the following is
+  proposed regardless of its own per-node measurement's verdict (real win, matched-not-beaten, or
+  null): [an array-based momentum sibling](momentum-array-layer.md), [an array-based L2
+  sibling](l2-array-layer.md), [an array-based ReLU sibling](relu-array-layer.md), [an
+  array-based softmax sibling](softmax-array-layer.md), [an array-based dropout
+  sibling](dropout-array-layer.md), and [an array-based binary cross-entropy
+  sibling](binary-cross-entropy-array-layer.md) (the last depending on the next item's own
+  single-output array network). All proposed, not started.
+- **An array-based ensemble sibling** - `EnsembleBackpropClassifierNetwork` (this codebase's own
+  best-performing, production-facing real-MNIST capability, 96.01% held-out accuracy) has no
+  array-based or Rust-matmul-backed counterpart at all, unlike every other capability this
+  codebase has ever measured as worth adopting - today's ~29.6-minute real-MNIST training run is
+  sped up only by `multiprocessing`, never by vectorization. [An array-based ensemble
+  sibling](ensemble-array-layer.md) is the proposed, not-started workplan, including the real,
+  specific `ensemble_train.py` integration gap it found by checking the code rather than assuming
+  it would just work.
 The array-based (Rust-matmul-backed) Adam sibling that used to be listed here - both the
 numpy-backed half (`AdamArrayLayer`/`AdamVectorizedMultiClassBackpropClassifierNetwork`) and the
 Rust-matmul-backed counterpart (`AdamRustArrayLayer`/`AdamRustArrayMultiClassBackpropClassifierNetwork`)
