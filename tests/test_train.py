@@ -192,8 +192,6 @@ def test_train_linear_classifier_network_diagnostic_reports_converged():
 
 def test_train_linear_classifier_network_rejects_empty_training_data():
 
-    # previously wasn't rejected - _training_accuracy divided by len(training_data), so an
-    # empty list raised a bare ZeroDivisionError instead of a clear error
     bounds = square_bounds(10.0)
     student = LinearClassifierNetwork.randomized(1, 2, bounds)
 
