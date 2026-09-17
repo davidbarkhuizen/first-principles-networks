@@ -94,6 +94,31 @@ def build_balanced_binary_dataset(
     return [(dataset[index][0], category) for index, category in index_category_pairs]
 
 
+def _picklable_snapshot(snapshot):
+    """
+    Converts a classifier's own snapshot() output into a form guaranteed picklable across a
+    multiprocessing.Pool worker boundary, regardless of classifier_cls's backend - a no-op for
+    a per-node classifier's snapshot (already plain lists/tuples/floats) and for a numpy-backed
+    one (ndarrays already pickle natively; converting them here too is harmless, not required),
+    but the fix that actually matters: indrajala_ml_array.Array (RustArrayBackpropClassifierNetwork's
+    own backend) does not support pickling at all (confirmed directly - pickle.dumps raises
+    TypeError), so without this, a Rust-backed classifier_cls could never train through this
+    module's multiprocessing.Pool path. Recurses through nested lists/tuples so it works
+    uniformly across every snapshot shape this module ever sees (per-node's nested
+    list-of-layers-of-node-tuples, or an array backend's flat list of (W, b) pairs), calling
+    each array-like leaf's own .tolist() (both numpy ndarrays and pa.Array support it) rather
+    than assuming any one shape. The corresponding reconstruction happens on the collecting
+    side: RustArrayBackpropClassifierNetwork.restore() accepts plain lists as well as pa.Array,
+    wrapping via pa.Array(...) when needed, the same pattern its own load() already used.
+    """
+    to_list = getattr(snapshot, "tolist", None)
+    if to_list is not None:
+        return to_list()
+    if isinstance(snapshot, (list, tuple)):
+        return type(snapshot)(_picklable_snapshot(item) for item in snapshot)
+    return snapshot
+
+
 def _train_classifier_on_binary_dataset(
     label: int,
     binary_dataset: list[tuple[tuple[float, ...], float]],
@@ -126,7 +151,7 @@ def _train_classifier_on_binary_dataset(
     student = classifier_cls.randomized(layer_sizes, dimension, input_bounds)
     result = train_linear_classifier_network(student, binary_dataset, learning_rate=learning_rate, epochs=epochs)
 
-    return label, student.snapshot(), result.diagnostic
+    return label, _picklable_snapshot(student.snapshot()), result.diagnostic
 
 
 def _train_one_classifier(
@@ -484,16 +509,14 @@ def train_ensemble_serial_from_indices(
     multiprocessing worker already does, just called synchronously here instead of dispatched
     across a process boundary).
 
-    This is the *only* training path available to a Rust-array-core-backed classifier_cls
-    (RustArrayBackpropClassifierNetwork): indrajala_ml_array.Array does not support pickling
-    (confirmed directly - pickle.dumps raises TypeError), so it can never cross a
-    multiprocessing.Pool worker boundary the way a numpy-backed classifier_cls's own snapshot
-    already does. It's also the second of two training paths worth comparing for a picklable
-    (numpy) classifier_cls: per-classifier training is now (per the array/Rust ports' own
-    measured speedups) fast enough that training all class_count classifiers serially may match
-    or beat train_ensemble_parallel_from_indices's own multiprocessing dispatch/collection
-    overhead - see docs/research/research-multiclass-and-loss.md's "the ensemble/real-MNIST
-    investigation" entry for the measured comparison, and
+    A second training path worth comparing against train_ensemble_parallel_from_indices for
+    every classifier_cls, numpy- and Rust-backed alike (see _picklable_snapshot and
+    RustArrayBackpropClassifierNetwork.restore()'s own tolerance for why the Rust-backed path
+    can use either training function, not just this one): per-classifier training is now (per
+    the array/Rust ports' own measured speedups) fast enough that training all class_count
+    classifiers serially may match or beat the parallel path's own multiprocessing
+    dispatch/collection overhead - see docs/research/research-multiclass-and-loss.md's "the
+    ensemble/real-MNIST investigation" entry for the measured comparison, and
     docs/proposals/ensemble-array-layer.md's own "measurement plan" for why this question was
     worth answering directly rather than assuming vectorization is strictly additive to the
     existing multiprocessing-based design.

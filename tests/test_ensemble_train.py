@@ -317,7 +317,9 @@ def test_train_ensemble_parallel_accepts_array_backed_classifier_cls():
     # flagged this as untested: ArrayBackpropClassifierNetwork.randomized's accepted-and-discarded
     # input_bounds parameter (see its own docstring) should let it plug into the existing
     # multiprocessing.Pool path completely unchanged - numpy arrays pickle fine across a worker
-    # boundary, unlike indrajala_ml_array.Array (confirmed separately not to pickle at all).
+    # boundary natively (unlike indrajala_ml_array.Array - see
+    # test_train_ensemble_parallel_accepts_rust_array_backed_classifier_cls below for how that
+    # gap was closed instead of worked around).
     #
     # train_ensemble_parallel's own _collect_ensemble_results always wraps the trained
     # classifiers in EnsembleBackpropClassifierNetwork (the per-node wrapper), regardless of
@@ -348,6 +350,42 @@ def test_train_ensemble_parallel_accepts_array_backed_classifier_cls():
     assert result.classify_state((5.0, -5.0)) == 2
 
     ensemble = EnsembleArrayBackpropClassifierNetwork(result.classifiers)
+    assert ensemble.classify_state((-5.0, -5.0)) == 0
+
+
+def test_train_ensemble_parallel_accepts_rust_array_backed_classifier_cls():
+
+    # indrajala_ml_array.Array does not support pickling (confirmed directly: pickle.dumps
+    # raises TypeError), which would otherwise make this the one classifier_cls that can never
+    # train through a multiprocessing.Pool worker boundary. Closed by
+    # ensemble_train._picklable_snapshot (converts a worker's returned snapshot to plain,
+    # always-picklable lists before it crosses the process boundary) paired with
+    # RustArrayBackpropClassifierNetwork.restore()'s own tolerance for receiving plain lists as
+    # well as pa.Array - no new public training function needed, the existing
+    # train_ensemble_parallel/train_ensemble_parallel_from_indices machinery already works
+    # unchanged once both sides of that boundary agree on a picklable representation.
+    dataset = _synthetic_multiclass_dataset()
+    bounds = square_bounds(10.0)
+
+    result, _ = train_ensemble_parallel(
+        dataset,
+        class_count=3,
+        layer_sizes=[4],
+        dimension=2,
+        input_bounds=bounds,
+        learning_rate=0.5,
+        epochs=5,
+        worker_count=2,
+        seed=0,
+        classifier_cls=RustArrayBackpropClassifierNetwork,
+    )
+
+    assert all(isinstance(classifier, RustArrayBackpropClassifierNetwork) for classifier in result.classifiers)
+    assert result.classify_state((-5.0, -5.0)) == 0
+    assert result.classify_state((5.0, 5.0)) == 1
+    assert result.classify_state((5.0, -5.0)) == 2
+
+    ensemble = EnsembleRustArrayBackpropClassifierNetwork(result.classifiers)
     assert ensemble.classify_state((-5.0, -5.0)) == 0
 
 
@@ -444,11 +482,10 @@ def test_train_ensemble_serial_from_indices_matches_the_parallel_path(tmp_path):
 
 def test_train_ensemble_serial_from_indices_accepts_array_and_rust_backed_classifier_cls(tmp_path):
 
-    # the whole reason this function exists: indrajala_ml_array.Array does not support pickling
-    # (confirmed directly), so RustArrayBackpropClassifierNetwork can never train through
-    # train_ensemble_parallel_from_indices's own multiprocessing.Pool boundary - this is its only
-    # training path. ArrayBackpropClassifierNetwork (numpy) works here too, as a second
-    # comparison point against its own parallel-path result.
+    # the serial path this function provides for both backends - ArrayBackpropClassifierNetwork
+    # (numpy) and RustArrayBackpropClassifierNetwork alike (see _picklable_snapshot for why Rust
+    # can use the parallel path too now, not just this one) - as a comparison point against each
+    # backend's own parallel-path result.
     dataset = _synthetic_multiclass_dataset()
     labels = [label for _, label in dataset]
     path = str(tmp_path / "records.pkl")
