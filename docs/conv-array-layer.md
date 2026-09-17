@@ -3,8 +3,8 @@
 [← back to README](../README.md)
 
 **Status: proposed, not started.** Written up front as a design/measurement plan before any of
-it exists, per this repo's own practice (see [Adam optimizer](adam-optimizer.md), [an array-based
-Adam sibling](adam-array-layer.md) for precedent).
+it exists, per this repo's own established practice of writing a plan down before implementation,
+matching every other array-porting workplan in this codebase's history.
 
 ## why this, and why now
 
@@ -27,8 +27,8 @@ codebase; convolution is the one place it was never even attempted.
 ## scope
 
 `ArrayConvLayer` (numpy) and `RustArrayConvLayer` (Rust-matmul-backed), the same
-numpy-first-then-Rust precedent [an array-based Adam sibling](adam-array-layer.md) established,
-paired with a new `ArrayConvMultiClassBackpropClassifierNetwork` mirroring
+numpy-first-then-Rust precedent every array-ported sibling in this codebase established, paired
+with a new `ArrayConvMultiClassBackpropClassifierNetwork` mirroring
 `ConvMultiClassBackpropClassifierNetwork`'s own composition (one conv layer directly after the
 input, followed by ordinary dense hidden/output layers built from `ArrayLayer`). Same v1
 constraints [convolutional layers](convolutional-layers.md) already scoped for the per-node
@@ -37,12 +37,12 @@ reopened.
 
 ## design: the actual new work is a windowing primitive, not a matmul port
 
-Every other sibling in this round ([momentum](momentum-array-layer.md),
-[L2](l2-array-layer.md), [ReLU](relu-array-layer.md), [softmax](softmax-array-layer.md),
-[dropout](dropout-array-layer.md)) is a variant *layered onto* the array world's existing
-matmul-shaped pipeline - a different formula applied to the same `W @ x + b` shape `ArrayLayer`
-already computes. Convolution is different: its core operation (each output position reading its
-own local receptive-field window of the input) has never been expressed as a matmul in this
+Every other array-ported sibling in this codebase (momentum, L2, ReLU, softmax, dropout - see
+[research and analysis](research-backprop-siblings.md)) is a variant *layered onto* the array
+world's existing matmul-shaped pipeline - a different formula applied to the same `W @ x + b`
+shape `ArrayLayer` already computes. Convolution is different: its core operation (each output
+position reading its own local receptive-field window of the input) has never been expressed as a
+matmul in this
 codebase at all, on any path. The standard vectorization technique ("im2col") makes it one: stack
 every receptive-field window into a matrix, so convolution becomes one matmul against the
 stacked kernel weights.

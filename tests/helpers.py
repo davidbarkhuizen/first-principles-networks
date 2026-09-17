@@ -380,8 +380,8 @@ class DropoutMultiClassBackpropClassifierNetwork(MultiClassBackpropClassifierNet
     DropoutRustArrayMultiClassBackpropClassifierNetwork an eval-mode parity reference (dropout is
     a deterministic no-op at eval mode - training defaults to False on both sides, and neither
     predict_probabilities nor classify_state ever toggles it on), per
-    docs/dropout-array-layer.md's own "scope" caveat that a genuine training-time comparison
-    isn't achievable across two independent RNG streams.
+    docs/dropout-array-layer.md's own "correctness validation" section, which notes a genuine
+    training-time comparison isn't achievable across two independent RNG streams.
     """
 
     def __init__(

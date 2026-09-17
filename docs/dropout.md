@@ -3,16 +3,16 @@
 [← back to README](../README.md)
 
 **Status: stage 2 (the per-node capability) done; the overfitting-gap measurement itself now run
-against [an array-based dropout sibling](dropout-array-layer.md), not the per-node path this
-document's own stages 3-4 originally targeted.** That array-based sibling (both numpy and
-Rust-matmul-backed) was built specifically to make the measurement affordable - see this
-document's own "the measurement gap" below for the full story - and its own "measurement plan
-and result (stage 3)" section now has the real numbers: **a reconfirmed null**, both at the
-original scale and a deliberately more overfitting-prone escalation, at far higher statistical
-power (30 seeds) than the per-node path's abandoned attempt could ever afford. Written up front
-as a design/measurement plan before any of it existed, per this repo's
-own practice (see [Adam optimizer](adam-optimizer.md), [a learning-rate schedule](learning-rate-schedule.md)
-for precedent) - updated here with stage-by-stage status notes as it's executed.
+against an array-based dropout sibling, not the per-node path this document's own stages 3-4
+originally targeted.** That array-based sibling (both numpy and Rust-matmul-backed) was built
+specifically to make the measurement affordable - see this document's own "the measurement gap"
+below for the full story - and [research and
+analysis](research-backprop-siblings.md#an-array-based-dropout-sibling-another-reconfirmed-null-now-at-real-power)
+now has the real numbers: **a reconfirmed null**, both at the original scale and a deliberately
+more overfitting-prone escalation, at far higher statistical power (30 seeds) than the per-node
+path's abandoned attempt could ever afford. Written up front as a design/measurement plan before
+any of it existed, per this repo's own established practice of writing a plan down before
+implementation - updated here with stage-by-stage status notes as it's executed.
 `DropoutBackpropClassifierNetwork` is built and correctness-tested, but its actual regularization
 effect on this codebase's own benchmark is a known, flagged gap, not a silently-dropped one - see
 "the measurement gap" at the end of "measurement plan" below for why, and what would need to be
@@ -230,8 +230,8 @@ room to help), a deliberately more overfitting-prone follow-up before concluding
 help either - a larger hidden layer relative to the same fixed 320 training examples, or
 substantially more epochs than stage 1 uses, to induce visible overfitting first, then retest
 dropout there. Not committed to up front - only run if stage 1's result actually calls for it, the
-same conditional-escalation pattern [the Adam optimizer
-workplan](adam-optimizer.md#measurement-plan)'s own stage-3-gates-stage-4 structure used.
+same conditional-escalation pattern the Adam optimizer investigation's own stage-3-gates-stage-4
+structure used.
 
 ### the measurement gap - not run, deliberately, not silently dropped
 
@@ -247,10 +247,11 @@ paid for.
 **Why this codebase has no cheaper path available today**: `DropoutBackpropClassifierNetwork` has
 only the per-node `BackpropNode`/`BackpropLayer` path (see "scope" above) - no vectorized numpy or
 Rust-matmul-backed counterpart exists. This isn't a dropout-specific gap: every sibling in this
-family except Adam launches per-node-only, and Adam's own array-based port
-([an array-based Adam sibling](adam-array-layer.md)) was a separate, later, independently-scoped
-5-stage workplan, built only *after* Adam's per-node measurements had already shown a real,
-substantial win worth chasing to production scale - not part of Adam's own initial launch either.
+family except Adam launches per-node-only, and Adam's own array-based port (see [research and
+analysis](research-adam-optimizer.md#an-array-based-rust-matmul-backed-adam-sibling-the-wall-clock-win-the-accuracy-result-was-missing))
+was a separate, later, independently-scoped 5-stage workplan, built only *after* Adam's per-node
+measurements had already shown a real, substantial win worth chasing to production scale - not
+part of Adam's own initial launch either.
 
 **Decision: deliberately not run, and not immediately planned.** Reopening this measurement would
 need either (a) tolerating the wall-clock cost outright (a single overnight/background run, not
@@ -260,22 +261,22 @@ Dropout's actual regularization effect on this codebase's own benchmark therefor
 genuinely unmeasured, not merely unmeasured-yet-assumed-fine: the "risks and open questions"
 section below carries this forward as an open item, not a resolved one.
 
-**Update**: path (b) is now done, and the gap is closed. [An array-based dropout
-sibling](dropout-array-layer.md) (`DropoutArrayLayer`/`DropoutVectorizedMultiClassBackpropClassifierNetwork`
-and `DropoutRustArrayLayer`/`DropoutRustArrayMultiClassBackpropClassifierNetwork`) was built, and
-its own stage 3 re-ran the sweep against the numpy-backed array sibling: a real 150-run pass at
-the original `[16]`-hidden/20-epoch scale (2.24 minutes total, versus this section's own 40+
-minute per-node projection for a smaller job - over 53x), then, since that came back null, a
-150-run conditional escalation at `[128]` hidden/60 epochs (21.33 minutes). **Result: a
-reconfirmed null at both scales**, the same qualitative finding as
+**Update**: path (b) is now done, and the gap is closed. An array-based dropout sibling
+(`DropoutArrayLayer`/`DropoutVectorizedMultiClassBackpropClassifierNetwork` and
+`DropoutRustArrayLayer`/`DropoutRustArrayMultiClassBackpropClassifierNetwork`) was built, and its
+own stage 3 re-ran the sweep against the numpy-backed array sibling: a real 150-run pass at the
+original `[16]`-hidden/20-epoch scale (2.24 minutes total, versus this section's own 40+ minute
+per-node projection for a smaller job - over 53x), then, since that came back null, a 150-run
+conditional escalation at `[128]` hidden/60 epochs (21.33 minutes). **Result: a reconfirmed null at
+both scales**, the same qualitative finding as
 [L2's](research-backprop-siblings.md#l2-weight-regularization-closes-the-overfitting-gap-doesnt-improve-it)
 own measurement - no `drop_probability` improved held-out accuracy above the unregularized
 baseline, and unlike L2's own escalation, this one didn't even widen the train-test gap (flagged
-explicitly, not glossed over - see [an array-based dropout
-sibling](dropout-array-layer.md#measurement-plan-and-result-stage-3) for the full numbers and
-that honest caveat). Dropout's actual regularization effect on this codebase's own benchmark is
-therefore no longer an open question - the "risks and open questions" section below is updated
-accordingly.
+explicitly, not glossed over - see [research and
+analysis](research-backprop-siblings.md#an-array-based-dropout-sibling-another-reconfirmed-null-now-at-real-power)
+for the full numbers and that honest caveat). Dropout's actual regularization effect on this
+codebase's own benchmark is therefore no longer an open question - the "risks and open questions"
+section below is updated accordingly.
 
 ## risks and open questions
 
@@ -289,10 +290,10 @@ accordingly.
 - **Whether dropout actually helps on this codebase's own benchmark at all** - **resolved: no.**
   The per-node path's own stage-1 sweep was attempted and stopped before completion (too slow -
   see "the measurement gap" above), but [an array-based dropout
-  sibling](dropout-array-layer.md#measurement-plan-and-result-stage-3) reran it at real power (30
-  seeds, both the original scale and a conditional escalation): no `drop_probability` improved
-  held-out accuracy above the unregularized baseline at either scale, the same finding L2's own
-  measurement reached on this identical proxy.
+  sibling](research-backprop-siblings.md#an-array-based-dropout-sibling-another-reconfirmed-null-now-at-real-power)
+  reran it at real power (30 seeds, both the original scale and a conditional escalation): no
+  `drop_probability` improved held-out accuracy above the unregularized baseline at either scale,
+  the same finding L2's own measurement reached on this identical proxy.
 - **Composability with other siblings** - explicitly out of scope; flagged, not chased.
 - **Hidden-layer-only scope** - a convention carried over from ReLU's own precedent, not a
   mathematical necessity for dropout specifically (unlike ReLU's genuine output-range mismatch);

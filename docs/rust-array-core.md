@@ -15,8 +15,10 @@ shape combinations), `outer`, `sum_axis0`, `argmax`, a hand-rolled xorshift128+ 
 exists independent of numpy, against that too - a three-way match) across 618 tests in
 `rust/indrajala_ml_array/tests/` (254 covering the operation subset itself, plus 364 covering
 `fused.rs`'s per-layer functions below - 271 for the plain-SGD path, plus 93 for
-`layer_adam_apply_accumulated_gradient`, [the Adam array-layer sibling](adam-array-layer.md)'s own
-stage 5). The one documented exception is `uniform`: a hand-rolled
+`layer_adam_apply_accumulated_gradient`, the array-based Adam sibling's own contribution - see
+[research and
+analysis](research-adam-optimizer.md#an-array-based-rust-matmul-backed-adam-sibling-the-wall-clock-win-the-accuracy-result-was-missing)).
+The one documented exception is `uniform`: a hand-rolled
 PRNG can never reproduce numpy's Mersenne Twister bit-for-bit, so its tests check statistical
 plausibility (range, mean, variance), not per-draw equality - see `random.rs`'s own doc comment.
 

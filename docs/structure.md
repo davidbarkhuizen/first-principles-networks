@@ -69,7 +69,7 @@ indrajala_ml/
                                      running mean/variance estimates per weight, not momentum's
                                      single shared velocity term (see "backprop siblings")
     adam_backprop_classifier_network.py  Adam sibling of backprop_classifier_network.py (see
-                                     "backprop siblings", docs/adam-optimizer.md)
+                                     "backprop siblings")
     conv_kernel.py                  ConvKernel — one output channel's shared, trainable
                                      kernel weights/bias, with its own accumulate_gradient/
                                      apply_accumulated_gradient pair (see "convolutional layer")
@@ -392,9 +392,8 @@ the training loop only ever treats the snapshot as opaque, so this is invisible 
 
 Six additive siblings of `BackpropClassifierNetwork` exist alongside it - each isolating one
 axis of variation (init scheme, hidden-layer activation, output loss, optimizer, regularization),
-none replacing it or changing any existing demo, and each (except the newest, not yet measured -
-see below) backed by a real measurement in [research and analysis](research-and-analysis.md)
-rather than assumed to help:
+none replacing it or changing any existing demo, and each backed by a real measurement in
+[research and analysis](research-and-analysis.md) rather than assumed to help:
 
 - **`FanInAwareBackpropClassifierNetwork`** swaps in the same fan-in-aware `randomize()` scheme
   `MultiClassBackpropClassifierNetwork` already uses (below) instead of
@@ -435,16 +434,18 @@ rather than assumed to help:
   own published values rather than requiring an explicit value - see `adam_layer.py`'s own
   docstring for why (they're closer to fixed algorithmic constants in real-world Adam usage than
   a knob this codebase's measurements have an opinion on, unlike momentum's coefficient).
-  **Built and correctness-tested (hand-derived regression fixtures, the same convention as every
-  sibling above) but not yet measured against the SGD/momentum baseline** - see
-  [Adam optimizer](adam-optimizer.md) for the measurement plan.
+  Needs its own retuned `learning_rate` to avoid actively hurting, like every other sibling here,
+  but once retuned it's a modest win at tuned-XOR scale and a substantial one under large-batch
+  training, at both proxy and real scale - kept as a real, adopted capability alongside momentum/L2
+  rather than a default. See [research and analysis](research-adam-optimizer.md) for the full
+  measurement.
 
-Of these six, two (`FanInAware...`, `ReLU...`) are genuine, measured improvements over the
-plain sigmoid/quadratic-loss/no-momentum/no-regularization baseline; one
+Of these six, three (`FanInAware...`, `ReLU...`, `Adam...`) are genuine, measured improvements
+over the plain sigmoid/quadratic-loss/no-momentum/no-regularization baseline (Adam's specifically
+under large-batch training - see [research and analysis](research-adam-optimizer.md)); one
 (`BinaryCrossEntropy...`) matches it once retuned; two (`Momentum...`, `L2Regularized...`) are
-kept as real, tested capabilities despite measuring as nulls on the scenarios tested, not
-because either is recommended for use today; `Adam...` is a real, correctness-tested capability
-whose own measurement is still open (see [Adam optimizer](adam-optimizer.md)).
+kept as real, tested capabilities despite measuring as nulls on the scenarios tested, not because
+either is recommended for use today.
 `demo_backprop_variant_comparison.py` reproduces three of these comparisons (one-vs-rest vs
 softmax, quadratic vs binary cross-entropy, fan-in-aware vs Xavier/Glorot init - see
 [demos](demos.md#demo-backprop-variant-comparison)) live and re-runnably, rather than leaving the
@@ -620,8 +621,10 @@ mirror any array backend's speed claim gets measured against, not this codebase'
 array backend. [A hand-built Rust core](rust-array-core.md) (`rust/indrajala_ml_array/`, wrapped
 via PyO3) implements the same operation subset ([the numpy interface
 subset](numpy-interface-subset.md)) this class needs, is parity-tested against real numpy across
-618 tests (525 at this phase's own completion; the growth since is [the Adam array-layer
-sibling](adam-array-layer.md)'s own stage 5 fused-op tests, a later addition), and backs
+618 tests (525 at this phase's own completion; the growth since is the array-based Adam sibling's
+own fused-op tests, a later addition - see [research and
+analysis](research-adam-optimizer.md#an-array-based-rust-matmul-backed-adam-sibling-the-wall-clock-win-the-accuracy-result-was-missing)),
+and backs
 `RustArrayLayer`/`RustArrayMultiClassBackpropClassifierNetwork`
 (`indrajala_ml/model/rust_array_layer.py`,
 `indrajala_ml/model/rust_array_multiclass_backprop_classifier_network.py`) - the actual production
@@ -669,7 +672,7 @@ ranked.
   attempted (a real 50-run measurement, launched against an 8-way `multiprocessing.Pool`) and
   stopped before completion once it was observed running ~5x slower than serial calibration
   predicted, on track for 40+ minutes - the per-node path alone was too slow to afford it.
-  **Update:** [an array-based dropout sibling](dropout-array-layer.md) is now done, every stage -
+  **Update:** an array-based dropout sibling is now done, every stage -
   `DropoutArrayLayer`/`DropoutVectorizedMultiClassBackpropClassifierNetwork` (numpy) and
   `DropoutRustArrayLayer`/`DropoutRustArrayMultiClassBackpropClassifierNetwork`
   (Rust-matmul-backed, including a new RNG primitive this crate didn't have before,
@@ -680,14 +683,17 @@ ranked.
   `[16]`-hidden scale, over 53x faster than the per-node path's own 40+ minute projection for a
   smaller job) plus a conditional `[128]`-hidden escalation (21.33 minutes) - **a reconfirmed
   null at both scales**, the same qualitative finding as L2's own measurement, with one honestly-
-  flagged difference: unlike L2's escalation, this one didn't widen the train-test gap at all.
+  flagged difference: unlike L2's escalation, this one didn't widen the train-test gap at all. See
+  [research and
+  analysis](research-backprop-siblings.md#an-array-based-dropout-sibling-another-reconfirmed-null-now-at-real-power)
+  for the full measurement.
 - **Batch or layer normalization** - no normalization exists at all; likely the highest-value item
   in this group once hidden layers get deeper than 1-2, but also the biggest lift of anything
   here (running statistics, a train/eval-mode split - real complexity beyond the existing
   siblings' pattern). Not yet started.
 
-**RMSprop** (Adam minus its momentum-like first-moment term) is closed -
-[Adam optimizer](adam-optimizer.md)'s stage 7: measured (no new code needed,
+**RMSprop** (Adam minus its momentum-like first-moment term) is closed - measured (no new code
+needed,
 `AdamBackpropClassifierNetwork(..., beta1=0.0)` already *is* RMSprop) against Adam and sigmoid on
 a fresh real-MNIST-proxy batch-size sweep. RMSprop tracked Adam within seed-to-seed noise at every
 batch size tested - the second-moment normalization alone accounts for Adam's batch-size-
@@ -696,8 +702,7 @@ capability; Adam remains the recommended choice. See [research and
 analysis](research-adam-optimizer.md#rmsprop-the-second-moment-term-alone-accounts-for-adams-batch-size-win-stage-7-of-the-adam-optimizer-workplan)
 for the full measurement.
 
-**A learning-rate schedule** (decay/warmup) is closed -
-[a learning-rate schedule](learning-rate-schedule.md)'s all-five-stages workplan: `lr_schedule.
+**A learning-rate schedule** (decay/warmup) is closed - `lr_schedule.
 linear_warmup`, wired into both training loops via a widened `learning_rate: float |
 Callable[[int], float]`, then retested against the documented `batch_size=128`/`lr=64.0`
 divergence ([the learning-rate-vs-batch-size
@@ -736,34 +741,36 @@ concrete failure case motivates it yet.
   Vectorizing is now understood as the cheap way to get a well-powered measurement, not an
   expensive follow-on reserved for siblings already known to win - so each of the following is
   proposed regardless of its own per-node measurement's verdict (real win, matched-not-beaten, or
-  null): [an array-based momentum sibling](momentum-array-layer.md), [an array-based L2
-  sibling](l2-array-layer.md), [an array-based ReLU sibling](relu-array-layer.md), [an
-  array-based softmax sibling](softmax-array-layer.md), [an array-based dropout
-  sibling](dropout-array-layer.md), and [an array-based binary cross-entropy
-  sibling](binary-cross-entropy-array-layer.md) (the last depending on the next item's own
-  single-output array network). **Update:** [an array-based L2 sibling](l2-array-layer.md) is now
-  done, every stage - 53x-845x faster per example than the per-node path, and a reconfirmed null
-  (no `l2_lambda` improves held-out accuracy above the unregularized baseline) at far higher
+  null): an array-based momentum sibling, an array-based L2 sibling, an array-based ReLU sibling,
+  an array-based softmax sibling, an array-based dropout sibling, and [an array-based binary
+  cross-entropy sibling](binary-cross-entropy-array-layer.md) (the last depending on the next
+  item's own single-output array network). **Update:** [an array-based L2
+  sibling](research-backprop-siblings.md#an-array-based-l2-sibling-the-reconfirmed-null-holds-at-far-higher-power)
+  is now done, every stage - 53x-845x faster per example than the per-node path, and a reconfirmed
+  null (no `l2_lambda` improves held-out accuracy above the unregularized baseline) at far higher
   power than the per-node path could afford, including a deliberately more overfitting-prone
   escalation built specifically to give L2 more room to help. [An array-based momentum
-  sibling](momentum-array-layer.md) is also done, every stage - 30x-717x faster per example, and
-  a reconfirmed null (momentum still doesn't help once the learning-rate confound is controlled
-  for, and `momentum=0.9` remains actively harmful) at 3x the original's seed count. [An
-  array-based ReLU sibling](relu-array-layer.md) is also done, every stage - 41.6x-632.3x faster
-  per example, and a genuine, scale-dependent finding rather than a blanket win: ReLU's tuned-XOR
-  win doesn't transfer at UCI-digits scale (a tie), but does transfer, modestly, at real-MNIST
-  scale (94.16% ± 0.22% vs the sigmoid baseline's 93.72% ± 0.67%, 5 seeds), and it still needs
-  its own tuned learning rate at every scale checked. [An array-based softmax
-  sibling](softmax-array-layer.md) is also done, every stage - 75.2x-1089.7x faster per example,
-  and unlike ReLU's scale-dependent split, a genuine win at *both* scales checked: the UCI-digits
-  win reproduces at array speed (100.00%/98.33% vs one-vs-rest's 99.58%/96.66%), and the
-  previously-too-expensive-to-run retune on real MNIST turns softmax's untuned loss into a
-  decisive win (93.85% ± 0.26% vs the untuned baseline's 92.85% ± 0.36%, 5 seeds, every softmax
-  seed beating every baseline seed) - still needing its own tuned learning rate, the same caveat
-  every retuned sibling in this round carries. [An array-based dropout
-  sibling](dropout-array-layer.md) is also done, every stage (numpy and Rust-matmul-backed,
-  including a new RNG primitive this crate didn't have before) - built specifically to make
-  [dropout's own abandoned overfitting-gap
+  sibling](research-backprop-siblings.md#an-array-based-momentum-sibling-unchanged-on-stronger-evidence)
+  is also done, every stage - 30x-717x faster per example, and a reconfirmed null (momentum still
+  doesn't help once the learning-rate confound is controlled for, and `momentum=0.9` remains
+  actively harmful) at 3x the original's seed count. [An array-based ReLU
+  sibling](research-backprop-siblings.md#an-array-based-relu-sibling-a-genuine-scale-dependent-finding)
+  is also done, every stage - 41.6x-632.3x faster per example, and a genuine, scale-dependent
+  finding rather than a blanket win: ReLU's tuned-XOR win doesn't transfer at UCI-digits scale (a
+  tie), but does transfer, modestly, at real-MNIST scale (94.16% ± 0.22% vs the sigmoid baseline's
+  93.72% ± 0.67%, 5 seeds), and it still needs its own tuned learning rate at every scale checked.
+  [An array-based softmax
+  sibling](research-multiclass-and-loss.md#an-array-based-softmax-sibling-the-retune-the-per-node-investigation-declined-to-spend-on)
+  is also done, every stage - 75.2x-1089.7x faster per example, and unlike ReLU's scale-dependent
+  split, a genuine win at *both* scales checked: the UCI-digits win reproduces at array speed
+  (100.00%/98.33% vs one-vs-rest's 99.58%/96.66%), and the previously-too-expensive-to-run retune
+  on real MNIST turns softmax's untuned loss into a decisive win (93.85% ± 0.26% vs the untuned
+  baseline's 92.85% ± 0.36%, 5 seeds, every softmax seed beating every baseline seed) - still
+  needing its own tuned learning rate, the same caveat every retuned sibling in this round carries.
+  [An array-based dropout
+  sibling](research-backprop-siblings.md#an-array-based-dropout-sibling-another-reconfirmed-null-now-at-real-power)
+  is also done, every stage (numpy and Rust-matmul-backed, including a new RNG primitive this
+  crate didn't have before) - built specifically to make [dropout's own abandoned overfitting-gap
   sweep](dropout.md#the-measurement-gap---not-run-deliberately-not-silently-dropped) affordable,
   and unlike the four above, the result is a reconfirmed null rather than a genuine or
   scale-dependent win: no `drop_probability` improves held-out accuracy over the unregularized
@@ -784,8 +791,9 @@ Rust-matmul-backed counterpart (`AdamRustArrayLayer`/`AdamRustArrayMultiClassBac
 - is closed, all five stages done including the wall-clock/robustness measurement: both
 array-based backends measured 70x-794x faster per example than the per-node path (widening with
 batch size), and Adam's batch-size accuracy-robustness result confirmed to survive the array/Rust
-port unchanged. See [an array-based Adam sibling](adam-array-layer.md) for the full plan and
-measured results.
+port unchanged. See [research and
+analysis](research-adam-optimizer.md#an-array-based-rust-matmul-backed-adam-sibling-the-wall-clock-win-the-accuracy-result-was-missing)
+for the full measurement.
 
 ### infrastructure that protects the rigor
 
@@ -803,8 +811,10 @@ measured results.
   now built: `benchmark_data.build_mnist_digit_proxy` (both binary one-vs-rest and genuine
   multiclass digit-subset proxies, reusing `ensemble_train.select_balanced_indices` for the
   binary case) and `benchmark_sweep.run_parameter_sweep`/`estimate_sweep_wallclock`/
-  `summarize_sweep_results`. The stdout-buffering gap found while running [an array-based
-  dropout sibling](dropout-array-layer.md)'s own stage-3 sweep (a long-running sweep launched
+  `summarize_sweep_results`. The stdout-buffering gap found while running [an array-based dropout
+  sibling's own stage-3
+  sweep](research-backprop-siblings.md#an-array-based-dropout-sibling-another-reconfirmed-null-now-at-real-power)
+  (a long-running sweep launched
   via `run_in_background`/redirected to a file gets no interim progress output at all until it
   exits or its stdout buffer fills, since Python fully buffers stdout when it isn't a tty) is
   fixed in the new runner itself (`flush=True` on every progress print). Validated against a

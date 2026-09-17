@@ -2,47 +2,9 @@
 
 [← back to README](../README.md)
 
-**Status: all seven stages done.**
-Built (stage 2), then measured at three scales (tuned-XOR, real-MNIST proxy, real-MNIST-ensemble).
-Adopted, kept as a real capability alongside momentum/L2 rather than a default: needs its own
-retuned `learning_rate` to avoid actively hurting (like every other sibling here), but once
-retuned it's a modest win on the tuned-XOR scale and a substantial one under large-batch training,
-at both proxy and real scale - see the delivery-stages list below for the numbers, and [research
-and analysis](research-adam-optimizer.md) for the full write-ups. Originally written up front as a
-design/measurement plan before any of it existed, per this repo's own practice of writing a plan
-down before implementation (see [dataset sourcing](dataset-sourcing-proposal.md), [the Rust
-production cutover plan](rust-production-cutover.md) for precedent).
-
-## why this, and why now
-
-The first item in [structure](structure.md#possible-next-steps)'s "new model primitives" tier:
-every gradient-based sibling in this codebase (plain SGD, momentum, L2) shares one
-`learning_rate` across every weight, for the life of training. Adam (Kingma & Ba, 2014) is a
-structurally different mechanism worth its own measurement, not assumed to land the way momentum
-did: a per-parameter *adaptive* learning rate, driven by running estimates of each weight's own
-gradient mean and variance, rather than a single global velocity term.
-
-Momentum was measured here to actively hurt at its canonical coefficient, and land as a flat null
-otherwise (see [research and analysis](research-backprop-siblings.md#momentum-measured-not-worth-adopting)),
-and the mini-batch retest ([research and
-analysis](research-backprop-siblings.md#the-learning-rate-vs-batch-size-follow-up-the-confound-was-real-and-momentum-still-doesnt-help))
-found momentum flat-to-actively-harmful even under lower-noise batch gradients, once a real
-learning-rate confound was controlled for. Adam is worth testing independently rather than
-assumed to fare the same way: it doesn't accumulate a single shared velocity the way momentum
-does, and its per-parameter second-moment estimate is specifically designed to normalize away the
-kind of gradient-scale variation this codebase's own measurements keep surfacing (e.g. the
-`batch_size >= 32` learning-rate sensitivity above).
-
-## scope
-
-`AdamBackpropClassifierNetwork`, a sibling of `BackpropClassifierNetwork` only (single-output,
-binary) - the same scope boundary every prior weight-update-rule sibling used
-(`MomentumBackpropClassifierNetwork`, `L2RegularizedBackpropClassifierNetwork`); no prior sibling
-in this family has launched into `MultiClassBackpropClassifierNetwork` at the same time it was
-first built. RMSprop (Adam minus its momentum term) is deliberately out of scope for this
-workplan - it becomes a cheap ablation once Adam's `AdamBackpropNode` exists (zero out its
-momentum-like first-moment term), not a separate build, and is only worth doing if Adam's own
-result says something worth isolating further.
+Design reference for `AdamBackpropClassifierNetwork` (see
+[structure](structure.md#backprop-siblings)). Built and measured; see [research and
+analysis](research-adam-optimizer.md) for the full measurement and decision.
 
 ## design: fits the existing accumulate/apply seam, no new mechanism needed
 
@@ -86,116 +48,8 @@ momentum's velocity live per-node with no shared state between nodes or layers.
 ## hyperparameters
 
 `learning_rate` stays the normal, explicit, per-call training-time argument, unchanged from every
-other sibling. For `beta1`/`beta2`/`epsilon`: proposing to default them to Kingma & Ba's own
-published values (`0.9`, `0.999`, `1e-8`) rather than requiring them explicitly the way
-`momentum`/`l2_lambda` are - those two were made required specifically because no coefficient
-this codebase measured was safe to recommend as a default, whereas beta/epsilon are closer to
-fixed algorithmic constants in virtually all real-world Adam usage, not tunable knobs this project
-has an opinion on. **Open decision, flagged rather than assumed**: could instead require them
-explicitly for consistency with momentum/L2's posture, at the cost of every call site needing to
-state values nobody expects to vary.
-
-## correctness validation
-
-Same convention as `test_momentum_backprop_model.py`: a hand-computed (independently, via a
-standalone script - not derived from the implementation under test) 2-3-step regression fixture
-using `wire_fixed_single_hidden_node`, pinning exact weight/bias values via `pytest.approx`, plus
-a sanity check that the first step (`t=1`, `m`/`v` starting at zero) reduces to a specific,
-independently-computable value the way momentum's own first-step test reduces to plain SGD.
-
-## measurement plan
-
-Two stages, cheapest and most comparable to existing results first:
-
-1. **The pinned tuned-XOR scenario** (`test_backprop_training_pipeline.py`'s pinned scenario,
-   10-15 seeds) - establishes whether Adam helps or hurts at all on this codebase's smallest,
-   most-measured target. Correction, found while executing this stage: momentum's own baseline was
-   actually measured on the 320-example real-MNIST proxy, not this XOR scenario (see
-   [research and analysis](research-backprop-siblings.md#momentum-measured-not-worth-adopting)) - this
-   stage instead reuses the same pinned XOR scenario the binary-cross-entropy and ReLU
-   investigations used.
-2. **The 320-example real-MNIST proxy, crossed with `batch_size`** - reusing the exact scratch-sweep
-   pattern from the learning-rate-vs-batch-size sweep (fork-based multiprocessing pool, ~25 minutes
-   at this scale, see [research and
-   analysis](research-backprop-siblings.md#the-learning-rate-vs-batch-size-follow-up-the-confound-was-real-and-momentum-still-doesnt-help)).
-   This is where Adam's actual selling point (per-parameter adaptive rates smoothing noisy
-   gradients) should show up if it's going to, especially at `batch_size=1`'s per-example-noisy
-   regime where momentum specifically failed.
-
-A third, larger stage (real-MNIST-ensemble scale, via `ensemble_train.py`) is conditional on stage
-2 showing something worth confirming at full scale - `ensemble_train.py`'s
-`classifier_cls.randomized(layer_sizes, dimension, input_bounds)` call doesn't currently pass
-through extra hyperparameters, so plugging Adam in there would need either a small
-`ensemble_train.py` extension or a hand-rolled ad hoc parallel-training script (the same
-uncommitted-prototype pattern several other real-scale investigations in this codebase already
-used) - a real added step, not assumed away.
-
-## risks and open questions
-
-- **beta1/beta2/epsilon as defaults vs. required arguments** - resolved during stage 2 (see
-  "hyperparameters" above and delivery stage 2 below): defaulted to Kingma & Ba's published values.
-- **Whether Adam's adaptive per-parameter scaling interacts with `batch_size=128`'s
-  linear-scaling-rule divergence** - resolved during stage 4: yes, and the interaction is that the
-  linear scaling rule actively hurts Adam rather than merely being unneeded - see [research and
-  analysis](research-adam-optimizer.md#adam-under-batch-size-a-much-bigger-cleaner-win-stage-4-of-the-adam-optimizer-workplan).
-- **RMSprop as a follow-on ablation** - out of scope for stages 1-6 (see "scope" above); Adam's
-  own result (a real, not-null win) triggered the condition this was flagged under, so it was
-  planned as stage 7 below. Resolved: RMSprop (`beta1=0.0`) tracks Adam within seed-to-seed noise
-  at every batch size tested - the second-moment term alone accounts for the win, Adam's
-  first-moment smoothing adds nothing measurable here. See [research and
-  analysis](research-adam-optimizer.md#rmsprop-the-second-moment-term-alone-accounts-for-adams-batch-size-win-stage-7-of-the-adam-optimizer-workplan).
-
-## delivery stages (each its own PR, per this repo's practice)
-
-1. ✅ This design document.
-2. ✅ `adam_layer.py` (factory) + `adam_backprop_classifier_network.py` + hand-derived regression
-   tests (`test_adam_layer.py`, isolated node-level; `test_adam_backprop_model.py`, whole-network,
-   the same two-tier convention every prior sibling used) - the actual capability, buildable and
-   mergeable on its own, independent of any measurement result. `beta1`/`beta2`/`epsilon` default
-   to Kingma & Ba's own published values (0.9/0.999/1e-8) - the "hyperparameters" open decision
-   above was resolved this way rather than requiring them explicitly, since they're closer to
-   fixed algorithmic constants in real-world use than a knob momentum's own posture was about.
-   Mini-batch (`learn_batch`) verified working with no extra code, inherited unchanged the same
-   way every prior sibling's did. Full suite (850 tests, up from 845) passes.
-3. ✅ The tuned-XOR-scale measurement, written up in [research and
-   analysis](research-adam-optimizer.md#adam-tuned-xor-measurement-stage-3-of-the-adam-optimizer-workplan).
-   At the demo-tuned `learning_rate=1.0` Adam collapses badly (58.27% vs. sigmoid's 97.80% mean,
-   10 seeds) - the same "no default is safe without retuning" pattern cross-entropy/ReLU/momentum
-   all showed. Retuned to `learning_rate=0.01-0.05`, Adam modestly beats the sigmoid baseline's
-   mean with a visibly tighter spread, confirmed at 15 seeds (98.09-98.38% vs. 97.33% mean,
-   0.75-1.14% vs. 1.66% stdev) - a real but modest edge on this small, near-ceiling toy problem,
-   not a dramatic win the way ReLU's retuned result was, and not a null the way momentum's own
-   retuned sweep was.
-4. ✅ The real-MNIST-proxy batch-size sweep, written up in [research and
-   analysis](research-adam-optimizer.md#adam-under-batch-size-a-much-bigger-cleaner-win-stage-4-of-the-adam-optimizer-workplan).
-   A materially bigger, cleaner win than stage 3's XOR result: at a **fixed** `learning_rate`, Adam
-   barely degrades across `batch_size` 1-128 (90.50% -> 86.75%) while sigmoid collapses over the
-   same range (89.62% -> 71.50%, variance exploding); at `batch_size=128` Adam beats every sigmoid
-   regime tried with roughly a tenth of the variance. Resolves the flagged open question below:
-   linearly scaling `learning_rate` with `batch_size` (the fix SGD/momentum need) actively destroys
-   Adam instead (collapses to a coin-flip 50.00% at `batch_size=128`) - the opposite prescription
-   from SGD/momentum's own linear scaling rule.
-5. ✅ Real-MNIST-ensemble-scale validation, written up in [research and
-   analysis](research-adam-optimizer.md#adam-at-real-mnist-ensemble-scale-the-proxy-result-holds-stage-5-of-the-adam-optimizer-workplan).
-   Stage 4's proxy result was judged strong enough to justify the run: at `batch_size=128`, fixed
-   untuned-for-batch-size rates, Adam beats sigmoid by **5.56 points** (94.62% vs. 89.06%) on real
-   full 60000/10000 MNIST via the production ensemble architecture - the proxy-scale gap held up
-   at real scale, if smaller in absolute terms. Adam gives up only 1.39 points versus the
-   documented `batch_size=1` production baseline (96.01%); sigmoid gives up 6.95. No wall-clock win
-   on its own (mini-batching alone doesn't speed up this codebase's per-example forward/backward
-   loop) - the practical payoff is conditional on the array-based Adam sibling flagged in
-   [structure](structure.md#possible-next-steps), which is what would make large batches cheap in
-   wall-clock terms too.
-6. ✅ Docs closeout: `structure.md`'s possible-next-steps entry updated to reflect the actual
-   result, the same pattern the momentum re-test's own closeout PRs followed.
-7. ✅ The RMSprop ablation flagged in "scope" and "risks and open questions" above -
-   `AdamBackpropClassifierNetwork(..., beta1=0.0)` already *is* RMSprop (with `beta1=0`,
-   `bias_correction1 = 1 - 0**t = 1` for every `t >= 1`, so `m_hat = m = g` - no momentum term,
-   no bias-correction effect on it, exactly RMSprop's per-parameter-normalized-by-second-moment
-   update with none of Adam's own first-moment smoothing). No new code needed - a pure
-   measurement stage, written up in [research and
-   analysis](research-adam-optimizer.md#rmsprop-the-second-moment-term-alone-accounts-for-adams-batch-size-win-stage-7-of-the-adam-optimizer-workplan):
-   RMSprop tracks Adam within seed-to-seed noise at every batch size tested (1/8/32/128) on a
-   freshly-built real-MNIST-proxy sweep - the second-moment normalization alone accounts for
-   Adam's batch-size-robustness win, its first-moment term adds nothing measurable. Not adopted
-   as a separate capability; Adam remains the recommended choice.
+other sibling. `beta1`/`beta2`/`epsilon` default to Kingma & Ba's own published values (`0.9`,
+`0.999`, `1e-8`) rather than requiring them explicitly the way `momentum`/`l2_lambda` are - those
+two were made required specifically because no coefficient this codebase measured was safe to
+recommend as a default, whereas beta/epsilon are closer to fixed algorithmic constants in
+virtually all real-world Adam usage, not tunable knobs this project has an opinion on.
