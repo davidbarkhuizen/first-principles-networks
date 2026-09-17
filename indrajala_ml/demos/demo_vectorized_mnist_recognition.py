@@ -1,12 +1,10 @@
-import time
-
+from indrajala_ml.demos.timing import timed_call, timed_train
 from indrajala_ml.mnist_data import load_mnist_dataset, load_mnist_dataset_as_array
 from indrajala_ml.model.multiclass_backprop_classifier_network import MultiClassBackpropClassifierNetwork
 from indrajala_ml.model.vectorized_multiclass_backprop_classifier_network import (
     VectorizedMultiClassBackpropClassifierNetwork,
 )
 from indrajala_ml.multiclass_evaluate import accuracy
-from indrajala_ml.train import train_linear_classifier_network
 
 DIMENSION = 28 * 28
 CLASS_COUNT = 10
@@ -44,16 +42,12 @@ def main() -> None:
     array_student = VectorizedMultiClassBackpropClassifierNetwork.randomized(LAYER_SIZES, DIMENSION, CLASS_COUNT)
 
     print("training pure-Python network for 1 epoch (real baseline architecture - expect several minutes)...")
-    node_start = time.perf_counter()
-    node_result = train_linear_classifier_network(node_student, train_data, learning_rate=0.5, epochs=1)
-    node_elapsed = time.perf_counter() - node_start
+    node_result, node_elapsed = timed_train(node_student, train_data, learning_rate=0.5, epochs=1)
     node_test_accuracy = accuracy(node_student, test_data)
     print(f"  done in {node_elapsed:.1f}s ({node_elapsed / 60:.2f} min)")
 
     print("training vectorized network for 1 epoch...")
-    array_start = time.perf_counter()
-    array_result = train_linear_classifier_network(array_student, train_data, learning_rate=0.5, epochs=1)
-    array_elapsed = time.perf_counter() - array_start
+    array_result, array_elapsed = timed_train(array_student, train_data, learning_rate=0.5, epochs=1)
     array_test_accuracy = accuracy(array_student, test_data)
     print(f"  done in {array_elapsed:.1f}s ({array_elapsed / 60:.2f} min)")
 
@@ -76,13 +70,8 @@ def main() -> None:
     # this times that claim directly, not just the already-proven decode-correctness parity
     # (tests/test_mnist_data.py).
     print("data loading comparison (full training file decode):")
-    decode_start = time.perf_counter()
-    load_mnist_dataset(TRAIN_PATH)
-    tuple_decode_elapsed = time.perf_counter() - decode_start
-
-    array_decode_start = time.perf_counter()
-    load_mnist_dataset_as_array(TRAIN_PATH)
-    array_decode_elapsed = time.perf_counter() - array_decode_start
+    _, tuple_decode_elapsed = timed_call(load_mnist_dataset, TRAIN_PATH)
+    _, array_decode_elapsed = timed_call(load_mnist_dataset_as_array, TRAIN_PATH)
 
     print(f"  load_mnist_dataset (tuples):        {tuple_decode_elapsed:.2f}s")
     print(f"  load_mnist_dataset_as_array (numpy): {array_decode_elapsed:.2f}s")
