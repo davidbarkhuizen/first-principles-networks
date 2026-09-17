@@ -5,6 +5,7 @@ import numpy as np
 import pytest
 
 from indrajala_ml.model.adam_layer import make_adam_layer_cls
+from indrajala_ml.model.binary_cross_entropy_backprop_classifier_network import CrossEntropyOutputLayer
 from indrajala_ml.model.dropout_layer import make_dropout_layer_cls
 from indrajala_ml.model.fan_in_aware_backprop_classifier_network import FanInAwareBackpropClassifierNetwork
 from indrajala_ml.model.l2_regularization_layer import make_l2_layer_cls
@@ -493,6 +494,58 @@ def matching_softmax_array_backprop_networks(
     docs/design-docs/array-siblings/softmax-array-layer.md's own "correctness validation" section.
     """
     node_network = SoftmaxMultiClassBackpropClassifierNetwork(
+        layer_sizes, dimension, [(-bounds, bounds)] * dimension, class_count
+    )
+    array_network = array_network_cls(layer_sizes, dimension, class_count)
+
+    previous_size = dimension
+    for layer_index, size in enumerate([*layer_sizes, class_count]):
+        weights = [[rng.uniform(-2.0, 2.0) for _ in range(previous_size)] for _ in range(size)]
+        biases = [rng.uniform(-2.0, 2.0) for _ in range(size)]
+
+        node_layer = node_network.trainable_layers[layer_index]
+        for node, node_weights, bias in zip(node_layer.nodes, weights, biases):
+            node.update_input_weights(node_weights)
+            node.bias = bias
+
+        array_network.layers[layer_index].W = wrap(weights)
+        array_network.layers[layer_index].b = wrap(biases)
+
+        previous_size = size
+
+    return node_network, array_network
+
+
+class CrossEntropyMultiClassBackpropClassifierNetwork(MultiClassBackpropClassifierNetwork):
+    """
+    Test-only per-node cross-entropy reference: MultiClassBackpropClassifierNetwork with its
+    output_layer_cls extension point set to CrossEntropyOutputLayer - the hidden layers stay the
+    default plain BackpropLayer (sigmoid), the same construction
+    BinaryCrossEntropyBackpropClassifierNetwork uses for the single-output case (a single
+    class-attribute override, needing no factory function since CrossEntropyOutputLayer takes no
+    extra tunable coefficient - unlike L2/momentum's own make_*_layer_cls factories). Gives
+    CrossEntropyVectorizedMultiClassBackpropClassifierNetwork a genuine parity reference, per
+    docs/proposals/binary-cross-entropy-array-layer.md's "correctness validation" section.
+    """
+
+    output_layer_cls = CrossEntropyOutputLayer
+
+
+def matching_cross_entropy_multiclass_array_backprop_networks(
+    rng: random.Random,
+    array_network_cls,
+    wrap: Callable,
+    layer_sizes: list[int],
+    dimension: int,
+    class_count: int,
+    bounds: float = 10.0,
+):
+    """
+    The cross-entropy-multiclass-sibling analogue of matching_array_backprop_networks above - see
+    matching_adam_array_backprop_networks's own docstring for the general shape this follows. No
+    extra coefficient argument, matching matching_softmax_array_backprop_networks's own posture.
+    """
+    node_network = CrossEntropyMultiClassBackpropClassifierNetwork(
         layer_sizes, dimension, [(-bounds, bounds)] * dimension, class_count
     )
     array_network = array_network_cls(layer_sizes, dimension, class_count)
