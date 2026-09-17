@@ -2,18 +2,20 @@
 
 [← back to README](../README.md)
 
-**Status: stages 2 and 5 (both array-based backends) done; the stage-1 overfitting-gap sweep
-(stage 3) not yet run.** Written up front as a design/measurement plan before any of it existed,
-per this repo's own practice (see [Adam optimizer](adam-optimizer.md), [an array-based Adam
-sibling](adam-array-layer.md) for precedent) - updated here with stage-by-stage status notes as
-it's executed. Both `DropoutArrayLayer`/`DropoutVectorizedMultiClassBackpropClassifierNetwork`
+**Status: all stages done.** Written up front as a design/measurement plan before any of it
+existed, per this repo's own practice (see [Adam optimizer](adam-optimizer.md), [an array-based
+Adam sibling](adam-array-layer.md) for precedent) - updated here with stage-by-stage status notes
+as it's executed. Both `DropoutArrayLayer`/`DropoutVectorizedMultiClassBackpropClassifierNetwork`
 (numpy) and `DropoutRustArrayLayer`/`DropoutRustArrayMultiClassBackpropClassifierNetwork`
 (Rust-matmul-backed) are built and correctness-tested - the Rust stage was **not** gated on
 stage 3's wall-clock finding the way "delivery stages" below originally proposed: both backends
 were built together, deliberately, since the point of this workplan is affording the sweep at
-all, not re-litigating whether it's worth affording. The sweep itself (closing
-[dropout's own flagged measurement gap](dropout.md#the-measurement-gap---not-run-deliberately-not-silently-dropped))
-remains a separate, not-yet-run follow-on - see "delivery stages" below.
+all, not re-litigating whether it's worth affording. The sweep itself - closing
+[dropout's own flagged measurement gap](dropout.md#the-measurement-gap---not-run-deliberately-not-silently-dropped) -
+has now run, both the original scale and the conditional escalation: **a reconfirmed null**, the
+same qualitative finding as L2's own measurement, now at real statistical power (30 seeds, both
+scales) the abandoned per-node attempt could never afford - see "measurement plan and result
+(stage 3)" below for the full numbers.
 
 ## why this, and why now
 
@@ -144,28 +146,85 @@ test, not incidental to it:
   test in this codebase, which are all bit-close deterministic checks; flagged explicitly rather
   than silently reusing a deterministic-parity test template that doesn't fit.
 
-## measurement plan
+## measurement plan and result (stage 3)
 
 The whole point of this workplan - closing [dropout's own flagged measurement
-gap](dropout.md#the-measurement-gap---not-run-deliberately-not-silently-dropped):
+gap](dropout.md#the-measurement-gap---not-run-deliberately-not-silently-dropped). Run against
+`DropoutVectorizedMultiClassBackpropClassifierNetwork` (numpy), not the Rust backend: numpy's own
+RNG is seedable (`np.random.seed`), giving genuinely reproducible per-seed trials, while the Rust
+core's hand-rolled generator explicitly can never be (see "design" above and
+[rust-array-core.md](rust-array-core.md)'s "the RNG exception") - reproducibility matters more
+for an actual measurement than the Rust backend's own extra speed, and the two backends are
+already proven equivalent at eval mode by this workplan's own parity tests, so numpy's conclusion
+about whether dropout helps transfers.
 
-- **Wall-clock, first**: confirm the port is actually fast enough before re-running the sweep -
-  the same fused-layer-operation benchmark used throughout this round, numpy vs. Rust (per
-  [goals and strategy](goals-and-strategy.md#measurement-discipline-the-per-node-paths-two-jobs-and-the-one-it-doesnt-have),
-  no fresh per-node timing run - the order of magnitude is already established), plus a direct
-  apples-to-apples re-run of dropout's own abandoned 50-run sweep's *serial calibration probe*
-  (the thing that predicted ~6 minutes for round one, then was blown through by ~5x) on the array
-  path, to get a real, not estimated, expected total wall-clock before launching the full sweep.
-- **The stage-1 overfitting-gap sweep itself**: `drop_probability` in 0.0/0.1/0.2/0.3/0.5, 10+
-  seeds each (more now that it's affordable), on the 2-class array-equivalent proxy described
-  under "scope" above, reporting the same train/test/gap table
-  [L2's](research-backprop-siblings.md#l2-weight-regularization-closes-the-overfitting-gap-doesnt-improve-it)
-  and [dropout's own](dropout.md#measurement-plan) entries used.
-- **The stage-2 conditional escalation, now affordable too**: if stage 1 comes back null the way
-  L2's did, the more-overfitting-prone follow-up [dropout's own workplan](dropout.md#measurement-plan)
-  proposed but never ran (larger hidden layer or more epochs, to induce visible overfitting
-  first) - genuinely conditional, only run if stage 1 calls for it, per that document's own
-  escalation discipline.
+**Wall-clock, first**: a real, timed calibration run (`[16]` hidden, 20 epochs,
+`drop_probability=0.0`, one seed) took 0.85s, projecting the original 50-run sweep shape at well
+under a minute - confirmed directly, not estimated, by then actually running it.
+
+**The proxy**: a fixed 400-example real-MNIST digit-3-vs-rest set (200 positive + 200 negative,
+stratified evenly across the other 9 digits - the "200/200 balanced, 80/20 split" shape
+[structure](structure.md#possible-next-steps)'s own audit item names), 80/20 split (320 train /
+80 test), reframed as `class_count=2` one-vs-rest per "scope" above - not the same proxy instance
+[L2's own array-stage escalation](l2-array-layer.md#measurement-plan-and-result-stage-3) built
+(independently constructed, the same posture every reproducibility check in this codebase takes),
+so the numbers below aren't bit-comparable to that document's own, only qualitatively so.
+
+**Stage 1 - reproduction** (`[16]` hidden, 20 epochs - dropout's own originally-planned scale,
+`learning_rate=0.5`, 30 seeds, 150 runs, 2.24 minutes total):
+
+| drop_probability | train acc | test acc | gap (pts) |
+|---|---|---|---|
+| 0.0 | 98.55% ± 0.25% | 88.88% ± 1.18% | 9.68 |
+| 0.1 | 98.62% ± 0.29% | 88.29% ± 1.19% | 10.33 |
+| 0.2 | 98.70% ± 0.32% | 88.25% ± 1.43% | 10.45 |
+| 0.3 | 98.44% ± 0.33% | 89.00% ± 1.04% | 9.44 |
+| 0.5 | 97.99% ± 0.52% | 89.25% ± 1.98% | 8.74 |
+
+At matching scale (50 runs: 10 seeds x 5 configs, the abandoned per-node sweep's own shape), the
+array path measured ~45 seconds against the per-node path's own projected 40+ minutes - **over
+53x**, landing in the same 53x-845x range
+[L2's](l2-array-layer.md#measurement-plan-and-result-stage-3) own wall-clock table measured.
+
+A clean null: every `drop_probability`'s test accuracy (88.25%-89.25%) sits well within one
+seed-to-seed standard deviation of the unregularized baseline's own 88.88% ± 1.18% - no
+meaningful improvement over `drop_probability=0.0`, the same shape L2's own reproduction found on
+this identical scale.
+
+**Stage 2 - the overfitting-headroom escalation** (`[128]` hidden, 60 epochs - substantially
+larger and longer, the same escalation shape
+[L2's own array-stage escalation](l2-array-layer.md#measurement-plan-and-result-stage-3) used,
+deliberately chosen to try to induce more overfitting before concluding dropout doesn't help;
+`learning_rate=0.5`, 30 seeds, 150 runs, 21.33 minutes total):
+
+| drop_probability | train acc | test acc | gap (pts) |
+|---|---|---|---|
+| 0.0 | 98.50% ± 0.19% | 88.58% ± 1.47% | 9.92 |
+| 0.1 | 98.57% ± 0.25% | 88.33% ± 1.22% | 10.24 |
+| 0.2 | 98.55% ± 0.35% | 88.37% ± 1.26% | 10.18 |
+| 0.3 | 98.46% ± 0.29% | 88.88% ± 0.75% | 9.58 |
+| 0.5 | 98.53% ± 0.39% | 88.79% ± 1.39% | 9.74 |
+
+**A real, honestly-flagged difference from L2's own escalation, not glossed over**: L2's escalation
+widened its own train-test gap (10.11 -> 13.03 points), confirming that scale was genuinely more
+overfitting-prone before asking whether L2 exploits the extra headroom. This escalation did
+**not** - the gap here (9.6-10.2 points) is statistically indistinguishable from stage 1's own
+(8.7-10.5 points), and train accuracy stayed capped at ~98.5% regardless of hidden-layer width or
+epoch count. This proxy's own train-accuracy ceiling on this particular fixed 320-example split
+appears to be reached already at `[16]`/20 epochs (plausibly intrinsic label noise/overlap in a
+small, fixed digit-3-vs-rest split, not something more capacity or more training resolves) -
+`[128]`/60 epochs never got the extra room to work with that L2's own escalation did. Flagged
+explicitly, not hidden: the escalation's own precondition (confirm the gap widens first) wasn't
+met this time, unlike every other sibling's own escalation in this round.
+
+**Decision: a reconfirmed null, now at real statistical power (30 seeds, both scales) the
+abandoned per-node attempt could never afford, closing [dropout's own flagged measurement
+gap](dropout.md#the-measurement-gap---not-run-deliberately-not-silently-dropped) - dropout closes
+no held-out-accuracy gap it isn't already given room to close, the same qualitative finding as
+L2's own measurement, on both the original and the escalated scale.** Not adopted as a default;
+`DropoutBackpropClassifierNetwork`/`DropoutVectorizedMultiClassBackpropClassifierNetwork`/
+`DropoutRustArrayMultiClassBackpropClassifierNetwork` remain real, tested capabilities for a
+genuinely more overfitting-prone future scenario than this proxy turned out to provide.
 
 ## risks and open questions
 
@@ -182,7 +241,16 @@ gap](dropout.md#the-measurement-gap---not-run-deliberately-not-silently-dropped)
   direction: the Rust stage's value (affording the sweep) doesn't depend on how slow the numpy
   stage turns out to be.
 - **A reconfirmed null is a legitimate outcome** - same framing as every sibling in this round;
-  the value is finally getting a real answer, not a guaranteed regularization win.
+  the value is finally getting a real answer, not a guaranteed regularization win. Confirmed:
+  see "measurement plan and result (stage 3)" above.
+- **The stage-2 escalation didn't actually widen the train-test gap, unlike L2's own** - flagged
+  explicitly above rather than glossed over; this proxy's train accuracy appears capped around
+  98.5% on this fixed 320-example split regardless of hidden-layer width or epoch count, so the
+  escalation didn't get the extra overfitting headroom L2's own escalation did. Worth
+  re-attempting with a genuinely different lever (more training examples held fixed at a smaller
+  hidden layer, rather than a larger hidden layer/more epochs) if this question is ever revisited
+  - not attempted here, since the stage-1 result alone already answers the actual question this
+  workplan exists to close.
 
 ## delivery stages (each its own PR, per this repo's practice)
 
@@ -190,11 +258,16 @@ gap](dropout.md#the-measurement-gap---not-run-deliberately-not-silently-dropped)
 2. ✅ `DropoutArrayLayer` + `DropoutVectorizedMultiClassBackpropClassifierNetwork` + the
    parity-check tests above (numpy only) - `tests/test_dropout_array_layer.py` (12 tests),
    `tests/test_dropout_vectorized_multiclass_backprop_model.py` (13 tests).
-3. **Not run yet** - the wall-clock check, then the stage-1 (and conditionally stage-2)
-   overfitting-gap sweep - closing [dropout's own flagged
-   gap](dropout.md#the-measurement-gap---not-run-deliberately-not-silently-dropped).
-4. **Not run yet** - docs closeout: both this document's and [dropout.md](dropout.md)'s own
-   status updated to reflect the actual measurement result once stage 3 runs.
+3. ✅ The wall-clock check, then the stage-1 sweep, then - triggered by stage 1's own null result,
+   exactly the conditional escalation discipline this document's "measurement plan" originally
+   set - the stage-2 escalation, run right after since stage 1 finished in 2.24 minutes, cheap
+   enough not to warrant a separate pause to decide. Closes [dropout's own flagged
+   gap](dropout.md#the-measurement-gap---not-run-deliberately-not-silently-dropped) - see
+   "measurement plan and result (stage 3)" above for the full numbers, including the
+   honestly-flagged difference from L2's own escalation (this one didn't widen the train-test
+   gap).
+4. ✅ Docs closeout: this document's and [dropout.md](dropout.md)'s own status updated to reflect
+   the actual measurement result (a reconfirmed null, both scales).
 5. ✅ `DropoutRustArrayLayer` + `DropoutRustArrayMultiClassBackpropClassifierNetwork`, plus the
    Rust core's new `bernoulli_mask`/`draw_bernoulli_mask` RNG primitive (`random.rs`) and fused
    ops (`layer_dropout_forward`/`layer_dropout_forward_batch`/`layer_dropout_hidden_delta`/

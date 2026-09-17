@@ -669,14 +669,18 @@ ranked.
   attempted (a real 50-run measurement, launched against an 8-way `multiprocessing.Pool`) and
   stopped before completion once it was observed running ~5x slower than serial calibration
   predicted, on track for 40+ minutes - the per-node path alone was too slow to afford it.
-  **Update:** [an array-based dropout sibling](dropout-array-layer.md) is now done, both stages -
+  **Update:** [an array-based dropout sibling](dropout-array-layer.md) is now done, every stage -
   `DropoutArrayLayer`/`DropoutVectorizedMultiClassBackpropClassifierNetwork` (numpy) and
   `DropoutRustArrayLayer`/`DropoutRustArrayMultiClassBackpropClassifierNetwork`
   (Rust-matmul-backed, including a new RNG primitive this crate didn't have before,
   `bernoulli_mask`/`draw_bernoulli_mask`) - built together rather than gating the Rust stage on a
-  numpy-only wall-clock check first. The overfitting-gap sweep itself hasn't been re-run against
-  either backend yet - closing [dropout](dropout.md#the-measurement-gap---not-run-deliberately-not-silently-dropped)'s
-  own flagged gap is now affordable but still not done.
+  numpy-only wall-clock check first, closing
+  [dropout](dropout.md#the-measurement-gap---not-run-deliberately-not-silently-dropped)'s own
+  flagged gap: the overfitting-gap sweep reran at 30-seed power (2.24 minutes for the original
+  `[16]`-hidden scale, over 53x faster than the per-node path's own 40+ minute projection for a
+  smaller job) plus a conditional `[128]`-hidden escalation (21.33 minutes) - **a reconfirmed
+  null at both scales**, the same qualitative finding as L2's own measurement, with one honestly-
+  flagged difference: unlike L2's escalation, this one didn't widen the train-test gap at all.
 - **Batch or layer normalization** - no normalization exists at all; likely the highest-value item
   in this group once hidden layers get deeper than 1-2, but also the biggest lift of anything
   here (running statistics, a train/eval-mode split - real complexity beyond the existing
@@ -757,12 +761,15 @@ concrete failure case motivates it yet.
   decisive win (93.85% ± 0.26% vs the untuned baseline's 92.85% ± 0.36%, 5 seeds, every softmax
   seed beating every baseline seed) - still needing its own tuned learning rate, the same caveat
   every retuned sibling in this round carries. [An array-based dropout
-  sibling](dropout-array-layer.md) is also done, both stages (numpy and Rust-matmul-backed,
-  including a new RNG primitive this crate didn't have before) - unlike the four above, this one
-  has no measurement result yet: it exists specifically to make [dropout's own abandoned
-  overfitting-gap sweep](dropout.md#the-measurement-gap---not-run-deliberately-not-silently-dropped)
-  affordable, and that sweep hasn't been re-run against it. Binary cross-entropy is still
-  proposed, not started (blocked on the next item's own single-output array network).
+  sibling](dropout-array-layer.md) is also done, every stage (numpy and Rust-matmul-backed,
+  including a new RNG primitive this crate didn't have before) - built specifically to make
+  [dropout's own abandoned overfitting-gap
+  sweep](dropout.md#the-measurement-gap---not-run-deliberately-not-silently-dropped) affordable,
+  and unlike the four above, the result is a reconfirmed null rather than a genuine or
+  scale-dependent win: no `drop_probability` improves held-out accuracy over the unregularized
+  baseline, at either the original scale or a conditional escalation that (honestly flagged,
+  unlike L2's own) didn't even widen the train-test gap. Binary cross-entropy is still proposed,
+  not started (blocked on the next item's own single-output array network).
 - **An array-based ensemble sibling** - `EnsembleBackpropClassifierNetwork` (this codebase's own
   best-performing, production-facing real-MNIST capability, 96.01% held-out accuracy) has no
   array-based or Rust-matmul-backed counterpart at all, unlike every other capability this
@@ -792,7 +799,17 @@ measured results.
   and mean/stdev-into-a-markdown-table aggregation. Worth determining which of these are real,
   tested, permanent fixtures worth building - versus which legitimately stay one-off, shaped by
   each measurement's own specifics - rather than assuming either answer up front. Not yet started
-  - not even audited yet.
+  - not even audited yet. **A concrete gap found while running [an array-based dropout
+  sibling](dropout-array-layer.md)'s own stage-3 sweep**: a long-running sweep launched via
+  `run_in_background`/redirected to a file gets no interim progress output at all until it
+  exits or its stdout buffer fills - Python fully buffers stdout when it isn't a tty, so a
+  per-config `print()` meant to show progress during a ~20+ minute run silently queues instead
+  of appearing. Worth fixing in any reusable sweep harness that comes out of this audit
+  (`python -u` / `PYTHONUNBUFFERED=1`, or explicit `flush=True` on the progress prints) rather
+  than re-discovering this each time a long sweep is launched in the background. See
+  [benchmarking](benchmarking.md) for where this kind of cross-cutting measurement information
+  (methodology notes, reusable infrastructure, findings that don't belong to one sibling's own
+  doc) is meant to accumulate going forward, once this audit actually happens.
 
 The three items that used to be here - matmul performance (see [research and
 analysis](research-rust-performance.md#simd-for-the-matvec-production-path-a-bigger-win-than-the-batch32-work-it-followed)),
