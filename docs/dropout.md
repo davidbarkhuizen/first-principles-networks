@@ -2,10 +2,10 @@
 
 [← back to README](../README.md)
 
-**Status: proposed, not started.** Written up front as a design/measurement plan before any of
-it exists, per this repo's own practice (see [Adam optimizer](adam-optimizer.md), [a learning-rate
-schedule](learning-rate-schedule.md) for precedent) - to be updated with stage-by-stage status
-notes, and corrected against whatever the actual build/measurements turn up, as it's executed.
+**Status: stage 2 (the capability) done; stage 3 (the overfitting-gap measurement) not yet run.**
+Written up front as a design/measurement plan before any of it existed, per this repo's own
+practice (see [Adam optimizer](adam-optimizer.md), [a learning-rate schedule](learning-rate-schedule.md)
+for precedent) - updated here with stage-by-stage status notes as it's executed.
 
 ## why this, and why now
 
@@ -88,9 +88,11 @@ class DropoutNode(BackpropNode):
         self.training = False
         self._kept = True
         self._base_activation = 0.0  # pre-dropout sigmoid(z()), cached for compute_hidden_delta
+        self._was_training = False  # a forward-time snapshot of self.training - see below
 
     def forward(self) -> float:
         self._base_activation = sigmoid(self.z())
+        self._was_training = self.training
         if self.training:
             self._kept = random.random() >= drop_probability
             # inverted dropout: rescale kept units by 1/keep_probability during training, so
@@ -108,7 +110,7 @@ class DropoutNode(BackpropNode):
             return            # gradient, incoming weights untouched this step
         downstream = sum(node.delta * node.input_node_weights[own_index] for node in next_layer_nodes)
         sigmoid_derivative = self._base_activation * (1.0 - self._base_activation)
-        scale = (1.0 / keep_probability) if self.training else 1.0
+        scale = (1.0 / keep_probability) if self._was_training else 1.0
         self.delta = downstream * sigmoid_derivative * scale
 ```
 
@@ -121,9 +123,31 @@ term appears squared on one side and linearly on the other) - naively delegating
 `super().compute_hidden_delta()` here would silently compute the wrong gradient. The correct
 chain rule (`d(base * mask/keep_probability)/dz = (mask/keep_probability) * base * (1-base)`)
 gives exactly the formula above: downstream-delta times the *ordinary* sigmoid derivative on the
-*unscaled* activation, times the same `1/keep_probability` rescale forward used. This is exactly
-the kind of thing the hand-computed regression fixture below needs to pin down precisely, not
-just eyeball as "probably fine."
+*unscaled* activation, times the same `1/keep_probability` rescale forward used.
+
+**A second subtlety, found by the hand-computed regression test below, not eyeballed as
+"probably fine" and missed**: `compute_hidden_delta`'s rescale can't read the *live*
+`self.training` at backward time - `BackpropClassifierNetwork.learn()` only brackets
+`set_training_mode(True)` around the `_forward()` call itself (see below), so by the time
+`_backward()` runs, `self.training` is already back to `False` again, and a naive
+`scale = (1.0 / keep_probability) if self.training else 1.0` silently applies the wrong
+(unscaled) derivative - a real bug the whole-network hand-derived fixture in
+`test_dropout_backprop_model.py` caught directly (the computed weight update was exactly half
+the independently hand-derived expected value, `1/keep_probability` missing). Fixed by taking
+`self._was_training = self.training` as a forward-time snapshot, the same category of
+already-established pattern `_kept`/`_base_activation` already are - `compute_hidden_delta` now
+reads that snapshot, not the live, possibly-already-reverted flag, which also makes the result
+correct regardless of exactly how wide or narrow a caller's `set_training_mode` bracket is.
+
+**A third thing found only by running the full suite, not by design review**: `ConvLayer`
+(`conv_layer.py`) is deliberately *not* a `BackpropLayer` subclass (composition, not inheritance -
+see its own docstring), so it doesn't automatically inherit `BackpropLayer`'s new no-op
+`set_training_mode` the way every other layer type does - `BackpropNetworkBase._set_training_mode`
+calling it unconditionally on every `trainable_layer` broke `ConvMultiClassBackpropClassifierNetwork`
+outright (`AttributeError`) until `ConvLayer` got the identical no-op added directly, extending
+the duck-typed surface its own docstring already enumerates. The one other place this sibling
+family's "purely additive" precedent had a real, previously-invisible edge - not just the
+train/eval-mode mechanism flagged above.
 
 `make_dropout_layer_cls(drop_probability)` mirrors every other factory's layer counterpart
 (`_node_cls = DropoutNode`), plus the one real addition: `DropoutLayer.set_training_mode(training)`
@@ -201,10 +225,12 @@ workplan](adam-optimizer.md#measurement-plan)'s own stage-3-gates-stage-4 struct
 ## risks and open questions
 
 - **The train/eval-mode mechanism is a real, minimal exception to this sibling family's
-  "purely additive" precedent** - resolved as far as design goes (see "design" above: a
-  no-op-by-default `set_training_mode` hook plus a try/finally at the two call sites that need
-  it), but the mutable-flag approach is a new kind of state for this class family, worth
-  revisiting if it ever feels brittle in practice.
+  "purely additive" precedent** - resolved and built (see "design" above: a no-op-by-default
+  `set_training_mode` hook, needed on every layer type including `ConvLayer`'s
+  composition-not-inheritance one, plus a try/finally at the two call sites that need it, plus a
+  forward-time `_was_training` snapshot so backward never depends on how wide that bracket is).
+  The mutable-flag approach is still a new kind of state for this class family, worth revisiting
+  if a future sibling needs the same mechanism and it starts feeling brittle.
 - **Whether this scale overfits enough for any regularizer to show a win** - L2's own measurement
   on this exact setup found it doesn't (no `l2_lambda` improved held-out accuracy above the
   unregularized baseline); the same risk applies to dropout, not assumed away just because the
@@ -216,14 +242,18 @@ workplan](adam-optimizer.md#measurement-plan)'s own stage-3-gates-stage-4 struct
 
 ## delivery stages (each its own PR, per this repo's practice)
 
-1. This design document.
-2. `dropout_layer.py` (`make_dropout_node_cls`/`make_dropout_layer_cls`) +
+1. ✅ This design document.
+2. ✅ `dropout_layer.py` (`make_dropout_node_cls`/`make_dropout_layer_cls`) +
    `dropout_backprop_classifier_network.py` (`DropoutBackpropClassifierNetwork`) + the
    train/eval-mode plumbing (`BackpropLayer.set_training_mode`/
    `BackpropNetworkBase._set_training_mode`, wired into `BackpropClassifierNetwork.learn`/
-   `BackpropNetworkBase._learn_batch`) + the correctness-validation tests above
-   (`test_dropout_layer.py`, `test_dropout_backprop_model.py`) - the actual capability, buildable
-   and mergeable independent of any measurement result.
+   `BackpropNetworkBase._learn_batch`, plus the same no-op added to `ConvLayer` once the full
+   suite caught it wasn't a `BackpropLayer` subclass) + the correctness-validation tests above
+   (`test_dropout_layer.py`, `test_dropout_backprop_model.py`, 20 tests) - the actual capability,
+   buildable and mergeable independent of any measurement result. Full suite passes (382 tests,
+   up from 362). Caught a real bug during implementation - see the "design" section's own
+   "second subtlety" above (the backward-pass rescale needed a forward-time snapshot of
+   `training`, not a live re-read of it).
 3. The stage-1 overfitting-gap measurement (same setup as L2's own, for direct comparability),
    written up in [research and analysis](research-backprop-siblings.md).
 4. Conditional: the stage-2 more-overfitting-prone follow-up, only if stage 1's result calls for
