@@ -102,6 +102,10 @@ cites in its docstrings, once their actual measured results were folded into
 - [an array-based softmax sibling](docs/design-docs/array-siblings/softmax-array-layer.md)
 - [an array-based dropout sibling](docs/design-docs/array-siblings/dropout-array-layer.md) —
   including the Rust core's first RNG primitive
+- [an array-based binary cross-entropy
+  sibling](docs/design-docs/array-siblings/binary-cross-entropy-array-layer.md) — the deferred
+  real-MNIST retune came back a genuine, if modest, win (+0.37 points over the ensemble's
+  documented baseline at `learning_rate=0.1`); the Rust stage needed no new Rust primitive at all
 
 #### ensemble (`docs/design-docs/ensemble/`)
 
@@ -120,11 +124,6 @@ cites in its docstrings, once their actual measured results were folded into
 
 Written up front, per this repo's own practice.
 
-- [an array-based binary cross-entropy sibling](docs/proposals/binary-cross-entropy-array-layer.md)
-  — stages 1-5 done: `CrossEntropyArrayLayer`/`CrossEntropyArrayBackpropClassifierNetwork` built
-  and parity-tested, and the deferred real-MNIST retune measurement came back a genuine, if
-  modest, win (+0.37 points over the ensemble's documented baseline at `learning_rate=0.1`); only
-  the Rust-matmul-backed stage remains
 - [an array-based convolutional layer](docs/proposals/conv-array-layer.md) — not started;
   vectorizing conv layers to finally afford the real-MNIST-scale validation the per-node path's
   ~30-minute-per-run cost has left unrun

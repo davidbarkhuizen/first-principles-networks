@@ -742,9 +742,8 @@ concrete failure case motivates it yet.
   expensive follow-on reserved for siblings already known to win - so each of the following is
   proposed regardless of its own per-node measurement's verdict (real win, matched-not-beaten, or
   null): an array-based momentum sibling, an array-based L2 sibling, an array-based ReLU sibling,
-  an array-based softmax sibling, an array-based dropout sibling, and [an array-based binary
-  cross-entropy sibling](../proposals/binary-cross-entropy-array-layer.md) (the last depending on the next
-  item's own single-output array network). **Update:** [an array-based L2
+  an array-based softmax sibling, an array-based dropout sibling, and an array-based binary
+  cross-entropy sibling. **Update:** [an array-based L2
   sibling](../research/research-backprop-siblings.md#an-array-based-l2-sibling-the-reconfirmed-null-holds-at-far-higher-power)
   is now done, every stage - 53x-845x faster per example than the per-node path, and a reconfirmed
   null (no `l2_lambda` improves held-out accuracy above the unregularized baseline) at far higher
@@ -776,19 +775,19 @@ concrete failure case motivates it yet.
   scale-dependent win: no `drop_probability` improves held-out accuracy over the unregularized
   baseline, at either the original scale or a conditional escalation that (honestly flagged,
   unlike L2's own) didn't even widen the train-test gap. [An array-based binary cross-entropy
-  sibling](../proposals/binary-cross-entropy-array-layer.md) is also done through its numpy stage
-  and real-MNIST retune measurement (`CrossEntropyArrayLayer`/
-  `CrossEntropyArrayBackpropClassifierNetwork`/`CrossEntropyVectorizedMultiClassBackpropClassifierNetwork`)
-  - unlike the reconfirmed-null siblings above, the deferred real-MNIST retune this workplan
-  existed to afford came back a genuine, if modest, win: at `learning_rate=0.1` cross-entropy beats
-  the ensemble's documented quadratic baseline by 0.37 points, every cross-entropy seed
-  outperforming every baseline seed - a different, more favorable outcome than the toy-XOR
-  "matches, doesn't beat" finding this workplan set out to check whether it transfers. See [an
-  array-based binary cross-entropy
+  sibling](../design-docs/array-siblings/binary-cross-entropy-array-layer.md) is also done, every
+  stage, both backends (`CrossEntropyArrayLayer`/`CrossEntropyArrayBackpropClassifierNetwork`/
+  `CrossEntropyVectorizedMultiClassBackpropClassifierNetwork` and their Rust-matmul-backed
+  counterparts, the Rust stage needing no new Rust primitive at all - its delta formula is
+  algebraically identical to the existing `pa.layer_softmax_output_delta`) - unlike the
+  reconfirmed-null siblings above, the deferred real-MNIST retune this workplan existed to afford
+  came back a genuine, if modest, win: at `learning_rate=0.1` cross-entropy beats the ensemble's
+  documented quadratic baseline by 0.37 points, every cross-entropy seed outperforming every
+  baseline seed - a different, more favorable outcome than the toy-XOR "matches, doesn't beat"
+  finding this workplan set out to check whether it transfers. See [an array-based binary
+  cross-entropy
   sibling](../research/research-multiclass-and-loss.md#an-array-based-binary-cross-entropy-sibling-the-retune-the-per-node-investigation-deferred)
-  for the full measurement. Only its Rust-matmul-backed stage remains - checked directly to need no
-  new Rust primitive at all (its delta formula is algebraically identical to the existing
-  `pa.layer_softmax_output_delta`).
+  for the full measurement.
 - **An array-based ensemble sibling** - `EnsembleBackpropClassifierNetwork` (this codebase's own
   best-performing, production-facing real-MNIST capability) previously had no array-based or
   Rust-matmul-backed counterpart at all, unlike every other capability this codebase had measured

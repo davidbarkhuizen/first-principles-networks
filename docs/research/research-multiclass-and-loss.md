@@ -330,8 +330,9 @@ beats, quadratic loss on toy XOR once retuned (97.60% at `learning_rate=0.1` vs.
 97.80%), and explicitly deferred extending that to `EnsembleBackpropClassifierNetwork`'s
 real-MNIST training as its own dedicated investigation, "given the cost of each real training
 run." `CrossEntropyArrayLayer`/`CrossEntropyArrayBackpropClassifierNetwork` (see
-[docs/proposals/binary-cross-entropy-array-layer.md](../proposals/binary-cross-entropy-array-layer.md))
-remove that cost the same way the softmax entry above did.
+[an array-based binary cross-entropy
+sibling](../design-docs/array-siblings/binary-cross-entropy-array-layer.md)) remove that cost the
+same way the softmax entry above did.
 
 **Same architecture/config as the documented ensemble baseline** (`demo_mnist_ensemble_recognition.py`,
 "the ensemble/real-MNIST investigation" step 3/4 above): `[16]` hidden, `dimension=784`,
