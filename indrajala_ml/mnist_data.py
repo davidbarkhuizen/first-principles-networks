@@ -108,6 +108,23 @@ def convert_parquet_to_binary(parquet_path: str, binary_path: str, limit: int | 
             f.write(bytes([row["label"]]))
 
 
+def _read_binary_records(path: str, limit: int | None = None) -> bytes:
+    """
+    Shared by load_mnist_dataset/load_mnist_dataset_as_array/load_mnist_labels: open the file,
+    read up to limit*RECORD_SIZE bytes from the start (or the whole file when limit is None),
+    and validate the result is a whole number of RECORD_SIZE-byte records - the same three-line
+    sequence each of them repeated independently. load_mnist_records_at_indices is deliberately
+    not unified here - it seeks per-index rather than doing one bulk read, a genuinely different
+    access pattern, not just a copy of this one.
+    """
+
+    with open(path, "rb") as f:
+        data = f.read(limit * RECORD_SIZE) if limit is not None else f.read()
+
+    assert len(data) % RECORD_SIZE == 0, f"file size is not a multiple of RECORD_SIZE ({RECORD_SIZE}); got {len(data)} bytes"
+    return data
+
+
 def load_mnist_dataset(path: str, limit: int | None = None) -> list[tuple[tuple[float, ...], int]]:
     """
     Loads the lightweight binary format convert_parquet_to_binary produces - no pyarrow, no PNG
@@ -121,10 +138,7 @@ def load_mnist_dataset(path: str, limit: int | None = None) -> list[tuple[tuple[
     post-hoc slice of everything.
     """
 
-    with open(path, "rb") as f:
-        data = f.read(limit * RECORD_SIZE) if limit is not None else f.read()
-
-    assert len(data) % RECORD_SIZE == 0, f"file size is not a multiple of RECORD_SIZE ({RECORD_SIZE}); got {len(data)} bytes"
+    data = _read_binary_records(path, limit)
 
     dataset: list[tuple[tuple[float, ...], int]] = []
     for offset in range(0, len(data), RECORD_SIZE):
@@ -150,10 +164,7 @@ def load_mnist_dataset_as_array(path: str, limit: int | None = None) -> np.ndarr
     replacement - nothing currently calling that function needs to change.
     """
 
-    with open(path, "rb") as f:
-        data = f.read(limit * RECORD_SIZE) if limit is not None else f.read()
-
-    assert len(data) % RECORD_SIZE == 0, f"file size is not a multiple of RECORD_SIZE ({RECORD_SIZE}); got {len(data)} bytes"
+    data = _read_binary_records(path, limit)
 
     record_count = len(data) // RECORD_SIZE
     records = np.frombuffer(data, dtype=np.uint8).reshape(record_count, RECORD_SIZE)
@@ -173,10 +184,7 @@ def load_mnist_labels(path: str) -> list[int]:
     memory, however they got there.
     """
 
-    with open(path, "rb") as f:
-        data = f.read()
-
-    assert len(data) % RECORD_SIZE == 0, f"file size is not a multiple of RECORD_SIZE ({RECORD_SIZE}); got {len(data)} bytes"
+    data = _read_binary_records(path)
 
     return [data[offset + IMAGE_SIZE * IMAGE_SIZE] for offset in range(0, len(data), RECORD_SIZE)]
 
