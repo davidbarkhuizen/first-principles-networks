@@ -21,6 +21,9 @@ retrofit - so it can represent targets (like XOR) the discrete model structurall
 - [theory](docs/theory.md) — Rosenblatt's perceptron theory, and reference material
 - [research and analysis](docs/research-and-analysis.md) — investigations behind a design
   decision, with the measurements that drove it
+- [benchmarking](docs/benchmarking.md) — not yet populated: the intended future home for
+  wall-clock measurements/speedup tables/sweep methodology, currently scattered across the docs
+  above and each sibling's own doc
 - [vectorization](docs/vectorization.md) — numpy-backed array classes (kept as a permanent
   benchmarking mirror) and a hand-built Rust array core (the production backend)
 - [Rust production cutover](docs/rust-production-cutover.md) — how the Rust core became primary
@@ -40,7 +43,8 @@ retrofit - so it can represent targets (like XOR) the discrete model structurall
 - [an array-based Adam sibling](docs/adam-array-layer.md) — a Rust-matmul-backed Adam, built and
   measured: both array-based backends 70x-794x faster per example than the per-node path,
   batch-size robustness confirmed to survive the port
-- [dropout](docs/dropout.md) — stochastic hidden-unit regularization, proposed and not yet started
+- [dropout](docs/dropout.md) — stochastic hidden-unit regularization, built and measured: a
+  reconfirmed null, the same as L2's own finding, via its own array-based sibling below
 - [an array-based momentum sibling](docs/momentum-array-layer.md) — proposed, not started:
   vectorizing momentum's own weight-update rule, to re-test its measured null at a scale/seed
   count the per-node path couldn't afford
@@ -53,8 +57,10 @@ retrofit - so it can represent targets (like XOR) the discrete model structurall
 - [an array-based softmax sibling](docs/softmax-array-layer.md) — proposed, not started:
   vectorizing softmax, to finally afford the real-MNIST learning-rate retune its own per-node
   investigation explicitly declined to run due to cost
-- [an array-based dropout sibling](docs/dropout-array-layer.md) — proposed, not started: the
-  direct fix for dropout's own abandoned, 40+-minute overfitting-gap sweep on the per-node path
+- [an array-based dropout sibling](docs/dropout-array-layer.md) — built and measured: the direct
+  fix for dropout's own abandoned, 40+-minute overfitting-gap sweep on the per-node path, now
+  reran at 30-seed power (over 53x faster) - a reconfirmed null at both the original and an
+  escalated scale
 - [an array-based binary cross-entropy sibling](docs/binary-cross-entropy-array-layer.md) —
   proposed, not started; depends on the array-based ensemble sibling's own single-output array
   network
