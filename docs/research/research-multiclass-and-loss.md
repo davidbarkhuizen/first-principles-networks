@@ -322,3 +322,69 @@ single-network comparison specifically.
 **Decision: adopted.** Softmax needs its own tuned learning rate at real-MNIST scale, never a
 drop-in replacement for one-vs-rest at existing hyperparameters - but once retuned, it's a genuine,
 decisive win at both scales checked.
+
+## an array-based binary cross-entropy sibling: the retune the per-node investigation deferred
+
+"binary cross-entropy for BackpropClassifierNetwork" above found cross-entropy *matches*, not
+beats, quadratic loss on toy XOR once retuned (97.60% at `learning_rate=0.1` vs. quadratic's
+97.80%), and explicitly deferred extending that to `EnsembleBackpropClassifierNetwork`'s
+real-MNIST training as its own dedicated investigation, "given the cost of each real training
+run." `CrossEntropyArrayLayer`/`CrossEntropyArrayBackpropClassifierNetwork` (see
+[docs/proposals/binary-cross-entropy-array-layer.md](../proposals/binary-cross-entropy-array-layer.md))
+remove that cost the same way the softmax entry above did.
+
+**Same architecture/config as the documented ensemble baseline** (`demo_mnist_ensemble_recognition.py`,
+"the ensemble/real-MNIST investigation" step 3/4 above): `[16]` hidden, `dimension=784`,
+`class_count=10`, 5 epochs, real 60000-train/10000-test MNIST, via
+`train_ensemble_parallel_from_indices`. Swept `learning_rate` for
+`classifier_cls=CrossEntropyArrayBackpropClassifierNetwork` against a matched-seed quadratic
+(`ArrayBackpropClassifierNetwork`) baseline at `learning_rate=0.5` (the documented 96.39%
+single-seed figure in step 4's own table above is one run only; this reruns it at 3 seeds for a
+genuine like-for-like comparison), 3 seeds each:
+
+| configuration | seed test accuracies | mean | stdev |
+|---|---|---|---|
+| quadratic @ lr=0.5 (baseline) | 95.85%, 95.92%, 96.14% | 95.97% | 0.15% |
+| cross-entropy @ lr=0.5 (untuned) | 92.25%, 93.46%, 92.66% | 92.79% | 0.62% |
+| cross-entropy @ lr=0.25 | 95.63%, 95.55%, 95.67% | 95.62% | 0.06% |
+| cross-entropy @ lr=0.1 | 96.30%, 96.32%, 96.41% | **96.34%** | 0.06% |
+| cross-entropy @ lr=0.05 | 96.00%, 96.08%, 96.21% | 96.10% | 0.11% |
+
+At `learning_rate=0.5` (the quadratic-tuned rate, unchanged), cross-entropy underperforms by 3.18
+points - the same undamped-gradient overshoot pattern found at every other scale checked (XOR,
+small proxy, full MNIST quadratic-vs-cross-entropy in step 2/3 above). But once retuned to
+`learning_rate=0.1`, cross-entropy doesn't just match the quadratic baseline the way it did on toy
+XOR - **it comes out ahead, +0.37 points, and every cross-entropy seed at this rate beats every
+quadratic-baseline seed** (96.30%-96.41% vs. 95.85%-96.14%, non-overlapping ranges) - the same
+"every seed beats every seed" separation the softmax entry above used to call its own result
+decisive, not just noise. `learning_rate=0.05` also beats the baseline (96.10%) but by less than
+0.1's own margin - 0.1 is the better of the two rates checked below the untuned one, not simply
+"lower is better."
+
+**This is a different, more favorable outcome than the toy-scale finding** - worth stating plainly
+rather than assuming the toy result would simply transfer. A plausible mechanism: MNIST's binary
+one-vs-rest sub-problems (each ensemble classifier's "is this digit?" target) are far more
+class-imbalanced than XOR's own even 50/50 split, and cross-entropy's undamped gradient - the same
+property that makes it overshoot at the quadratic-tuned rate - may push harder against the
+frequent negative examples once the learning rate is small enough not to overshoot, versus
+quadratic's `a(1-a)`-damped gradient doing comparatively less work against them. Not verified
+further here (out of scope for this workplan); flagged as the most likely explanation, not
+asserted as confirmed.
+
+**Wall-clock**: no separate table needed, per
+[goals and strategy](../project/goals-and-strategy.md#measurement-discipline-the-per-node-paths-two-jobs-and-the-one-it-doesnt-have)'s
+own discipline - `CrossEntropyArrayLayer` differs from plain `ArrayLayer` by one elementwise
+subtract in `compute_output_delta`/`compute_output_delta_batch` only, so its cost is
+indistinguishable from `ArrayBackpropClassifierNetwork`'s own already-measured per-classifier
+wall-clock (see "step 4" above). The sweep above confirms this directly, incidentally: every one
+of its 15 runs (quadratic and cross-entropy alike, all `[16]`-hidden/5-epoch/full-MNIST) landed
+within 81-99 seconds of each other on the machine this sweep ran on, with no systematic gap
+between the two loss functions.
+
+**Decision: adopted, with its own tuned learning rate.** Cross-entropy is not a drop-in
+replacement for quadratic loss at the ensemble's existing tuned rate (`learning_rate=0.5`) - but
+once retuned to `learning_rate=0.1`, it's a genuine, if modest, win over the documented ensemble
+baseline at real-MNIST scale, reversing the "matches, doesn't beat" framing the toy-scale
+investigation left this workplan with. Not adopted as the new default (the margin is real but
+small, and `learning_rate=0.5`-tuned quadratic remains a perfectly reasonable choice); recorded
+here as a validated, available option for anyone retuning this architecture from scratch.
