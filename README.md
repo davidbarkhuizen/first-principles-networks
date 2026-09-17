@@ -118,11 +118,13 @@ cites in its docstrings, once their actual measured results were folded into
 
 ### proposals (`docs/proposals/`)
 
-Written up front, per this repo's own practice - not started yet.
+Written up front, per this repo's own practice.
 
 - [an array-based binary cross-entropy sibling](docs/proposals/binary-cross-entropy-array-layer.md)
-  — its own blocking dependency (the array-based ensemble sibling's single-output array network)
-  is now done; unblocked, not yet started
-- [an array-based convolutional layer](docs/proposals/conv-array-layer.md) — vectorizing conv
-  layers to finally afford the real-MNIST-scale validation the per-node path's
+  — stages 1-5 done: `CrossEntropyArrayLayer`/`CrossEntropyArrayBackpropClassifierNetwork` built
+  and parity-tested, and the deferred real-MNIST retune measurement came back a genuine, if
+  modest, win (+0.37 points over the ensemble's documented baseline at `learning_rate=0.1`); only
+  the Rust-matmul-backed stage remains
+- [an array-based convolutional layer](docs/proposals/conv-array-layer.md) — not started;
+  vectorizing conv layers to finally afford the real-MNIST-scale validation the per-node path's
   ~30-minute-per-run cost has left unrun
