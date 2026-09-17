@@ -5,7 +5,7 @@ from typing import Sequence
 import indrajala_ml_array as pa
 
 from indrajala_ml.model.bounds import validate_batch, validate_class_count, validate_layer_sizes
-from indrajala_ml.model.model_io import load_json, save_json
+from indrajala_ml.model.model_io import load_array_model_json, save_array_model_json
 from indrajala_ml.model.rust_array_layer import RustArrayLayer
 
 
@@ -127,22 +127,19 @@ class RustArrayMultiClassBackpropClassifierNetwork:
             layer.b = b.copy()
 
     def save(self, path: str) -> None:
-        # own envelope, not save_model_json (model_io.py) - same reasoning
-        # VectorizedMultiClassBackpropClassifierNetwork.save already established: no
-        # input_bounds/StateLayer notion here.
-        save_json(
+        # save_array_model_json (model_io.py) - the shared envelope every array-backed sibling
+        # uses, not save_model_json: no input_bounds/StateLayer notion here.
+        save_array_model_json(
             path,
-            {
-                "layer_sizes": self.layer_sizes,
-                "dimension": self.dimension,
-                "class_count": self.class_count,
-                "snapshot": [(W.tolist(), b.tolist()) for W, b in self.snapshot()],
-            },
+            layer_sizes=self.layer_sizes,
+            dimension=self.dimension,
+            class_count=self.class_count,
+            snapshot=self.snapshot(),
         )
 
     @classmethod
     def load(cls, path: str) -> "RustArrayMultiClassBackpropClassifierNetwork":
-        state = load_json(path)
+        state = load_array_model_json(path)
         network = cls(state["layer_sizes"], state["dimension"], state["class_count"])
         network.restore([(pa.Array(W), pa.Array(b)) for W, b in state["snapshot"]])
         return network

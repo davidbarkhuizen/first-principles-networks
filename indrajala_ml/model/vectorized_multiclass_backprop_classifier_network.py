@@ -6,7 +6,7 @@ import numpy as np
 
 from indrajala_ml.model.array_layer import ArrayLayer
 from indrajala_ml.model.bounds import validate_batch, validate_class_count, validate_layer_sizes
-from indrajala_ml.model.model_io import load_json, save_json
+from indrajala_ml.model.model_io import load_array_model_json, save_array_model_json
 
 
 class VectorizedMultiClassBackpropClassifierNetwork:
@@ -126,21 +126,19 @@ class VectorizedMultiClassBackpropClassifierNetwork:
 
     def save(self, path: str) -> None:
         # not save_model_json (model_io.py) - that envelope hardcodes input_bounds, which this
-        # class has no notion of (no StateLayer). Own envelope, same reasoning
-        # ConvMultiClassBackpropClassifierNetwork already established for the identical problem.
-        save_json(
+        # class has no notion of (no StateLayer). save_array_model_json is the shared envelope
+        # every array-backed sibling uses instead.
+        save_array_model_json(
             path,
-            {
-                "layer_sizes": self.layer_sizes,
-                "dimension": self.dimension,
-                "class_count": self.class_count,
-                "snapshot": [(W.tolist(), b.tolist()) for W, b in self.snapshot()],
-            },
+            layer_sizes=self.layer_sizes,
+            dimension=self.dimension,
+            class_count=self.class_count,
+            snapshot=self.snapshot(),
         )
 
     @classmethod
     def load(cls, path: str) -> "VectorizedMultiClassBackpropClassifierNetwork":
-        state = load_json(path)
+        state = load_array_model_json(path)
         network = cls(state["layer_sizes"], state["dimension"], state["class_count"])
         network.restore([(np.array(W), np.array(b)) for W, b in state["snapshot"]])
         return network
