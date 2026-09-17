@@ -735,7 +735,15 @@ concrete failure case motivates it yet.
   array-based softmax sibling](softmax-array-layer.md), [an array-based dropout
   sibling](dropout-array-layer.md), and [an array-based binary cross-entropy
   sibling](binary-cross-entropy-array-layer.md) (the last depending on the next item's own
-  single-output array network). All proposed, not started.
+  single-output array network). **Update:** [an array-based L2 sibling](l2-array-layer.md) is now
+  done, every stage - 53x-845x faster per example than the per-node path, and a reconfirmed null
+  (no `l2_lambda` improves held-out accuracy above the unregularized baseline) at far higher
+  power than the per-node path could afford, including a deliberately more overfitting-prone
+  escalation built specifically to give L2 more room to help. [An array-based momentum
+  sibling](momentum-array-layer.md) and [an array-based ReLU sibling](relu-array-layer.md) are in
+  progress (their own numpy-only array ports built; the wall-clock/accuracy-at-scale measurement,
+  docs closeout, and Rust-matmul-backed counterparts remain). The rest are still proposed, not
+  started.
 - **An array-based ensemble sibling** - `EnsembleBackpropClassifierNetwork` (this codebase's own
   best-performing, production-facing real-MNIST capability, 96.01% held-out accuracy) has no
   array-based or Rust-matmul-backed counterpart at all, unlike every other capability this
