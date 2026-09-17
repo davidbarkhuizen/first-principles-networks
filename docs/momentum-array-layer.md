@@ -137,12 +137,12 @@ to afford a better-powered re-run of momentum's own question than the per-node p
 
 ## delivery stages (each its own PR, per this repo's practice)
 
-1. This design document.
-2. `MomentumArrayLayer` + `MomentumVectorizedMultiClassBackpropClassifierNetwork` + the
+1. ✅ This design document.
+2. ✅ `MomentumArrayLayer` + `MomentumVectorizedMultiClassBackpropClassifierNetwork` + the
    parity-check tests above (numpy only).
 3. The wall-clock/accuracy measurement described above.
 4. Docs closeout: `structure.md`'s possible-next-steps entry updated to reflect the actual result.
-5. `MomentumRustArrayLayer` + `MomentumRustArrayMultiClassBackpropClassifierNetwork` + the fused
+5. ✅ `MomentumRustArrayLayer` + `MomentumRustArrayMultiClassBackpropClassifierNetwork` + the fused
    Rust op + parity-check tests at every tier - independent of stage 3's measurement, the same way
    [an array-based Adam sibling](adam-array-layer.md#the-rust-matmul-backed-counterpart-stage-5)'s
    own stage 5 was.
