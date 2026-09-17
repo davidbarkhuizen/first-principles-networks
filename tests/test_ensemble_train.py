@@ -14,6 +14,8 @@ from indrajala_ml.ensemble_train import (
     train_ensemble_parallel_from_indices,
 )
 from indrajala_ml.geometry import square_bounds
+from indrajala_ml.model.array_backprop_classifier_network import ArrayBackpropClassifierNetwork
+from indrajala_ml.model.ensemble_array_backprop_classifier_network import EnsembleArrayBackpropClassifierNetwork
 from indrajala_ml.model.fan_in_aware_backprop_classifier_network import FanInAwareBackpropClassifierNetwork
 
 
@@ -302,6 +304,46 @@ def test_train_ensemble_parallel_is_reproducible_under_a_fixed_seed():
     ensemble_b, _ = _train_synthetic(dataset, bounds, epochs=3, seed=7)
 
     assert ensemble_a.snapshot() == ensemble_b.snapshot()
+
+
+def test_train_ensemble_parallel_accepts_array_backed_classifier_cls():
+
+    # docs/proposals/ensemble-array-layer.md's own "training-path integration gap" section
+    # flagged this as untested: ArrayBackpropClassifierNetwork.randomized's accepted-and-discarded
+    # input_bounds parameter (see its own docstring) should let it plug into the existing
+    # multiprocessing.Pool path completely unchanged - numpy arrays pickle fine across a worker
+    # boundary, unlike indrajala_ml_array.Array (confirmed separately not to pickle at all).
+    #
+    # train_ensemble_parallel's own _collect_ensemble_results always wraps the trained
+    # classifiers in EnsembleBackpropClassifierNetwork (the per-node wrapper), regardless of
+    # classifier_cls - fine for predict_probabilities/classify_state (duck-typed, calls
+    # classifier.predict_probability only), but that wrapper's own save() reaches into
+    # hidden_layers/input_bounds, which ArrayBackpropClassifierNetwork has neither of. The real
+    # ensemble wrapper for this backend is EnsembleArrayBackpropClassifierNetwork - built here by
+    # rewrapping .classifiers, not by changing train_ensemble_parallel's own return type.
+    dataset = _synthetic_multiclass_dataset()
+    bounds = square_bounds(10.0)
+
+    result, _ = train_ensemble_parallel(
+        dataset,
+        class_count=3,
+        layer_sizes=[4],
+        dimension=2,
+        input_bounds=bounds,
+        learning_rate=0.5,
+        epochs=5,
+        worker_count=2,
+        seed=0,
+        classifier_cls=ArrayBackpropClassifierNetwork,
+    )
+
+    assert all(isinstance(classifier, ArrayBackpropClassifierNetwork) for classifier in result.classifiers)
+    assert result.classify_state((-5.0, -5.0)) == 0
+    assert result.classify_state((5.0, 5.0)) == 1
+    assert result.classify_state((5.0, -5.0)) == 2
+
+    ensemble = EnsembleArrayBackpropClassifierNetwork(result.classifiers)
+    assert ensemble.classify_state((-5.0, -5.0)) == 0
 
 
 def test_train_ensemble_parallel_from_indices_produces_a_working_ensemble(tmp_path):
