@@ -239,6 +239,6 @@ result is about the single-network comparison specifically.
    at array speed; the real-MNIST loss reproduces too at the untuned rate, but retuning
    (`learning_rate=0.01`) turns it into a real, decisive win (+1.00 point, non-overlapping 5-seed
    ranges) - closing the gap the per-node investigation explicitly declined to spend on.
-5. Docs closeout.
-6. `SoftmaxRustArrayLayer` + `SoftmaxRustArrayMultiClassBackpropClassifierNetwork` + parity-check
-   tests at every tier, built on stage 2's primitive.
+5. ✅ Docs closeout - every stage of this workplan is now done.
+6. **Done.** `SoftmaxRustArrayLayer` + `SoftmaxRustArrayMultiClassBackpropClassifierNetwork` +
+   parity-check tests at every tier, built on stage 2's primitive.
