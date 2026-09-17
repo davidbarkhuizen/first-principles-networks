@@ -103,6 +103,12 @@ cites in its docstrings, once their actual measured results were folded into
 - [an array-based dropout sibling](docs/design-docs/array-siblings/dropout-array-layer.md) —
   including the Rust core's first RNG primitive
 
+#### ensemble (`docs/design-docs/ensemble/`)
+
+- [an array-based ensemble sibling](docs/design-docs/ensemble/ensemble-array-layer.md) — both
+  backends, unconditionally: vectorizing this codebase's own best-performing, production-facing
+  real-MNIST capability (96.01% held-out accuracy) down to 21.4s (83x faster), same accuracy
+
 #### infrastructure (`docs/design-docs/infra/`)
 
 - [a learning-rate schedule](docs/design-docs/infra/learning-rate-schedule.md) — the
@@ -115,10 +121,8 @@ cites in its docstrings, once their actual measured results were folded into
 Written up front, per this repo's own practice - not started yet.
 
 - [an array-based binary cross-entropy sibling](docs/proposals/binary-cross-entropy-array-layer.md)
-  — depends on the array-based ensemble sibling's own single-output array network
-- [an array-based ensemble sibling](docs/proposals/ensemble-array-layer.md) — vectorizing this
-  codebase's own best-performing, production-facing real-MNIST capability (96.01% held-out
-  accuracy), which has never been vectorized at all
+  — its own blocking dependency (the array-based ensemble sibling's single-output array network)
+  is now done; unblocked, not yet started
 - [an array-based convolutional layer](docs/proposals/conv-array-layer.md) — vectorizing conv
   layers to finally afford the real-MNIST-scale validation the per-node path's
   ~30-minute-per-run cost has left unrun

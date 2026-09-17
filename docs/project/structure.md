@@ -776,15 +776,63 @@ concrete failure case motivates it yet.
   scale-dependent win: no `drop_probability` improves held-out accuracy over the unregularized
   baseline, at either the original scale or a conditional escalation that (honestly flagged,
   unlike L2's own) didn't even widen the train-test gap. Binary cross-entropy is still proposed,
-  not started (blocked on the next item's own single-output array network).
+  not started - its own blocking dependency (the next item's single-output array network) is now
+  done, so it's unblocked but not yet picked up.
 - **An array-based ensemble sibling** - `EnsembleBackpropClassifierNetwork` (this codebase's own
-  best-performing, production-facing real-MNIST capability, 96.01% held-out accuracy) has no
-  array-based or Rust-matmul-backed counterpart at all, unlike every other capability this
-  codebase has ever measured as worth adopting - today's ~29.6-minute real-MNIST training run is
-  sped up only by `multiprocessing`, never by vectorization. [An array-based ensemble
-  sibling](../proposals/ensemble-array-layer.md) is the proposed, not-started workplan, including the real,
-  specific `ensemble_train.py` integration gap it found by checking the code rather than assuming
-  it would just work.
+  best-performing, production-facing real-MNIST capability) previously had no array-based or
+  Rust-matmul-backed counterpart at all, unlike every other capability this codebase had measured
+  as worth adopting - the ~29.6-minute real-MNIST training run was sped up only by
+  `multiprocessing`, never by vectorization. **Update:** done, both backends, built unconditionally
+  (the Rust port was not gated behind the numpy stage's own wall-clock verdict) - see [an
+  array-based ensemble sibling](../design-docs/ensemble/ensemble-array-layer.md) for the design and
+  [research and
+  analysis](../research/research-multiclass-and-loss.md#step-4-an-arrayrust-backed-ensemble-and-the-parallel-vs-serial-question)
+  for the full measurement. Real-MNIST-scale, array/Rust-backed, parallel-trained
+  (`train_ensemble_parallel_from_indices` with `classifier_cls=RustArrayBackpropClassifierNetwork`)
+  is now the recommended path: 21.4s vs. the documented 29.6 min baseline (83x faster), 96.07% test
+  accuracy (within noise of the documented 96.01%). The workplan's own "is multiprocessing still
+  worth keeping" question resolved in favor of keeping it - parallel dispatch still beats serial
+  training for both backends even after vectorization (numpy: 2.3x; Rust: 3.2x), so parallelism
+  and vectorization compound rather than substitute. One further finding worth flagging: unlike
+  every multiclass sibling in this round (30-800x+ over per-node), the array/Rust *per-classifier*
+  wall-clock gap here is much smaller (Rust beats numpy by only 1.79x at `batch_size=1`, roughly at
+  parity beyond that) - a single-node output layer has too little real matmul work per call for
+  either backend's fixed per-call overhead to be worth paying down, a distinct, not-yet-built
+  follow-on from the training-path question above (see "possible next steps" this raises directly
+  below).
+- **Closing the single-output per-call-overhead gap** - the array/Rust ensemble sibling above
+  found a shape (a single-node output layer, `dimension=784`) where per-call overhead - Python-level
+  dispatch for numpy, the PyO3 call boundary for Rust - dominates the real matmul work far more
+  than it does at `class_count`-wide output-layer scale, capping both backends' wall-clock win at
+  that shape to under 2x instead of the 30-800x+ every multiclass sibling in this round measured.
+  Not yet built, but three concrete, scoped directions this suggests:
+  - **A fused single-example `learn()` step** - today's `learn()` issues roughly nine separate
+    per-layer method calls for a 2-layer (1 hidden + 1 output) network (forward x2,
+    `compute_output_delta` x1, `compute_hidden_delta` x1, `accumulate_gradient` x2,
+    `apply_accumulated_gradient` x2), each paying its own Python-dispatch/PyO3-crossing cost
+    independently. A single fused call doing the whole small network's forward+backward+update in
+    one shot - the same "fuse per-layer calls" idea [the Rust production
+    cutover](../architecture/rust-production-cutover.md)'s own phase 0b/1 already applied within one
+    layer's own operations, taken one level higher, across layers within one training step - would
+    amortize that overhead across the network's full compute instead of paying it once per
+    operation.
+  - **Batch the ensemble's `class_count` sub-networks' forward/backward together, not
+    per-classifier** - the ensemble-specific lever: every sub-network shares the same input
+    dimension, so stacking their weight matrices into one `(class_count, hidden_size, dimension)`
+    tensor and computing all `class_count` classifiers' forward pass in one batched matmul would
+    turn "`class_count` tiny per-call-overhead-bound ops" into one moderately-sized batched op -
+    structurally the same reason a `class_count`-node output layer's own forward pass is already
+    one matmul, not `class_count` separate ones. A real, new primitive (a new
+    `EnsembleArrayLayer`), not yet built - its own workplan, not a speculative build here.
+  - **Use `learn_batch` (mini-batch), not per-example `learn()`, in the ensemble's own training
+    loop** - available today, zero new code: the wall-clock benchmark behind this entry already
+    showed the numpy/Rust gap closing (and per-example cost dropping) by `batch_size=32` and
+    beyond, since a larger batch amortizes the same fixed per-call overhead over more real work per
+    call. `train_ensemble_parallel`/`train_ensemble_serial_from_indices` currently train via
+    `train_linear_classifier_network`'s per-example path (`BackpropClassifierNetwork`'s own
+    historical convention) rather than [mini-batch gradient
+    descent](../features/mini-batch-gradient-descent.md)'s `train_backprop_network_mini_batch` -
+    switching would likely buy back most of the `batch_size=1` gap without building anything new.
 The array-based (Rust-matmul-backed) Adam sibling - both the
 numpy-backed half (`AdamArrayLayer`/`AdamVectorizedMultiClassBackpropClassifierNetwork`) and the
 Rust-matmul-backed counterpart (`AdamRustArrayLayer`/`AdamRustArrayMultiClassBackpropClassifierNetwork`)
