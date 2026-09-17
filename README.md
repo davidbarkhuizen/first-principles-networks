@@ -21,9 +21,10 @@ retrofit - so it can represent targets (like XOR) the discrete model structurall
 - [theory](docs/theory.md) — Rosenblatt's perceptron theory, and reference material
 - [research and analysis](docs/research-and-analysis.md) — investigations behind a design
   decision, with the measurements that drove it
-- [benchmarking](docs/benchmarking.md) — not yet populated: the intended future home for
-  wall-clock measurements/speedup tables/sweep methodology, currently scattered across the docs
-  above and each sibling's own doc
+- [benchmarking](docs/benchmarking.md) — proposed reusable infrastructure (a fixed MNIST-proxy
+  builder, a fork-based sweep runner, wall-clock calibration, and mean/stdev aggregation) for the
+  hand-rolled measurement scripts every real-scale sweep in the docs above has so far re-rolled
+  from scratch
 - [vectorization](docs/vectorization.md) — numpy-backed array classes (kept as a permanent
   benchmarking mirror) and a hand-built Rust array core (the production backend)
 - [Rust production cutover](docs/rust-production-cutover.md) — how the Rust core became primary
