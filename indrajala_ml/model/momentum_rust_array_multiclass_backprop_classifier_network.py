@@ -12,7 +12,7 @@ from indrajala_ml.model.momentum_rust_array_layer import MomentumRustArrayLayer
 class MomentumRustArrayMultiClassBackpropClassifierNetwork:
     """
     The Rust-matmul-backed counterpart to MomentumVectorizedMultiClassBackpropClassifierNetwork -
-    see docs/momentum-array-layer.md's Rust-matmul-backed follow-on. Mirrors that class's
+    see docs/design-docs/array-siblings/momentum-array-layer.md's Rust-matmul-backed follow-on. Mirrors that class's
     external contract exactly against MomentumRustArrayLayer instead of MomentumArrayLayer - the
     same relationship RustArrayMultiClassBackpropClassifierNetwork has to
     VectorizedMultiClassBackpropClassifierNetwork, applied one level further to the momentum

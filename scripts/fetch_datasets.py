@@ -1,6 +1,6 @@
 """
 Ensures this checkout's dataset source files are present and checksum-verified, fetching from
-their pinned `indrajala-datasets-*` repo (see docs/dataset-sourcing-proposal.md) only when a file
+their pinned `indrajala-datasets-*` repo (see docs/design-docs/infra/dataset-sourcing-proposal.md) only when a file
 is missing or doesn't match its expected SHA-256.
 
 Presence+checksum is checked first, network only as a last resort: a repeated `./cli setup`/

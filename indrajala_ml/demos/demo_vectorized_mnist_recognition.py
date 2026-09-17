@@ -8,7 +8,7 @@ from indrajala_ml.multiclass_evaluate import accuracy
 
 DIMENSION = 28 * 28
 CLASS_COUNT = 10
-LAYER_SIZES = [30]  # matches docs/research-and-analysis.md's own already-measured pure-Python
+LAYER_SIZES = [30]  # matches docs/research/research-and-analysis.md's own already-measured pure-Python
 # baseline architecture (30-node hidden layer, ~12.5ms/iteration, ~12.5 minutes/epoch) - so this
 # run's pure-Python number is directly comparable to that already-documented figure, not a new,
 # unrelated one.
@@ -19,7 +19,7 @@ TEST_PATH = "data/mnist/mnist-test.bin"
 def main() -> None:
 
     print(
-        "Vectorization phase-1 validation, real MNIST scale (docs/vectorized-array-classes.md). "
+        "Vectorization phase-1 validation, real MNIST scale (docs/architecture/vectorized-array-classes.md). "
         "One real training epoch over the full 60000-example MNIST training set, same "
         "architecture/hyperparameters, pure-Python MultiClassBackpropClassifierNetwork vs. its "
         "numpy-array-backed VectorizedMultiClassBackpropClassifierNetwork sibling (already "
@@ -64,7 +64,7 @@ def main() -> None:
         print(f"speedup: {node_elapsed / array_elapsed:.2f}x")
     print()
 
-    # a separate, secondary measurement: docs/vectorized-array-classes.md's own "MNIST data
+    # a separate, secondary measurement: docs/architecture/vectorized-array-classes.md's own "MNIST data
     # loading" section flags load_mnist_dataset's tuple[float, ...]-per-example decode (47
     # million boxed Python floats at full 60000-example scale) as the single biggest real win -
     # this times that claim directly, not just the already-proven decode-correctness parity

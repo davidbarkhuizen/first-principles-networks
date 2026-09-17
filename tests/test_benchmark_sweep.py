@@ -5,7 +5,7 @@ from indrajala_ml.benchmark_sweep import estimate_sweep_wallclock, run_parameter
 
 def _toy_worker(config: int, seed: int) -> float:
     # deterministic pure function of (config, seed) - no real training, matching this project's
-    # agreed validation approach (see docs/benchmarking.md): prove the runner's own mechanics
+    # agreed validation approach (see docs/architecture/benchmarking.md): prove the runner's own mechanics
     # (dispatch, seeding, aggregation) work, not reprove a real measurement
     return config * 10.0 + seed
 

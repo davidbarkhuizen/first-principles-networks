@@ -13,7 +13,7 @@ from indrajala_ml.model.rust_array_layer import RustArrayLayer
 class ReLURustArrayMultiClassBackpropClassifierNetwork:
     """
     The Rust-matmul-backed counterpart to ReLUVectorizedMultiClassBackpropClassifierNetwork - see
-    docs/relu-array-layer.md's Rust-matmul-backed follow-on. Mirrors that class's external
+    docs/design-docs/array-siblings/relu-array-layer.md's Rust-matmul-backed follow-on. Mirrors that class's external
     contract exactly against ReLURustArrayLayer instead of ReLUArrayLayer - the same relationship
     RustArrayMultiClassBackpropClassifierNetwork has to
     VectorizedMultiClassBackpropClassifierNetwork, applied one level further to the ReLU line. A

@@ -21,7 +21,7 @@ class DropoutBackpropClassifierNetwork(BackpropClassifierNetwork):
 
     drop_probability is a required constructor parameter, not a keyword default, deliberately:
     the same posture momentum/l2_lambda take, not Adam's beta1/beta2/epsilon - see
-    docs/dropout.md's own "hyperparameters" section for why.
+    docs/features/dropout.md's own "hyperparameters" section for why.
     """
 
     def __init__(

@@ -97,7 +97,7 @@ def matching_array_backprop_networks(
     MultiClassBackpropClassifierNetwork and an array-backed sibling
     (VectorizedMultiClassBackpropClassifierNetwork / RustArrayMultiClassBackpropClassifierNetwork,
     passed as array_network_cls) with identical injected weights. Neither array backend's RNG
-    stream is meaningfully comparable to Python's random module (see docs/rust-array-core.md's
+    stream is meaningfully comparable to Python's random module (see docs/architecture/rust-array-core.md's
     "the RNG exception"), so initial weights are always forced identical explicitly here instead
     of via each network's own randomize(). `wrap` converts a nested Python list of weights (or a
     flat list of biases) into the array backend's own array type - np.array for the numpy
@@ -135,7 +135,7 @@ class AdamMultiClassBackpropClassifierNetwork(MultiClassBackpropClassifierNetwor
     since this codebase has no per-node multi-class Adam sibling to build against otherwise. Gives
     every array-based Adam sibling (AdamVectorizedMultiClassBackpropClassifierNetwork,
     AdamRustArrayMultiClassBackpropClassifierNetwork) a genuine parity reference instead of a
-    hand-derived fixture, per docs/adam-array-layer.md's "correctness validation" section - shared
+    hand-derived fixture, per docs/design-docs/adam/adam-array-layer.md's "correctness validation" section - shared
     here rather than duplicated per test module, since both siblings need the identical reference.
     """
 
@@ -203,7 +203,7 @@ class L2MultiClassBackpropClassifierNetwork(MultiClassBackpropClassifierNetwork)
     hidden_layer_cls/output_layer_cls extension points set to make_l2_layer_cls's node class -
     the same construction L2RegularizedBackpropClassifierNetwork uses for the single-output
     case. Gives L2VectorizedMultiClassBackpropClassifierNetwork a genuine parity reference, per
-    docs/l2-array-layer.md's "correctness validation" section.
+    docs/design-docs/array-siblings/l2-array-layer.md's "correctness validation" section.
     """
 
     def __init__(
@@ -263,7 +263,7 @@ class MomentumMultiClassBackpropClassifierNetwork(MultiClassBackpropClassifierNe
     hidden_layer_cls/output_layer_cls extension points set to make_momentum_layer_cls's node
     class - the same construction MomentumBackpropClassifierNetwork uses for the single-output
     case. Gives MomentumVectorizedMultiClassBackpropClassifierNetwork a genuine parity reference,
-    per docs/momentum-array-layer.md's "correctness validation" section.
+    per docs/design-docs/array-siblings/momentum-array-layer.md's "correctness validation" section.
     """
 
     def __init__(
@@ -324,7 +324,7 @@ class ReLUMultiClassBackpropClassifierNetwork(MultiClassBackpropClassifierNetwor
     plain BackpropLayer (sigmoid), matching ReLUNode's hidden-layer-only convention (the same
     construction ReLUBackpropClassifierNetwork uses for the single-output case). Gives
     ReLUVectorizedMultiClassBackpropClassifierNetwork a genuine parity reference, per
-    docs/relu-array-layer.md's "correctness validation" section.
+    docs/design-docs/array-siblings/relu-array-layer.md's "correctness validation" section.
     """
 
     hidden_layer_cls = ReLULayer
@@ -375,12 +375,12 @@ class DropoutMultiClassBackpropClassifierNetwork(MultiClassBackpropClassifierNet
     DropoutNode's hidden-layer-only convention. No genuine per-node
     DropoutMultiClassBackpropClassifierNetwork sibling exists in this codebase
     (DropoutBackpropClassifierNetwork is scoped to the single-output case only, see
-    docs/dropout.md's "scope"), so this exists purely to give
+    docs/features/dropout.md's "scope"), so this exists purely to give
     DropoutVectorizedMultiClassBackpropClassifierNetwork/
     DropoutRustArrayMultiClassBackpropClassifierNetwork an eval-mode parity reference (dropout is
     a deterministic no-op at eval mode - training defaults to False on both sides, and neither
     predict_probabilities nor classify_state ever toggles it on), per
-    docs/dropout-array-layer.md's own "correctness validation" section, which notes a genuine
+    docs/design-docs/array-siblings/dropout-array-layer.md's own "correctness validation" section, which notes a genuine
     training-time comparison isn't achievable across two independent RNG streams.
     """
 
@@ -451,7 +451,7 @@ def matching_softmax_array_backprop_networks(
     Unlike momentum/L2/ReLU (which need a test-only per-node reference subclass built via
     make_*_layer_cls/hidden_layer_cls), a genuine per-node softmax reference already exists
     (SoftmaxMultiClassBackpropClassifierNetwork), so this uses it directly - per
-    docs/softmax-array-layer.md's own "correctness validation" section.
+    docs/design-docs/array-siblings/softmax-array-layer.md's own "correctness validation" section.
     """
     node_network = SoftmaxMultiClassBackpropClassifierNetwork(
         layer_sizes, dimension, [(-bounds, bounds)] * dimension, class_count

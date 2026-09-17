@@ -26,7 +26,7 @@ class ReLUNode(BackpropNode):
     """
     A hidden-layer node using ReLU (max(0, z)) instead of BackpropNode's sigmoid - the modern
     default hidden-layer activation specifically because it doesn't saturate on its positive
-    side at all, unlike sigmoid (see docs/research-and-analysis.md's "the ensemble/real-MNIST
+    side at all, unlike sigmoid (see docs/research/research-and-analysis.md's "the ensemble/real-MNIST
     investigation" entry for how much sigmoid saturation alone was already measured to cost this
     codebase). Hidden-layer-only by convention, in this codebase and in the literature generally
     - an unbounded activation isn't suited to any of this codebase's output layers (plain

@@ -13,7 +13,7 @@ from indrajala_ml.model.model_io import load_array_model_json, save_array_model_
 class AdamVectorizedMultiClassBackpropClassifierNetwork:
     """
     The Adam-optimized sibling of VectorizedMultiClassBackpropClassifierNetwork - see
-    docs/adam-array-layer.md. Mirrors RustArrayMultiClassBackpropClassifierNetwork's own
+    docs/design-docs/adam/adam-array-layer.md. Mirrors RustArrayMultiClassBackpropClassifierNetwork's own
     precedent for adding an array-based sibling: a wholly separate class duplicating the same
     external contract (learn/learn_batch/classify_state/predict_probabilities/
     randomize/randomized/snapshot/restore/save/load) against AdamArrayLayer instead of

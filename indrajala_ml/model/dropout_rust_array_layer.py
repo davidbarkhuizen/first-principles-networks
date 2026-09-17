@@ -7,7 +7,7 @@ from indrajala_ml.model.rust_array_layer import RustArrayLayer
 
 class DropoutRustArrayLayer(RustArrayLayer):
     """
-    The Rust-matmul-backed counterpart to DropoutArrayLayer - see docs/dropout-array-layer.md's
+    The Rust-matmul-backed counterpart to DropoutArrayLayer - see docs/design-docs/array-siblings/dropout-array-layer.md's
     Rust-matmul-backed follow-on. Same inverted-dropout formulas, but forward/forward_batch/
     compute_hidden_delta/compute_hidden_delta_batch are each a single fused Rust call
     (`layer_dropout_forward`/`layer_dropout_forward_batch`/`layer_dropout_hidden_delta`/
@@ -20,8 +20,8 @@ class DropoutRustArrayLayer(RustArrayLayer):
     Unlike `uniform()` (`randomize()`'s own RNG source, drawn once at construction time), this
     mask is drawn fresh on every training-time forward pass - the same "no numpy-seed-compatible
     RNG to match" caveat this crate's `uniform()` already carries applies here too (see
-    docs/rust-array-core.md's own random-generator doc comment), sharper here since the mask *is*
-    the mechanism under test, not incidental to it (see docs/dropout-array-layer.md's
+    docs/architecture/rust-array-core.md's own random-generator doc comment), sharper here since the mask *is*
+    the mechanism under test, not incidental to it (see docs/design-docs/array-siblings/dropout-array-layer.md's
     "correctness validation": parity against the numpy-backed sibling can only be checked
     statistically at training=True, exactly at training=False).
 

@@ -24,7 +24,7 @@ class AdamBackpropClassifierNetwork(BackpropClassifierNetwork):
     (learn/_backward/randomize/snapshot/restore) is inherited unchanged.
 
     Scoped to BackpropClassifierNetwork only (single-output, binary), matching every prior
-    weight-update-rule sibling's own launch scope - see docs/adam-optimizer.md for the full
+    weight-update-rule sibling's own launch scope - see docs/design-docs/adam/adam-optimizer.md for the full
     design/measurement plan, including why beta1/beta2/epsilon get safe defaults here rather than
     momentum's required-argument posture.
     """

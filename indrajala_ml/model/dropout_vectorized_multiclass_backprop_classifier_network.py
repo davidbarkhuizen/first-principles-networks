@@ -13,7 +13,7 @@ from indrajala_ml.model.model_io import load_array_model_json, save_array_model_
 class DropoutVectorizedMultiClassBackpropClassifierNetwork:
     """
     The dropout sibling of VectorizedMultiClassBackpropClassifierNetwork - see
-    docs/dropout-array-layer.md. Mirrors AdamVectorizedMultiClassBackpropClassifierNetwork's own
+    docs/design-docs/array-siblings/dropout-array-layer.md. Mirrors AdamVectorizedMultiClassBackpropClassifierNetwork's own
     precedent for adding an array-based sibling: a wholly separate class duplicating the same
     external contract, not a subclass swapping a layer_cls extension point -
     VectorizedMultiClassBackpropClassifierNetwork.__init__ hardcodes ArrayLayer construction and
@@ -28,7 +28,7 @@ class DropoutVectorizedMultiClassBackpropClassifierNetwork:
 
     learn/learn_batch bracket only the forward pass in a set_training_mode(True)/try/finally,
     not the whole method - matching BackpropClassifierNetwork.learn's own bracket shape (see
-    docs/dropout.md's "design"): each DropoutArrayLayer's backward pass reads its own
+    docs/features/dropout.md's "design"): each DropoutArrayLayer's backward pass reads its own
     forward-time _was_training/_mask snapshot, not the live flag, so a bracket any wider than
     "the forward pass itself" isn't needed, and predict_probabilities/classify_state need no
     bracket at all - training already defaults to False on every fresh DropoutArrayLayer and the

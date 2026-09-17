@@ -12,7 +12,7 @@ from indrajala_ml.model.model_io import load_array_model_json, save_array_model_
 class L2RustArrayMultiClassBackpropClassifierNetwork:
     """
     The Rust-matmul-backed counterpart to L2VectorizedMultiClassBackpropClassifierNetwork - see
-    docs/l2-array-layer.md's Rust-matmul-backed follow-on. Mirrors that class's external contract
+    docs/design-docs/array-siblings/l2-array-layer.md's Rust-matmul-backed follow-on. Mirrors that class's external contract
     exactly (learn/learn_batch/classify_state/predict_probabilities/randomize/randomized/
     snapshot/restore/save/load) against L2RustArrayLayer instead of L2ArrayLayer - the same
     relationship RustArrayMultiClassBackpropClassifierNetwork has to

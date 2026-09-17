@@ -46,7 +46,7 @@ def test_forward_matches_softmax_output_layer_across_a_random_sweep():
 
 def test_forward_matches_softmax_output_layer_for_large_magnitude_z_without_overflow():
 
-    # the numerically-adversarial case docs/softmax-array-layer.md's "correctness validation"
+    # the numerically-adversarial case docs/design-docs/array-siblings/softmax-array-layer.md's "correctness validation"
     # section calls for: confirms the array layer's max-shift trick matches the per-node
     # reference's own overflow-safe behavior, not just the well-conditioned case
     dimension = 1

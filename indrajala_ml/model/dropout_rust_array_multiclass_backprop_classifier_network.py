@@ -13,7 +13,7 @@ from indrajala_ml.model.rust_array_layer import RustArrayLayer
 class DropoutRustArrayMultiClassBackpropClassifierNetwork:
     """
     The Rust-matmul-backed counterpart to DropoutVectorizedMultiClassBackpropClassifierNetwork -
-    see docs/dropout-array-layer.md's Rust-matmul-backed follow-on. Mirrors that class's external
+    see docs/design-docs/array-siblings/dropout-array-layer.md's Rust-matmul-backed follow-on. Mirrors that class's external
     contract exactly against DropoutRustArrayLayer instead of DropoutArrayLayer - the same
     relationship RustArrayMultiClassBackpropClassifierNetwork has to
     VectorizedMultiClassBackpropClassifierNetwork, applied one level further to the dropout line.

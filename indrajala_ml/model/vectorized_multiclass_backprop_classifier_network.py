@@ -12,7 +12,7 @@ from indrajala_ml.model.model_io import load_array_model_json, save_array_model_
 class VectorizedMultiClassBackpropClassifierNetwork:
     """
     A numpy-array-backed sibling of MultiClassBackpropClassifierNetwork - see
-    docs/vectorized-array-classes.md's "the architectural point" section for why this is a
+    docs/architecture/vectorized-array-classes.md's "the architectural point" section for why this is a
     standalone class, not a BackpropNetworkBase subclass: array-based vectorization replaces
     "one Python object, one method call, per node" with "one array, one matrix operation, for
     the whole layer", so there's no per-node compute_hidden_delta(next_layer_nodes, own_index)

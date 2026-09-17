@@ -13,7 +13,7 @@ from indrajala_ml.model.model_io import load_array_model_json, save_array_model_
 class AdamRustArrayMultiClassBackpropClassifierNetwork:
     """
     The Rust-matmul-backed counterpart to AdamVectorizedMultiClassBackpropClassifierNetwork - see
-    docs/adam-array-layer.md's Rust-matmul-backed follow-on. Mirrors that class's external
+    docs/design-docs/adam/adam-array-layer.md's Rust-matmul-backed follow-on. Mirrors that class's external
     contract exactly (learn/learn_batch/classify_state/predict_probabilities/
     randomize/randomized/snapshot/restore/save/load) against AdamRustArrayLayer instead of
     AdamArrayLayer - the same relationship RustArrayMultiClassBackpropClassifierNetwork has to

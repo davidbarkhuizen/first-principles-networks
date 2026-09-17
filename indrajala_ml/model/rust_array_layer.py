@@ -5,8 +5,8 @@ import indrajala_ml_array as pa
 
 class RustArrayLayer:
     """
-    The Rust-array-core-backed sibling of ArrayLayer - see docs/rust-production-cutover.md's
-    phase 1. Every method here is a single fused Rust call (docs/rust-production-cutover.md's
+    The Rust-array-core-backed sibling of ArrayLayer - see docs/architecture/rust-production-cutover.md's
+    phase 1. Every method here is a single fused Rust call (docs/architecture/rust-production-cutover.md's
     phase 0b, `fused.rs`) instead of a composition of individual `Array` operators, mirroring
     ArrayLayer's own method names/formulas exactly so this class is a drop-in swap for it.
     `indrajala_ml_array.Array` has no in-place arithmetic beyond `+=`/`-=`, so every method below

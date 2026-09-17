@@ -8,7 +8,7 @@ from indrajala_ml.model.array_layer import ArrayLayer
 class ReLUArrayLayer(ArrayLayer):
     """
     The array-based counterpart to relu_layer.ReLUNode/ReLULayer: max(0, z) instead of sigmoid,
-    as whole-array numpy ops instead of a per-node Python loop. See docs/relu-array-layer.md for
+    as whole-array numpy ops instead of a per-node Python loop. See docs/design-docs/array-siblings/relu-array-layer.md for
     the full design.
 
     Unlike momentum/L2/Adam's own array siblings (which only touch apply_accumulated_gradient),

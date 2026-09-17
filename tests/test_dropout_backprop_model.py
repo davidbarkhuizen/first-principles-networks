@@ -87,7 +87,7 @@ def test_learn_when_the_hidden_unit_is_dropped_leaves_its_incoming_weights_uncha
 
 def test_predict_probability_between_learn_calls_is_unaffected_by_training_mode():
 
-    # call-scoped, not lifecycle-scoped (docs/dropout.md's own central design point): a
+    # call-scoped, not lifecycle-scoped (docs/features/dropout.md's own central design point): a
     # predict_probability() call sandwiched between two learn() calls must see eval-mode
     # behavior, not accidentally inherit training mode left on by the learn() call before it
     network = _fixed_network()

@@ -19,7 +19,7 @@ CLASS_COUNT = 3
 
 
 def _matching_networks(rng: random.Random):
-    # tier 1 (docs/rust-production-cutover.md's phase 2) - identical fixed weights/inputs
+    # tier 1 (docs/architecture/rust-production-cutover.md's phase 2) - identical fixed weights/inputs
     # injected directly, never randomize(), since indrajala_ml_array.uniform's RNG can never be
     # seed-comparable against Python's random module (see rust-array-core.md's "the RNG
     # exception"). The array-vs-node analogue of
@@ -54,7 +54,7 @@ def test_classify_state_matches_across_a_random_sweep():
 def test_learn_matches_after_every_step_not_just_at_the_end():
 
     # one silently-wrong intermediate step should fail loudly rather than being averaged away
-    # by many steps - tier 1's own required regression gate (docs/rust-production-cutover.md).
+    # by many steps - tier 1's own required regression gate (docs/architecture/rust-production-cutover.md).
     rng = random.Random(2)
     node_network, rust_network = _matching_networks(rng)
     learning_rate = 0.3

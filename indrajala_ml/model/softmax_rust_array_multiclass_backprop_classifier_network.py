@@ -13,7 +13,7 @@ from indrajala_ml.model.softmax_rust_array_layer import SoftmaxRustArrayLayer
 class SoftmaxRustArrayMultiClassBackpropClassifierNetwork:
     """
     The Rust-matmul-backed counterpart to SoftmaxVectorizedMultiClassBackpropClassifierNetwork -
-    see docs/softmax-array-layer.md's Rust-matmul-backed follow-on. Mirrors that class's external
+    see docs/design-docs/array-siblings/softmax-array-layer.md's Rust-matmul-backed follow-on. Mirrors that class's external
     contract exactly against SoftmaxRustArrayLayer instead of SoftmaxArrayLayer - the same
     relationship RustArrayMultiClassBackpropClassifierNetwork has to
     VectorizedMultiClassBackpropClassifierNetwork, applied one level further to the softmax line.

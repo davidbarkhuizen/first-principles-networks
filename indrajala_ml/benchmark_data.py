@@ -11,7 +11,7 @@ MNIST_DIGIT_COUNT = 10
 class BenchmarkProxy:
     """
     A fixed, class-balanced MNIST-digit proxy dataset for a benchmarking sweep - see
-    docs/benchmarking.md. Built once and reused across every seed in a sweep (never resampled
+    docs/architecture/benchmarking.md. Built once and reused across every seed in a sweep (never resampled
     per seed - the same practice every existing measurement in this codebase's docs already
     follows), which is why this is a plain data holder, not something build_mnist_digit_proxy's
     caller reconstructs per run.
@@ -41,7 +41,7 @@ def build_mnist_digit_proxy(
 ) -> BenchmarkProxy:
     """
     Builds the fixed MNIST-digit proxy dataset shape every real-scale sweep in this codebase's
-    docs has hand-built independently (see docs/benchmarking.md's "why this, and why now") -
+    docs has hand-built independently (see docs/architecture/benchmarking.md's "why this, and why now") -
     `examples_per_class` balanced examples per requested digit, decoded only for the examples
     actually selected (never the full 60000/10000-record file), split into a stratified
     train/test pair that preserves per-class balance in both halves.

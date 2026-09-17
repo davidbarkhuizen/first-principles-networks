@@ -81,7 +81,7 @@ class BackpropNetworkBase:
         # (not just after) learn()/learn_batch() steps, so this must be toggled on for the
         # duration of one training call and off again immediately after - never left on. A
         # no-op for every layer except a training-aware sibling like DropoutLayer (see
-        # docs/dropout.md).
+        # docs/features/dropout.md).
         for layer in self.trainable_layers:
             layer.set_training_mode(training)
 
@@ -153,7 +153,7 @@ def randomize_fan_in_aware(network: BackpropNetworkBase) -> None:
     Unlike BackpropClassifierNetwork.randomize()'s per-dimension-bounds-width scaling (tuned for
     1-2D geometric problems - see that method's own docstring), this scheme is dimension-generic:
     it was measured directly to matter at real scale for EnsembleBackpropClassifierNetwork's
-    784-dimension MNIST sub-networks too (see docs/research-and-analysis.md's "ensemble/real-MNIST
+    784-dimension MNIST sub-networks too (see docs/research/research-and-analysis.md's "ensemble/real-MNIST
     investigation" entry - 83.5% of hidden activations already saturated at initialization under
     the old scheme, fixed by this one, +6.6 points real-scale test accuracy with no other change).
     """

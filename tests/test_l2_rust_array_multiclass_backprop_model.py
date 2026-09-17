@@ -19,7 +19,7 @@ L2_LAMBDA = 0.05
 
 
 def _matching_networks(rng: random.Random, bounds: float = 10.0):
-    # tier 1 (docs/rust-production-cutover.md's phase 2): identical fixed weights/inputs
+    # tier 1 (docs/architecture/rust-production-cutover.md's phase 2): identical fixed weights/inputs
     # injected directly, never randomize(), since indrajala_ml_array.uniform's RNG can never be
     # seed-comparable against Python's random module (see rust-array-core.md's "the RNG
     # exception").

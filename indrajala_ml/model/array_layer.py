@@ -10,7 +10,7 @@ def sigmoid(z: np.ndarray) -> np.ndarray:
     np.exp(-z) to inf, and 1/(1+inf) is 0.0 under IEEE 754, which is exactly the limiting value
     backprop_node.sigmoid's OverflowError branch returns by hand. Confirmed by
     tests/test_array_layer.py's dedicated overflow-boundary sweep, not assumed from the formulas
-    looking equivalent - see docs/vectorized-array-classes.md's "numerical parity validation".
+    looking equivalent - see docs/architecture/vectorized-array-classes.md's "numerical parity validation".
     """
 
     with np.errstate(over="ignore"):
@@ -20,7 +20,7 @@ def sigmoid(z: np.ndarray) -> np.ndarray:
 class ArrayLayer:
     """
     One backprop layer's weights/activations as whole arrays, not `size` separate BackpropNode
-    objects - see docs/vectorized-array-classes.md's "class design" section for the full
+    objects - see docs/architecture/vectorized-array-classes.md's "class design" section for the full
     forward/backward/gradient formula table this class implements incrementally, stage by stage.
     Built incrementally: single-example forward() first, then this stage's forward_batch().
     """
@@ -82,7 +82,7 @@ class ArrayLayer:
         # uses instead of calling accumulate_gradient once per example:
         # self.delta_batch.T @ input_activation_batch computes the same sum of per-example outer
         # products as looping accumulate_gradient over every row, in one matrix multiply - per
-        # docs/vectorized-array-classes.md's own learn_batch formula.
+        # docs/architecture/vectorized-array-classes.md's own learn_batch formula.
         self._grad_W += self.delta_batch.T @ input_activation_batch
         self._grad_b += self.delta_batch.sum(axis=0)
 
