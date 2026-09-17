@@ -26,8 +26,8 @@ nearly identically every time:
    stratified) or, less often, multiclass subset, built once and reused across every seed in a
    sweep, never resampled per seed. Sizes vary (320 examples in the earlier momentum/Adam sweeps,
    400 in L2's and dropout's), but the shape is the same every time.
-2. **A fork-based `multiprocessing.Pool` sweep runner** over (config, seed) pairs, with per-process
-   reseeding so results are reproducible from a fixed top-level seed.
+2. **A `multiprocessing.Pool` sweep runner** over (config, seed) pairs, each job handed its own
+   fixed seed from a caller-supplied seed list so results are reproducible from that list.
 3. **A wall-clock calibration probe**, run once before committing to the full sweep, to project
    total cost and decide up front whether it's affordable - done by hand, informally, in every
    sweep so far.
@@ -71,10 +71,10 @@ one-vs-rest and doesn't generalize to this case. Both paths decode only the sele
 into a stratified train/test pair that preserves per-class balance in both halves.
 
 **`indrajala_ml/benchmark_sweep.py`** - `run_parameter_sweep(configs, seeds, worker_fn,
-worker_count=None)`, a fork-based `multiprocessing.Pool` dispatching one job per (config, seed)
-pair, mirroring `ensemble_train.py`'s own dispatch pattern (a per-job seed derived from a parent
-`random.Random(seed)`, `random.seed(job_seed)` explicitly set at the top of each worker, small
-picklable results collected via `pool.imap`); `estimate_sweep_wallclock(worker_fn, sample_config,
+worker_count=None)`, a `multiprocessing.Pool` dispatching one job per (config, seed) pair (each
+job handed its own fixed seed from `seeds`, with whichever RNG a `worker_fn` needs seeded left to
+that function itself, exactly as every existing sweep script already does by hand), small
+picklable results collected via `pool.imap`; `estimate_sweep_wallclock(worker_fn, sample_config,
 sample_seed, planned_run_count, worker_count)`, running one real job serially and projecting total
 wall-clock, replacing the informal calibration step every sweep so far has done by hand;
 `summarize_sweep_results(results)`, rendering mean/stdev per config as the same markdown table
@@ -106,13 +106,20 @@ code's actual job is narrow: cap an already-balanced index selection down to a f
 existing helper reaches, and produce a stratified train/test split - not reinventing dataset
 loading or class balancing.
 
-`run_parameter_sweep` relies on the same fork-based copy-on-write process model
-`ensemble_train.py`'s own parallel path already depends on (its own docstring notes fork-based
-workers aren't guaranteed to diverge in global random state without an explicit reseed, which is
-why every worker reseeds explicitly rather than trusting incidental post-fork divergence). Any
-shared read-only data a `worker_fn` closes over - typically one `BenchmarkProxy`, built once in
-the parent - is inherited by each forked worker via copy-on-write, not re-pickled through `imap`'s
-per-job arguments on every call.
+`run_parameter_sweep`'s `worker_fn` must be a module-level function, not a local closure or
+lambda - the same picklability constraint `ensemble_train.py`'s own worker functions already
+have, for the same reason: `Pool` workers receive tasks through a queue, which pickles whatever
+callable and arguments each task carries. Rather than re-pickling `worker_fn` on every one of
+potentially hundreds of (config, seed) tasks, it's pickled once per worker process via `Pool`'s
+own `initializer`/`initargs` - cheap even when `worker_fn` closes over a real, non-trivial shared
+context (typically one `BenchmarkProxy`, built once by the caller before this call). Only
+`configs` and `seeds` travel through `imap`'s own per-job queue.
+
+Unlike `ensemble_train.py`'s own workers, `run_parameter_sweep` does not reseed any RNG itself -
+different `worker_fn`s may need to seed Python's `random`, numpy's RNG, or (for eval-mode-only
+paths) nothing at all, so which RNG to seed is left to `worker_fn`, exactly as every existing
+sweep script already does by hand; the runner's only job is handing each job its own fixed seed
+from the caller's `seeds` list.
 
 ## tests
 
