@@ -603,9 +603,13 @@ and every formula that was a per-node Python loop becomes one array operation (`
 next_layer.delta`, replacing a per-node `sum()`; `accumulate_gradient`: `np.outer(self.delta,
 input_layer.a)`). This can't reuse `BackpropNetworkBase`'s per-node orchestration at all -
 there's no `own_index` to enumerate - so `VectorizedMultiClassBackpropClassifierNetwork` is a
-fully standalone class, sharing only the external contract (`learn`, `learn_batch`,
-`classify_state`, `predict_probabilities`, `snapshot`/`restore`, `save`/`load`) every sibling
-network already shares, with its own JSON envelope (arrays via `.tolist()`).
+fully standalone class relative to `BackpropNetworkBase`, sharing only the external contract
+(`learn`, `learn_batch`, `classify_state`, `predict_probabilities`, `snapshot`/`restore`,
+`save`/`load`) every sibling network already shares, with its own JSON envelope (arrays via
+`.tolist()`). It does, however, have its own array-level base class one level up
+(`ArrayNetworkBase`) that every momentum/L2/Adam/ReLU/softmax/dropout/cross-entropy array sibling
+subclasses - see [vectorized array-based classes](../architecture/vectorized-array-classes.md#why-a-standalone-class-not-a-backpropnetworkbase-sibling)'s
+own 2026-09-17 update for why that extension point didn't exist here initially.
 
 Built and parity-checked against the pure-Python reference classes at every stage, then measured
 end to end: UCI digits (`[32]` hidden, 30 epochs) trains to matching accuracy (99.5%/96.1% vs.
