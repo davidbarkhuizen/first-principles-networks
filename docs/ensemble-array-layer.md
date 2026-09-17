@@ -180,21 +180,26 @@ Same two-tier convention as every array-based sibling:
 
 ## measurement plan
 
-- **Per-classifier wall-clock**: the standard fused-layer benchmark
-  (`dimension=784, hidden=16`, per-node/numpy/Rust, several batch sizes) - expect a result in
-  line with every other sibling in this round.
+- **Per-classifier wall-clock**: the standard fused-layer benchmark (`dimension=784, hidden=16`,
+  numpy vs. Rust, several batch sizes) - per [goals and strategy](goals-and-strategy.md#measurement-discipline-the-per-node-paths-two-jobs-and-the-one-it-doesnt-have),
+  no fresh per-node timing run: this round's own five siblings already established per-node is
+  30-1000x+ slower independently and consistently, so this benchmark compares the two backends
+  actually worth choosing between, not re-confirms what per-node already lost every time.
 - **The real question - does vectorizing change how this codebase should train the ensemble at
   all**: today's ~29.6-minute wall-clock comes from `multiprocessing` parallelism across 10
-  independent per-node jobs, not from any per-classifier speed. Once each classifier trains
-  70-800x faster per example (this round's own consistent finding), it's a real, open, honestly
-  unresolved question whether **training all 10 classifiers serially in one process**, with no
-  multiprocessing at all, beats or merely matches the current parallel-per-node wall-clock - and
-  if it does, that would remove real complexity from this codebase (the memory-aware worker-count
-  capping, the index-based record loading fix, the whole `multiprocessing.Pool` machinery
-  `ensemble_train.py` carries specifically for per-node-scale cost) rather than just making the
-  existing approach faster. Measure both configurations directly (serial array/Rust vs. the
-  existing parallel per-node baseline) rather than assuming vectorization is strictly additive to
-  the current design.
+  independent per-node jobs, not from any per-classifier speed - a figure this codebase already
+  has on record (the [ensemble/real-MNIST
+  investigation](research-multiclass-and-loss.md#the-ensemblereal-mnist-investigation)'s own step
+  3), not one to re-time fresh. Once each classifier trains 70-800x faster per example (this
+  round's own consistent finding), it's a real, open, honestly unresolved question whether
+  **training all 10 classifiers serially in one process**, with no multiprocessing at all, beats
+  or merely matches that documented parallel-per-node wall-clock - and if it does, that would
+  remove real complexity from this codebase (the memory-aware worker-count capping, the
+  index-based record loading fix, the whole `multiprocessing.Pool` machinery `ensemble_train.py`
+  carries specifically for per-node-scale cost) rather than just making the existing approach
+  faster. Measure the new serial array/Rust configuration directly and compare it against that
+  existing documented figure, rather than assuming vectorization is strictly additive to the
+  current design.
 - **Accuracy parity at real-MNIST scale**: reproduce the 96.01% held-out test accuracy result on
   the array/Rust-backed ensemble, same architecture/hyperparameters, checking it lands within
   seed-to-seed noise of the per-node figure - the same [RNG-exception](rust-array-core.md#the-rng-exception)
