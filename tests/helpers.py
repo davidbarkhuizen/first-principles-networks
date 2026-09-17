@@ -5,7 +5,9 @@ import numpy as np
 import pytest
 
 from indrajala_ml.model.adam_layer import make_adam_layer_cls
+from indrajala_ml.model.l2_regularization_layer import make_l2_layer_cls
 from indrajala_ml.model.linear_classifier_network import LinearClassifierNetwork
+from indrajala_ml.model.momentum_layer import make_momentum_layer_cls
 from indrajala_ml.model.multiclass_backprop_classifier_network import MultiClassBackpropClassifierNetwork
 
 
@@ -171,6 +173,126 @@ def matching_adam_array_backprop_networks(
         layer_sizes, dimension, [(-bounds, bounds)] * dimension, class_count, beta1, beta2, epsilon
     )
     array_network = array_network_cls(layer_sizes, dimension, class_count, beta1, beta2, epsilon)
+
+    previous_size = dimension
+    for layer_index, size in enumerate([*layer_sizes, class_count]):
+        weights = [[rng.uniform(-2.0, 2.0) for _ in range(previous_size)] for _ in range(size)]
+        biases = [rng.uniform(-2.0, 2.0) for _ in range(size)]
+
+        node_layer = node_network.trainable_layers[layer_index]
+        for node, node_weights, bias in zip(node_layer.nodes, weights, biases):
+            node.update_input_weights(node_weights)
+            node.bias = bias
+
+        array_network.layers[layer_index].W = wrap(weights)
+        array_network.layers[layer_index].b = wrap(biases)
+
+        previous_size = size
+
+    return node_network, array_network
+
+
+class L2MultiClassBackpropClassifierNetwork(MultiClassBackpropClassifierNetwork):
+    """
+    Test-only per-node L2 reference: MultiClassBackpropClassifierNetwork with its
+    hidden_layer_cls/output_layer_cls extension points set to make_l2_layer_cls's node class -
+    the same construction L2RegularizedBackpropClassifierNetwork uses for the single-output
+    case. Gives L2VectorizedMultiClassBackpropClassifierNetwork a genuine parity reference, per
+    docs/l2-array-layer.md's "correctness validation" section.
+    """
+
+    def __init__(
+        self,
+        layer_sizes: list[int],
+        dimension: int,
+        input_bounds: list[tuple[float, float]],
+        class_count: int,
+        l2_lambda: float,
+    ) -> None:
+        layer_cls = make_l2_layer_cls(l2_lambda)
+        self.hidden_layer_cls = layer_cls
+        self.output_layer_cls = layer_cls
+        super().__init__(layer_sizes, dimension, input_bounds, class_count)
+
+
+def matching_l2_array_backprop_networks(
+    rng: random.Random,
+    array_network_cls,
+    wrap: Callable,
+    layer_sizes: list[int],
+    dimension: int,
+    class_count: int,
+    l2_lambda: float,
+    bounds: float = 10.0,
+):
+    """
+    The L2-sibling analogue of matching_array_backprop_networks above - see
+    matching_adam_array_backprop_networks's own docstring for the general shape this follows.
+    """
+    node_network = L2MultiClassBackpropClassifierNetwork(
+        layer_sizes, dimension, [(-bounds, bounds)] * dimension, class_count, l2_lambda
+    )
+    array_network = array_network_cls(layer_sizes, dimension, class_count, l2_lambda)
+
+    previous_size = dimension
+    for layer_index, size in enumerate([*layer_sizes, class_count]):
+        weights = [[rng.uniform(-2.0, 2.0) for _ in range(previous_size)] for _ in range(size)]
+        biases = [rng.uniform(-2.0, 2.0) for _ in range(size)]
+
+        node_layer = node_network.trainable_layers[layer_index]
+        for node, node_weights, bias in zip(node_layer.nodes, weights, biases):
+            node.update_input_weights(node_weights)
+            node.bias = bias
+
+        array_network.layers[layer_index].W = wrap(weights)
+        array_network.layers[layer_index].b = wrap(biases)
+
+        previous_size = size
+
+    return node_network, array_network
+
+
+class MomentumMultiClassBackpropClassifierNetwork(MultiClassBackpropClassifierNetwork):
+    """
+    Test-only per-node momentum reference: MultiClassBackpropClassifierNetwork with its
+    hidden_layer_cls/output_layer_cls extension points set to make_momentum_layer_cls's node
+    class - the same construction MomentumBackpropClassifierNetwork uses for the single-output
+    case. Gives MomentumVectorizedMultiClassBackpropClassifierNetwork a genuine parity reference,
+    per docs/momentum-array-layer.md's "correctness validation" section.
+    """
+
+    def __init__(
+        self,
+        layer_sizes: list[int],
+        dimension: int,
+        input_bounds: list[tuple[float, float]],
+        class_count: int,
+        momentum: float,
+    ) -> None:
+        layer_cls = make_momentum_layer_cls(momentum)
+        self.hidden_layer_cls = layer_cls
+        self.output_layer_cls = layer_cls
+        super().__init__(layer_sizes, dimension, input_bounds, class_count)
+
+
+def matching_momentum_array_backprop_networks(
+    rng: random.Random,
+    array_network_cls,
+    wrap: Callable,
+    layer_sizes: list[int],
+    dimension: int,
+    class_count: int,
+    momentum: float,
+    bounds: float = 10.0,
+):
+    """
+    The momentum-sibling analogue of matching_array_backprop_networks above - see
+    matching_adam_array_backprop_networks's own docstring for the general shape this follows.
+    """
+    node_network = MomentumMultiClassBackpropClassifierNetwork(
+        layer_sizes, dimension, [(-bounds, bounds)] * dimension, class_count, momentum
+    )
+    array_network = array_network_cls(layer_sizes, dimension, class_count, momentum)
 
     previous_size = dimension
     for layer_index, size in enumerate([*layer_sizes, class_count]):
