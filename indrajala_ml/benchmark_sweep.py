@@ -30,7 +30,7 @@ def run_parameter_sweep(
 ) -> dict[Hashable, list[Any]]:
     """
     The fork-based multiprocessing.Pool sweep runner every real-scale measurement in this
-    codebase's docs has hand-rolled independently - see docs/benchmarking.md. Dispatches one job
+    codebase's docs has hand-rolled independently - see docs/architecture/benchmarking.md. Dispatches one job
     per (config, seed) pair; worker_fn must be a module-level function (not a local closure or
     lambda), the same picklability constraint ensemble_train.py's own worker functions already
     have, for the same reason - Pool workers receive tasks through a queue, which pickles

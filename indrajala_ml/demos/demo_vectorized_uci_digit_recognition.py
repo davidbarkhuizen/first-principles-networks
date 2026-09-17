@@ -23,7 +23,7 @@ def main() -> None:
     print(
         "Vectorization phase-1 validation: the same UCI hand-written digits task "
         "demo_uci_digit_recognition.py trains, here trained by "
-        "VectorizedMultiClassBackpropClassifierNetwork (docs/vectorized-array-classes.md) - a "
+        "VectorizedMultiClassBackpropClassifierNetwork (docs/architecture/vectorized-array-classes.md) - a "
         "numpy-array-backed sibling, parity-checked step-by-step against the pure-Python "
         "MultiClassBackpropClassifierNetwork in tests/test_vectorized_multiclass_backprop_model.py. "
         "This demo trains both, at the same seed and hyperparameters, and reports the actual "

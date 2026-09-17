@@ -19,7 +19,7 @@ class FanInAwareBackpropClassifierNetwork(BackpropClassifierNetwork):
     directly: 83.5% of hidden activations already saturated at initialization, before any
     training). Switching to this class alone, with no other change, was measured directly to
     take the real, full-scale MNIST ensemble from 89.4% to 96.01% test accuracy at the same
-    wall-clock cost - see docs/research-and-analysis.md's "ensemble/real-MNIST investigation"
+    wall-clock cost - see docs/research/research-and-analysis.md's "ensemble/real-MNIST investigation"
     entry for the full measurement.
 
     Deliberately not a change to BackpropClassifierNetwork itself: that class's existing scaling

@@ -12,7 +12,7 @@ from indrajala_ml.model.model_io import load_array_model_json, save_array_model_
 class L2VectorizedMultiClassBackpropClassifierNetwork:
     """
     The L2 (weight decay) regularized sibling of VectorizedMultiClassBackpropClassifierNetwork -
-    see docs/l2-array-layer.md. Mirrors AdamVectorizedMultiClassBackpropClassifierNetwork's own
+    see docs/design-docs/array-siblings/l2-array-layer.md. Mirrors AdamVectorizedMultiClassBackpropClassifierNetwork's own
     precedent for adding an array-based sibling: a wholly separate class duplicating the same
     external contract (learn/learn_batch/classify_state/predict_probabilities/
     randomize/randomized/snapshot/restore/save/load) against L2ArrayLayer instead of ArrayLayer,

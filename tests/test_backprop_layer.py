@@ -81,7 +81,7 @@ class _CallCountingLayer:
     """A fake trainable layer - exercises BackpropNetworkBase's own gradient/persistence
     methods to confirm they call each of these once per *layer*, not once per node, which is
     exactly the seam a convolutional layer (many nodes sharing one kernel - see
-    docs/convolutional-layers.md) depends on."""
+    docs/features/convolutional-layers.md) depends on."""
 
     def __init__(self, nodes):
         self.nodes = nodes

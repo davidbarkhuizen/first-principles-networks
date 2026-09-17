@@ -10,7 +10,7 @@ class SoftmaxArrayLayer(ArrayLayer):
     The array-based counterpart to softmax_output_layer.SoftmaxOutputNode/SoftmaxOutputLayer:
     joint softmax normalization across the whole output vector instead of an independent per-node
     sigmoid, as whole-array numpy ops instead of a per-node Python loop. See
-    docs/softmax-array-layer.md for the full design.
+    docs/design-docs/array-siblings/softmax-array-layer.md for the full design.
 
     Output-layer-only, matching SoftmaxOutputLayer's own `assert size >= 2` convention (a
     single-node softmax has nothing to normalize against) - unlike ReLU's own hidden-layer-only

@@ -12,7 +12,7 @@ from indrajala_ml.model.momentum_array_layer import MomentumArrayLayer
 class MomentumVectorizedMultiClassBackpropClassifierNetwork:
     """
     The momentum sibling of VectorizedMultiClassBackpropClassifierNetwork - see
-    docs/momentum-array-layer.md. Mirrors AdamVectorizedMultiClassBackpropClassifierNetwork's own
+    docs/design-docs/array-siblings/momentum-array-layer.md. Mirrors AdamVectorizedMultiClassBackpropClassifierNetwork's own
     precedent for adding an array-based sibling: a wholly separate class duplicating the same
     external contract (learn/learn_batch/classify_state/predict_probabilities/
     randomize/randomized/snapshot/restore/save/load) against MomentumArrayLayer instead of

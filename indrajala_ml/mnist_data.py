@@ -87,7 +87,7 @@ def convert_parquet_to_binary(parquet_path: str, binary_path: str, limit: int | 
     pyarrow is imported locally, inside this function, not at module level - so merely
     importing this module (to call load_mnist_dataset) never pulls pyarrow into a process that
     doesn't need it. That's not a style preference: it's the actual, measured fix for a real
-    multiprocessing memory-exhaustion failure (see docs/research-and-analysis.md) - pyarrow's
+    multiprocessing memory-exhaustion failure (see docs/research/research-and-analysis.md) - pyarrow's
     own import footprint, inherited by every forked worker process regardless of whether that
     worker ever touches it, turned out to be several times larger than the training data itself.
     Mirrors exactly how digits_data.py's bundled CSV was extracted once from scikit-learn
@@ -153,7 +153,7 @@ def load_mnist_dataset(path: str, limit: int | None = None) -> list[tuple[tuple[
 def load_mnist_dataset_as_array(path: str, limit: int | None = None) -> np.ndarray:
     """
     The array-backed counterpart to load_mnist_dataset, addressing the root cause
-    docs/research-and-analysis.md's "parallelizing MNIST training" entry measured and worked
+    docs/research/research-and-analysis.md's "parallelizing MNIST training" entry measured and worked
     around rather than fixed: decoding into `tuple[float, ...]` per example means 60000 x 784 =
     47 million individually boxed Python float objects. Decoding raw uint8 pixel bytes directly
     via np.frombuffer avoids that entirely - one array, not millions of objects.
@@ -176,7 +176,7 @@ def load_mnist_labels(path: str) -> list[int]:
     Reads only every record's label byte - no pixel decoding, no per-pixel float objects. Used
     to make class-balancing decisions (which examples to draw for which class) cheaply, without
     ever materializing the full dataset's pixel data as Python objects - see
-    load_mnist_records_at_indices, and docs/research-and-analysis.md's "parallelizing MNIST
+    load_mnist_records_at_indices, and docs/research/research-and-analysis.md's "parallelizing MNIST
     training" entry for why this matters: materializing all 60000 examples as decoded
     (tuple-of-784-floats, label) pairs, even just once in the main process, was measured to cost
     several GB once duplicated into a multiprocessing worker - not because of any particular
@@ -195,7 +195,7 @@ def load_mnist_records_at_indices(path: str, indices: list[int]) -> list[tuple[t
     file. This is what lets a multiprocessing worker build just its own small, class-balanced
     slice of the data without any process (main or worker) ever holding the full dataset
     decoded in memory at once - see load_mnist_labels and
-    docs/research-and-analysis.md's "parallelizing MNIST training" entry. Not necessarily called
+    docs/research/research-and-analysis.md's "parallelizing MNIST training" entry. Not necessarily called
     in index order - callers needing a specific order should sort/shuffle the result themselves.
     """
 

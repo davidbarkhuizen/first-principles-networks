@@ -13,7 +13,7 @@ from indrajala_ml.model.relu_array_layer import ReLUArrayLayer
 class ReLUVectorizedMultiClassBackpropClassifierNetwork:
     """
     A ReLU-hidden-layer sibling of VectorizedMultiClassBackpropClassifierNetwork - see
-    docs/relu-array-layer.md. Mirrors AdamVectorizedMultiClassBackpropClassifierNetwork's own
+    docs/design-docs/array-siblings/relu-array-layer.md. Mirrors AdamVectorizedMultiClassBackpropClassifierNetwork's own
     precedent for adding an array-based sibling: a wholly separate class duplicating the same
     external contract, not a subclass swapping a layer_cls extension point -
     VectorizedMultiClassBackpropClassifierNetwork.__init__ hardcodes ArrayLayer construction and

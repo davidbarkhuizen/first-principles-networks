@@ -25,7 +25,7 @@ def make_adam_node_cls(beta1: float, beta2: float, epsilon: float) -> type[Backp
     AdamBackpropClassifierNetwork, unlike momentum's own coefficient (which this codebase's
     measurements found no safe default for) - these are closer to fixed algorithmic constants in
     virtually all real-world Adam usage, not a knob this project has an opinion on. See
-    docs/adam-optimizer.md for the full design/measurement plan this implements.
+    docs/design-docs/adam/adam-optimizer.md for the full design/measurement plan this implements.
     """
 
     class AdamBackpropNode(BackpropNode):

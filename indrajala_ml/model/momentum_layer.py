@@ -15,7 +15,7 @@ def make_momentum_node_cls(momentum: float) -> type[BackpropNode]:
     A factory, not a fixed class, because momentum is a genuinely tunable coefficient - unlike
     every other node variant in this codebase (softmax, cross-entropy, ReLU), which differ by a
     fixed formula with no free parameter, there is no single momentum value this codebase's own
-    measurements support recommending as a default (see docs/research-and-analysis.md's
+    measurements support recommending as a default (see docs/research/research-and-analysis.md's
     "momentum" entry: the canonical α=0.9 robustly hurt across a learning-rate sweep, and no
     coefficient in 0.3-0.7 measurably beat no momentum at all, once enough seeds ruled out noise).
     """

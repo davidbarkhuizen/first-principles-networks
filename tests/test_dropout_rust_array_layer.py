@@ -39,7 +39,7 @@ def test_forward_and_hidden_delta_in_training_mode_are_internally_consistent_acr
 
     # a bit-identical mask draw against the numpy-backed sibling isn't achievable (this crate's
     # hand-rolled xorshift128+ generator can never reproduce numpy's Mersenne Twister stream, the
-    # same "the RNG exception" docs/rust-array-core.md already documents for uniform()) - so this
+    # same "the RNG exception" docs/architecture/rust-array-core.md already documents for uniform()) - so this
     # checks the fused op's own internal contract instead: every kept unit's activation equals
     # base/keep_probability exactly, every dropped unit's activation is exactly 0.0, and the
     # returned mask is what forward_batch actually used, not re-derived - across enough draws

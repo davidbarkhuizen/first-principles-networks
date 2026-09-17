@@ -13,7 +13,7 @@ class ConvMultiClassBackpropClassifierNetwork(MultiClassBackpropClassifierNetwor
     """
     A convolutional sibling of MultiClassBackpropClassifierNetwork - one ConvLayer (v1 scope:
     directly after the input, single input channel, 'valid' padding - see
-    docs/convolutional-layers.md's "scoping v1") feeding one or more ordinary dense hidden
+    docs/features/convolutional-layers.md's "scoping v1") feeding one or more ordinary dense hidden
     layers, then a plain one-vs-rest output layer, exactly like the dense-only base class.
 
     A new class, not a retrofit, for the same reason as every other sibling in this codebase
@@ -29,10 +29,10 @@ class ConvMultiClassBackpropClassifierNetwork(MultiClassBackpropClassifierNetwor
     _backward/classify_state/predict_probabilities, are inherited completely unchanged - none
     of them reach into layer internals directly, they go through the same per-layer hooks
     (accumulate_gradients/apply_accumulated_gradients/snapshot_state/restore_state) ConvLayer
-    itself implements (see docs/convolutional-layers.md's "the architectural point..." section).
+    itself implements (see docs/features/convolutional-layers.md's "the architectural point..." section).
 
     Every real use case here is a normalized-pixel image (UCI digits, MNIST - see
-    docs/convolutional-layers.md's "expected effect and validation targets"), so input_bounds
+    docs/features/convolutional-layers.md's "expected effect and validation targets"), so input_bounds
     is not a constructor parameter the way it is for the dense-only base class's more general
     geometric targets - it's fixed internally to [(0.0, 1.0)] * dimension, the same convention
     demo_mnist_ensemble_recognition.py's own MNIST training already uses.

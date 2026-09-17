@@ -45,7 +45,7 @@ def select_balanced_indices(
     decoding the examples themselves - only their labels. See
     train_ensemble_parallel_from_indices, which uses this to let each worker load just its own
     selected examples directly, without any process needing the full dataset decoded in memory
-    at once (measured directly to matter: see docs/research-and-analysis.md).
+    at once (measured directly to matter: see docs/research/research-and-analysis.md).
     """
 
     assert class_count >= 2, f"class_count must be at least 2; got {class_count}"
@@ -112,7 +112,7 @@ def _train_classifier_on_binary_dataset(
     subclass - e.g. FanInAwareBackpropClassifierNetwork, see train_ensemble_parallel_from_indices's
     own classifier_cls parameter) completely independently - no state is shared with any other
     worker, which is what makes this genuinely (not just approximately) parallelizable - see
-    docs/research-and-analysis.md's "parallelizing MNIST training" entry.
+    docs/research/research-and-analysis.md's "parallelizing MNIST training" entry.
 
     Explicitly seeds this process's own random state before building anything - confirmed
     directly this session that fork-based multiprocessing workers are not guaranteed to diverge
@@ -173,7 +173,7 @@ def _train_one_indexed_classifier(
     """
     The index-based counterpart to _train_one_classifier, for datasets too large to pass a
     fully-decoded binary_dataset through multiprocessing IPC without exhausting memory (measured
-    directly: see docs/research-and-analysis.md). Instead of receiving already-decoded examples,
+    directly: see docs/research/research-and-analysis.md). Instead of receiving already-decoded examples,
     this receives a path, a record_loader function (e.g.
     mnist_data.load_mnist_records_at_indices), and the (index, category) pairs
     select_balanced_indices already chose - and loads only its own examples, directly, itself.
@@ -320,13 +320,13 @@ def train_ensemble_parallel(
     """
     Trains one classifier_cls instance per class completely independently - dispatched across
     a multiprocessing.Pool, since nothing needs to be synchronized between them (unlike the
-    data-parallel weight-averaging approach rejected in docs/research-and-analysis.md, this has
+    data-parallel weight-averaging approach rejected in docs/research/research-and-analysis.md, this has
     no communication cost beyond the one-time dispatch and final collection).
 
     classifier_cls defaults to BackpropClassifierNetwork (every existing caller's behavior is
     unchanged) but accepts any subclass with a matching constructor/randomized() signature - e.g.
     FanInAwareBackpropClassifierNetwork, whose init scheme was measured directly to matter at
-    real MNIST scale (see docs/research-and-analysis.md's "ensemble/real-MNIST investigation"
+    real MNIST scale (see docs/research/research-and-analysis.md's "ensemble/real-MNIST investigation"
     entry) in a way BackpropClassifierNetwork's own default scheme, tuned for 1-2D geometric
     problems, does not.
 
@@ -340,7 +340,7 @@ def train_ensemble_parallel(
     that touches it, was measured directly to cost several GB (not because of any particular
     library - 47 million individual boxed Python float objects is simply a lot of memory,
     however they got there). See train_ensemble_parallel_from_indices for that case, and
-    docs/research-and-analysis.md's "parallelizing MNIST training" entry for the measurements.
+    docs/research/research-and-analysis.md's "parallelizing MNIST training" entry for the measurements.
 
     seed, when given, makes the whole run reproducible: it seeds a single random.Random used for
     every dataset's stratified sampling (in class order, so the sequence is deterministic) and
@@ -405,7 +405,7 @@ def train_ensemble_parallel_from_indices(
     Measured directly, on real MNIST data (a single class's ~11846-example balanced set, one
     worker): the naive fully-decoded-then-shipped-via-IPC approach train_ensemble_parallel uses
     peaked at ~2.25GB; this index-based approach peaked at ~374MB for the same work - see
-    docs/research-and-analysis.md's "parallelizing MNIST training" entry.
+    docs/research/research-and-analysis.md's "parallelizing MNIST training" entry.
 
     record_loader must be a plain, module-level function (not a closure or lambda) for
     multiprocessing picklability, same as every worker function in this module. classifier_cls -

@@ -11,7 +11,7 @@ class MomentumArrayLayer(ArrayLayer):
     from Rumelhart, Hinton & Williams (1986)'s own generalized delta rule -
     Δw(n) = η·δ·a + α·Δw(n-1) - but as whole-array numpy ops over the layer's (size, input_size)
     weight matrix and size-length bias vector, instead of a per-weight Python loop. See
-    docs/momentum-array-layer.md for the full design.
+    docs/design-docs/array-siblings/momentum-array-layer.md for the full design.
 
     One previous-delta array per parameter tensor, no bias correction, no second moment -
     simpler than AdamArrayLayer's own state, the same shape used here.
