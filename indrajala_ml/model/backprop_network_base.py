@@ -5,7 +5,7 @@ import random
 from typing import Any, Sequence
 
 from indrajala_ml.model.backprop_layer import BackpropLayer
-from indrajala_ml.model.bounds import validate_input_bounds
+from indrajala_ml.model.bounds import validate_batch, validate_input_bounds, validate_layer_sizes
 from indrajala_ml.model.state_layer import StateLayer
 
 
@@ -38,8 +38,7 @@ class BackpropNetworkBase:
         output_size: int,
     ) -> None:
 
-        assert len(layer_sizes) >= 1, "layer_sizes must specify at least one hidden layer"
-        assert all(size >= 1 for size in layer_sizes), f"every hidden layer must have at least 1 node; got {layer_sizes}"
+        validate_layer_sizes(layer_sizes)
 
         self.dimension = dimension
 
@@ -95,7 +94,7 @@ class BackpropNetworkBase:
         # MultiClassBackpropClassifierNetwork's own learn_batch() - identical shape, differing
         # only in what a "target" is (a float reference value vs. an int category), which
         # _forward/_backward already abstract over.
-        assert len(batch) >= 1, "batch must not be empty"
+        validate_batch(batch)
         self._set_training_mode(True)
         try:
             for state, target in batch:
