@@ -189,6 +189,7 @@ per-node measurement could afford.
 3. ✅ The wall-clock/overfitting-headroom measurement - see "measurement plan and result" above:
    53x-845x faster per example than the per-node path; the reconfirmed null holds at far higher
    power and at a deliberately more overfitting-prone scale.
-4. Docs closeout: `structure.md`'s possible-next-steps entry updated to reflect the actual result.
+4. ✅ Docs closeout: `structure.md`'s possible-next-steps entry updated to reflect the actual
+   result.
 5. ✅ `L2RustArrayLayer` + `L2RustArrayMultiClassBackpropClassifierNetwork` + the fused Rust op +
    parity-check tests at every tier - independent of stage 3's measurement.
