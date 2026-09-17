@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from indrajala_ml.model.backprop_layer import BackpropLayer
 from indrajala_ml.model.backprop_network_base import fan_in_aware_weights_and_bias
+from indrajala_ml.model.bounds import validate_class_count, validate_layer_sizes
 from indrajala_ml.model.conv_layer import ConvLayer
 from indrajala_ml.model.model_io import load_json, save_json
 from indrajala_ml.model.multiclass_backprop_classifier_network import MultiClassBackpropClassifierNetwork
@@ -48,11 +49,8 @@ class ConvMultiClassBackpropClassifierNetwork(MultiClassBackpropClassifierNetwor
         stride: int = 1,
     ) -> None:
 
-        assert class_count >= 2, f"class_count must be at least 2; got {class_count}"
-        assert len(dense_layer_sizes) >= 1, "dense_layer_sizes must specify at least one dense hidden layer"
-        assert all(size >= 1 for size in dense_layer_sizes), (
-            f"every dense hidden layer must have at least 1 node; got {dense_layer_sizes}"
-        )
+        validate_class_count(class_count)
+        validate_layer_sizes(dense_layer_sizes, label="dense_layer_sizes", noun="dense hidden layer")
 
         self.class_count = class_count
         self.dimension = input_height * input_width

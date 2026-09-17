@@ -4,6 +4,7 @@ from typing import Sequence
 
 import indrajala_ml_array as pa
 
+from indrajala_ml.model.bounds import validate_batch, validate_class_count, validate_layer_sizes
 from indrajala_ml.model.model_io import load_json, save_json
 from indrajala_ml.model.rust_array_layer import RustArrayLayer
 
@@ -26,9 +27,8 @@ class RustArrayMultiClassBackpropClassifierNetwork:
 
     def __init__(self, layer_sizes: list[int], dimension: int, class_count: int) -> None:
 
-        assert len(layer_sizes) >= 1, "layer_sizes must specify at least one hidden layer"
-        assert all(size >= 1 for size in layer_sizes), f"every hidden layer must have at least 1 node; got {layer_sizes}"
-        assert class_count >= 2, f"class_count must be at least 2; got {class_count}"
+        validate_layer_sizes(layer_sizes)
+        validate_class_count(class_count)
 
         self.layer_sizes = layer_sizes
         self.dimension = dimension
@@ -74,7 +74,7 @@ class RustArrayMultiClassBackpropClassifierNetwork:
             layer.apply_accumulated_gradient(learning_rate, batch_size=1)
 
     def learn_batch(self, learning_rate: float, batch: Sequence[tuple[tuple[float, ...], int]]) -> None:
-        assert len(batch) >= 1, "batch must not be empty"
+        validate_batch(batch)
         batch_size = len(batch)
 
         activations = [pa.Array([list(state) for state, _category in batch])]
