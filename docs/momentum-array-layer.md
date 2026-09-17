@@ -204,7 +204,8 @@ genuinely different (vectorized, matmul-based) execution path.
    parity-check tests above (numpy only).
 3. ✅ The wall-clock/accuracy measurement - see "measurement plan and result" above: 30x-717x
    faster per example than the per-node path; the reconfirmed null holds at 3x the seed count.
-4. Docs closeout: `structure.md`'s possible-next-steps entry updated to reflect the actual result.
+4. ✅ Docs closeout: `structure.md`'s possible-next-steps entry updated to reflect the actual
+   result - every stage of this workplan is now done.
 5. ✅ `MomentumRustArrayLayer` + `MomentumRustArrayMultiClassBackpropClassifierNetwork` + the fused
    Rust op + parity-check tests at every tier - independent of stage 3's measurement, the same way
    [an array-based Adam sibling](adam-array-layer.md#the-rust-matmul-backed-counterpart-stage-5)'s

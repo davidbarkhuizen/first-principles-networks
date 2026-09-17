@@ -740,10 +740,13 @@ concrete failure case motivates it yet.
   (no `l2_lambda` improves held-out accuracy above the unregularized baseline) at far higher
   power than the per-node path could afford, including a deliberately more overfitting-prone
   escalation built specifically to give L2 more room to help. [An array-based momentum
-  sibling](momentum-array-layer.md) and [an array-based ReLU sibling](relu-array-layer.md) are in
-  progress (their own numpy-only array ports built; the wall-clock/accuracy-at-scale measurement,
-  docs closeout, and Rust-matmul-backed counterparts remain). The rest are still proposed, not
-  started.
+  sibling](momentum-array-layer.md) is also done, every stage - 30x-717x faster per example, and
+  a reconfirmed null (momentum still doesn't help once the learning-rate confound is controlled
+  for, and `momentum=0.9` remains actively harmful) at 3x the original's seed count. [An
+  array-based ReLU sibling](relu-array-layer.md) is in progress (its own numpy-only array port
+  and the Rust core's `array_relu`/`array_relu_mask` primitives built; the accuracy-at-scale
+  measurement, docs closeout, and Rust-matmul-backed counterpart remain). The rest are still
+  proposed, not started.
 - **An array-based ensemble sibling** - `EnsembleBackpropClassifierNetwork` (this codebase's own
   best-performing, production-facing real-MNIST capability, 96.01% held-out accuracy) has no
   array-based or Rust-matmul-backed counterpart at all, unlike every other capability this
