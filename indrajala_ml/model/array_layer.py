@@ -17,6 +17,20 @@ def sigmoid(z: np.ndarray) -> np.ndarray:
         return 1.0 / (1.0 + np.exp(-z))
 
 
+def fan_in_aware_random_layer(size: int, previous_size: int) -> tuple[np.ndarray, np.ndarray]:
+    """
+    The fan-in-aware initialization draw (limit = 1/sqrt(fan_in)) shared by
+    VectorizedMultiClassBackpropClassifierNetwork.randomize and
+    ArrayBackpropClassifierNetwork.randomize - the array-level analogue of
+    randomize_fan_in_aware (backprop_network_base.py), extracted here so both callers draw from
+    one formula instead of two independent copies.
+    """
+    limit = 1.0 / np.sqrt(previous_size)
+    W = np.random.uniform(-limit, limit, size=(size, previous_size))
+    b = np.random.uniform(-limit, limit, size=(size,))
+    return W, b
+
+
 class ArrayLayer:
     """
     One backprop layer's weights/activations as whole arrays, not `size` separate BackpropNode
