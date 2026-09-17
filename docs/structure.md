@@ -686,8 +686,8 @@ ranked.
   here (running statistics, a train/eval-mode split - real complexity beyond the existing
   siblings' pattern). Not yet started.
 
-**RMSprop** (Adam minus its momentum-like first-moment term), that used to be listed here, is now
-closed - [Adam optimizer](adam-optimizer.md)'s stage 7: measured (no new code needed,
+**RMSprop** (Adam minus its momentum-like first-moment term) is closed -
+[Adam optimizer](adam-optimizer.md)'s stage 7: measured (no new code needed,
 `AdamBackpropClassifierNetwork(..., beta1=0.0)` already *is* RMSprop) against Adam and sigmoid on
 a fresh real-MNIST-proxy batch-size sweep. RMSprop tracked Adam within seed-to-seed noise at every
 batch size tested - the second-moment normalization alone accounts for Adam's batch-size-
@@ -696,7 +696,7 @@ capability; Adam remains the recommended choice. See [research and
 analysis](research-adam-optimizer.md#rmsprop-the-second-moment-term-alone-accounts-for-adams-batch-size-win-stage-7-of-the-adam-optimizer-workplan)
 for the full measurement.
 
-**A learning-rate schedule** (decay/warmup), that used to be listed here, is also now closed -
+**A learning-rate schedule** (decay/warmup) is closed -
 [a learning-rate schedule](learning-rate-schedule.md)'s all-five-stages workplan: `lr_schedule.
 linear_warmup`, wired into both training loops via a widened `learning_rate: float |
 Callable[[int], float]`, then retested against the documented `batch_size=128`/`lr=64.0`
@@ -778,10 +778,10 @@ concrete failure case motivates it yet.
   sibling](ensemble-array-layer.md) is the proposed, not-started workplan, including the real,
   specific `ensemble_train.py` integration gap it found by checking the code rather than assuming
   it would just work.
-The array-based (Rust-matmul-backed) Adam sibling that used to be listed here - both the
+The array-based (Rust-matmul-backed) Adam sibling - both the
 numpy-backed half (`AdamArrayLayer`/`AdamVectorizedMultiClassBackpropClassifierNetwork`) and the
 Rust-matmul-backed counterpart (`AdamRustArrayLayer`/`AdamRustArrayMultiClassBackpropClassifierNetwork`)
-- is now closed, all five stages done including the wall-clock/robustness measurement: both
+- is closed, all five stages done including the wall-clock/robustness measurement: both
 array-based backends measured 70x-794x faster per example than the per-node path (widening with
 batch size), and Adam's batch-size accuracy-robustness result confirmed to survive the array/Rust
 port unchanged. See [an array-based Adam sibling](adam-array-layer.md) for the full plan and
@@ -811,7 +811,7 @@ measured results.
   (methodology notes, reusable infrastructure, findings that don't belong to one sibling's own
   doc) is meant to accumulate going forward, once this audit actually happens.
 
-The three items that used to be here - matmul performance (see [research and
+Matmul performance (see [research and
 analysis](research-rust-performance.md#simd-for-the-matvec-production-path-a-bigger-win-than-the-batch32-work-it-followed)),
 CI (see [setup](setup.md#ci)), and Python packaging/pinning (see
-[setup](setup.md#dependencies)) - are all closed; follow those links for the detail.
+[setup](setup.md#dependencies)) are all closed; follow those links for the detail.
