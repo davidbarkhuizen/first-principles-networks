@@ -3,8 +3,8 @@
 [← back to README](../README.md)
 
 **Status: all five stages done.** Written up front as a design/workplan doc before any of it
-existed, per this repo's own practice (see [Adam optimizer](adam-optimizer.md), [an array-based
-Adam sibling](adam-array-layer.md) for precedent). `benchmark_data.build_mnist_digit_proxy` and
+existed, per this repo's own established practice of writing a plan down before implementation.
+`benchmark_data.build_mnist_digit_proxy` and
 `benchmark_sweep.run_parameter_sweep`/`estimate_sweep_wallclock`/`summarize_sweep_results` are
 built and tested against a toy worker function (see "delivery stages" below) - not yet exercised
 by a real sweep, which is deferred to whatever the next genuine measurement need turns out to be.
@@ -16,11 +16,9 @@ flagged an audit item: every real-scale measurement this codebase has run - Adam
 sweeps, the learning-rate-vs-batch-size follow-up, RMSprop's ablation, the warmup-step sweep, L2's
 and dropout's array-stage sweeps (see [research: Adam
 optimizer](research-adam-optimizer.md), [research: backprop
-siblings](research-backprop-siblings.md), [an array-based L2
-sibling](l2-array-layer.md#measurement-plan-and-result-stage-3), [an array-based dropout
-sibling](dropout-array-layer.md#measurement-plan-and-result-stage-3)) - hand-rolled its own
-uncommitted one-off script, per this codebase's own established practice. None of those scripts
-are in the repo; only the prose describing what each one did survives.
+siblings](research-backprop-siblings.md#an-array-based-l2-sibling-the-reconfirmed-null-holds-at-far-higher-power))
+- hand-rolled its own uncommitted one-off script, per this codebase's own established practice.
+None of those scripts are in the repo; only the prose describing what each one did survives.
 
 An audit of that prose (not the code, which doesn't exist to audit) found four pieces recurring
 nearly identically every time:
@@ -46,8 +44,10 @@ One concrete, already-diagnosed gap rides along: a long sweep launched via `run_
 redirected to a file, shows no interim progress at all until it exits or its stdout buffer fills
 - Python fully buffers stdout when it isn't a tty, so a per-config `print()` meant to show
 progress during a 20+ minute run silently queues instead of appearing. Found while running [an
-array-based dropout sibling](dropout-array-layer.md)'s own stage-3 sweep; worth fixing in the
-runner itself (`flush=True` on progress output) rather than rediscovering it on the next one.
+array-based dropout sibling's own stage-3
+sweep](research-backprop-siblings.md#an-array-based-dropout-sibling-another-reconfirmed-null-now-at-real-power);
+worth fixing in the runner itself (`flush=True` on progress output) rather than rediscovering it
+on the next one.
 
 **Constraint from [goals and strategy](goals-and-strategy.md#measurement-discipline-the-per-node-paths-two-jobs-and-the-one-it-doesnt-have)'s
 "measurement discipline" section**: going forward, wall-clock and accuracy-at-scale sweeps compare
@@ -121,16 +121,20 @@ strategy](goals-and-strategy.md#measurement-discipline-the-per-node-paths-two-jo
 own wall-clock/accuracy-sweep policy paragraph was genuinely general-purpose prose, unattached to
 any specific number, and has been moved into "methodology" above. Every actual wall-clock *table*
 in [research: Rust performance](research-rust-performance.md), [research: backprop
-siblings](research-backprop-siblings.md), and each array-layer sibling's own "measurement plan"
-section turned out **not** to be cleanly extractable the way the audit assumed: every one is
-interleaved with sentence-by-sentence interpretation of its own specific cell values (e.g.
-[momentum's array
-port](momentum-array-layer.md#measurement-plan-and-result-stage-3)'s "**Yes, decisively**: 30x-717x
-faster..." reads directly off the table two lines above it). Moving those tables out and leaving a
-pointer behind would orphan that interpretive prose from the numbers it describes - the opposite
-of [goals and strategy](goals-and-strategy.md#what-success-looks-like-here)'s own "a place someone
-could actually learn from" standard. **Decision: left in place**, deliberately, not by default -
-those tables stay where their own narrative already lives; this doc's own newly-added
+siblings](research-backprop-siblings.md), and (at the time of this note) each still-standing
+array-layer sibling workplan's own "measurement plan" section turned out **not** to be cleanly
+extractable the way the audit assumed: every one is interleaved with sentence-by-sentence
+interpretation of its own specific cell values (e.g. [momentum's array
+port](research-backprop-siblings.md#an-array-based-momentum-sibling-unchanged-on-stronger-evidence)'s
+"**Yes, decisively**: 30x-717x faster..." reads directly off the table two lines above it). Moving
+those tables out and leaving a pointer behind would orphan that interpretive prose from the
+numbers it describes - the opposite of [goals and
+strategy](goals-and-strategy.md#what-success-looks-like-here)'s own "a place someone could
+actually learn from" standard. **Decision: left in place**, deliberately, not by default - those
+tables stay where their own narrative already lives (the finished array-layer sibling workplans
+were later retired in full, moving their tables and interpretive prose together into [research
+and analysis](research-and-analysis.md) rather than leaving them behind - a full relocation, not
+the lossy extraction this note originally declined); this doc's own newly-added
 "methodology" section above is the one piece that genuinely generalized.
 
 Also not in scope: running a real sweep with the new infrastructure. The first

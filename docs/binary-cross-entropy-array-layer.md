@@ -4,8 +4,9 @@
 
 **Status: proposed, not started; depends on [an array-based ensemble
 sibling](ensemble-array-layer.md)'s own single-output array network.** Written up front as a
-design/measurement plan before any of it exists, per this repo's own practice (see [Adam
-optimizer](adam-optimizer.md), [an array-based Adam sibling](adam-array-layer.md) for precedent).
+design/measurement plan before any of it exists, per this repo's own established practice of
+writing a plan down before implementation, matching every other array-porting workplan in this
+codebase's history.
 
 ## why this, and why now
 
@@ -25,19 +26,21 @@ exactly what an array/Rust port removes.
 ## scope, and a real, specific blocking dependency found by checking, not assumed away
 
 `BinaryCrossEntropyBackpropClassifierNetwork` is single-output (`output_layer_cls` on
-`BackpropClassifierNetwork`) - the same single-output-line gap every sibling in this round
-inherits from [an array-based Adam sibling](adam-array-layer.md#risks-and-open-questions).
-Unlike momentum/L2/ReLU/dropout, though, this gap can't be worked around the way those did (by
-scoping onto the existing `class_count`-many-outputs multiclass array line instead): a genuine,
-literal parity check against `CrossEntropyOutputLayer`'s single-node behavior needs a
-size-1-output host, and `VectorizedMultiClassBackpropClassifierNetwork`'s own constructor calls
-`validate_class_count`, which asserts `class_count >= 2` - checked directly in `bounds.py`, not
-assumed - so `class_count=1` is not an option on the existing array line at all. A cross-entropy
-output *delta* formula (`a - target`) generalizes fine to any output size (it's exactly
-`SoftmaxOutputNode`'s own simplification, applied independently per node instead of jointly), so
-a `CrossEntropyArrayLayer(ArrayLayer)` overriding only `compute_output_delta`/
-`compute_output_delta_batch` the same way [momentum's](momentum-array-layer.md)/[L2's](l2-array-layer.md)
-own single-method overrides do is not the hard part - having a genuine single-output array
+`BackpropClassifierNetwork`) - the same single-output-line gap every array-ported sibling in this
+codebase's history has inherited (no array-based `MultiClassBackpropClassifierNetwork` counterpart
+supports `class_count=1`). Unlike momentum/L2/ReLU/dropout, though, this gap can't be worked
+around the way those did (by scoping onto the existing `class_count`-many-outputs multiclass array
+line instead): a genuine, literal parity check against `CrossEntropyOutputLayer`'s single-node
+behavior needs a size-1-output host, and `VectorizedMultiClassBackpropClassifierNetwork`'s own
+constructor calls `validate_class_count`, which asserts `class_count >= 2` - checked directly in
+`bounds.py`, not assumed - so `class_count=1` is not an option on the existing array line at all. A
+cross-entropy output *delta* formula (`a - target`) generalizes fine to any output size (it's
+exactly `SoftmaxOutputNode`'s own simplification, applied independently per node instead of
+jointly), so a `CrossEntropyArrayLayer(ArrayLayer)` overriding only `compute_output_delta`/
+`compute_output_delta_batch` the same way momentum's/L2's own single-method overrides do (see
+[research and
+analysis](research-backprop-siblings.md#an-array-based-momentum-sibling-unchanged-on-stronger-evidence))
+is not the hard part - having a genuine single-output array
 network to attach it to, and compare against `BinaryCrossEntropyBackpropClassifierNetwork`
 itself, is. This workplan therefore depends on [an array-based ensemble
 sibling](ensemble-array-layer.md)'s own proposed single-output array network
@@ -88,8 +91,8 @@ formula):
   `matching_adam_array_backprop_networks` established.
 - The multiclass-line variant (see "design" above) gets its own
   `test_cross_entropy_vectorized_multiclass_backprop_model.py`, parity-checked against a test-only
-  per-node reference the same way [momentum's](momentum-array-layer.md#correctness-validation)/
-  [L2's](l2-array-layer.md#correctness-validation) workplans propose for theirs.
+  per-node reference, the same two-tier convention every array-ported sibling in this codebase
+  uses.
 
 ## measurement plan
 

@@ -76,8 +76,7 @@ bundled (`data/digits/digits.csv`) or synthetic data and needs nothing external.
 command above) ensures `data/mnist/mnist-train.parquet`/`mnist-test.parquet` are present and
 SHA-256-verified, fetching from the pinned
 [`indrajala-datasets-mnist`](https://github.com/davidbarkhuizen/indrajala-datasets-mnist)`@v2026-09-16`
-tag only when a file is missing or doesn't match - see [the dataset sourcing
-proposal](dataset-sourcing-proposal.md) for the full design and rationale. It then regenerates
+tag only when a file is missing or doesn't match. It then regenerates
 `mnist-train.bin`/`mnist-test.bin` from the parquet (via `mnist_data.convert_parquet_to_binary`) if
 those are missing too. Both checks are presence-first: a repeated `. cli setup`/`. cli fetch-data`
 against an already-populated checkout makes no network calls and does no reconversion.

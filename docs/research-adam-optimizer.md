@@ -2,21 +2,27 @@
 
 [← back to research and analysis](research-and-analysis.md)
 
-The measurement results for [the Adam optimizer workplan](adam-optimizer.md) - see [research and
-analysis](research-and-analysis.md) for what this collection of docs is for.
+The measurement results for `AdamBackpropClassifierNetwork` (see [structure](structure.md#backprop-siblings)
+for its design) - see [research and analysis](research-and-analysis.md) for what this collection
+of docs is for. Adam (Kingma & Ba, 2014) was worth measuring independently rather than assumed to
+fare like momentum: a per-parameter *adaptive* learning rate, driven by running estimates of each
+weight's own gradient mean and variance, rather than a single global velocity term - specifically
+designed to normalize away the kind of gradient-scale variation this codebase's own measurements
+kept surfacing.
 
 ## Adam: tuned-XOR measurement (stage 3 of the Adam optimizer workplan)
 
-[`AdamBackpropClassifierNetwork`](adam-optimizer.md) (stage 2, correctness-validated only) measured
-for the first time against a real training run: the same pinned XOR scenario
-`test_backprop_training_pipeline.py` uses (`BackpropClassifierNetwork([8], 2,
-square_bounds(10.0))`, 300 examples, 100 epochs), 10 (data-generation seed, weight-init seed) pairs,
-`beta1`/`beta2`/`epsilon` at their Kingma & Ba defaults. Note: `docs/adam-optimizer.md`'s original
-"same scenario momentum's own baseline used" framing for this stage doesn't hold up - momentum's
-own baseline was actually measured on the 320-example real-MNIST proxy, not XOR (see ["momentum:
-measured, not worth adopting"](research-backprop-siblings.md#momentum-measured-not-worth-adopting));
-this stage instead reuses the pinned XOR scenario the binary-cross-entropy and ReLU investigations
-used, which is what `test_backprop_training_pipeline.py` actually pins.
+`AdamBackpropClassifierNetwork` (correctness-validated via a hand-derived regression fixture,
+`beta1`/`beta2`/`epsilon` defaulted to Kingma & Ba's own published values - closer to fixed
+algorithmic constants in real-world use than a knob this codebase's own measurements have an
+opinion on, unlike momentum's coefficient) measured for the first time against a real training
+run: the same pinned XOR scenario `test_backprop_training_pipeline.py` uses
+(`BackpropClassifierNetwork([8], 2, square_bounds(10.0))`, 300 examples, 100 epochs), 10
+(data-generation seed, weight-init seed) pairs. Note: momentum's own baseline for this comparison
+was actually measured on the 320-example real-MNIST proxy, not XOR (see ["momentum: measured, not
+worth adopting"](research-backprop-siblings.md#momentum-measured-not-worth-adopting)); this stage
+instead reuses the pinned XOR scenario the binary-cross-entropy and ReLU investigations used, which
+is what `test_backprop_training_pipeline.py` actually pins.
 
 ### the demo-tuned rate: Adam collapses badly
 
@@ -139,17 +145,16 @@ Adam's numbers are a materially bigger, cleaner result than stage 3's modest XOR
 prescription from SGD/momentum's linear scaling rule - and, at this proxy's scale, that fixed rate
 gives Adam a real, substantial robustness advantage over sigmoid at every batch size tested, most
 dramatically at `batch_size=128` where sigmoid's training destabilizes regardless of which
-learning-rate regime is used. This is the clearest positive result the Adam workplan has produced
-so far, and directly validates the "worth its own measurement" rationale in
-[Adam optimizer](adam-optimizer.md)'s opening motivation: unlike momentum, Adam's per-parameter
-adaptive scaling genuinely does something SGD-with-momentum's single shared velocity term
-couldn't, once gradients come from batches rather than single examples.
+learning-rate regime is used. This is the clearest positive result the Adam investigation has
+produced so far, and directly validates the "worth its own measurement" rationale opening this
+document: unlike momentum, Adam's per-parameter adaptive scaling genuinely does something
+SGD-with-momentum's single shared velocity term couldn't, once gradients come from batches rather
+than single examples.
 
 ## Adam at real-MNIST-ensemble scale: the proxy result holds (stage 5 of the Adam optimizer workplan)
 
-Stage 4's proxy-scale result was strong enough to justify the ~30-minute-per-config real-scale
-run it was gated on (see the delivery-stages decision in [Adam
-optimizer](adam-optimizer.md#delivery-stages-each-its-own-pr-per-this-repos-practice)). Real full
+Stage 4's proxy-scale result was strong enough to justify the ~30-minute-per-config real-scale run
+it was gated on. Real full
 60000/10000 MNIST, via the same `EnsembleBackpropClassifierNetwork` architecture (10 independent
 `[16]`-hidden binary sub-networks, one per digit) `demo_mnist_ensemble_recognition.py` uses in
 production, fan-in-aware init, 5 epochs, `batch_size=128` - the batch size stage 4's proxy result
@@ -162,9 +167,8 @@ investigation](research-multiclass-and-loss.md#the-ensemblereal-mnist-investigat
 `ensemble_train.py`'s own parallel-training path doesn't wire `batch_size` through its worker
 functions (only `train_linear_classifier_network`'s per-example path) - measuring this needed a
 small hand-rolled script mirroring `train_ensemble_parallel_from_indices`'s job/worker structure
-but calling `train_backprop_network_mini_batch` instead, the "hand-rolled ad hoc parallel-training
-script" alternative [Adam optimizer](adam-optimizer.md)'s own scope section named up front, rather
-than extending the production module for a one-off measurement.
+but calling `train_backprop_network_mini_batch` instead - a hand-rolled ad hoc parallel-training
+script rather than extending the production module for a one-off measurement.
 
 | config | test accuracy | wall-clock |
 |---|---|---|
@@ -195,11 +199,10 @@ what says that combination wouldn't cost the accuracy tax sigmoid pays for it.
 ## RMSprop: the second-moment term alone accounts for Adam's batch-size win (stage 7 of the Adam optimizer workplan)
 
 Stage 4's win (a fixed `learning_rate` barely degrading Adam across `batch_size`, where sigmoid
-collapses) triggered this workplan's own flagged condition for the RMSprop ablation
-(`AdamBackpropClassifierNetwork(..., beta1=0.0)` - see [Adam optimizer](adam-optimizer.md#delivery-stages-each-its-own-pr-per-this-repos-practice)'s
-stage 7): no new code needed, a pure measurement stage isolating whether the win comes from
-Adam's per-parameter second-moment normalization alone or needs its first-moment (momentum-like)
-smoothing too.
+collapses) triggered the flagged condition for an RMSprop ablation
+(`AdamBackpropClassifierNetwork(..., beta1=0.0)`): no new code needed, a pure measurement stage
+isolating whether the win comes from Adam's per-parameter second-moment normalization alone or
+needs its first-moment (momentum-like) smoothing too.
 
 Repeats stage 4's real-MNIST-proxy batch-size sweep methodology exactly (fan-in-aware init, `[16]`
 hidden, 5 epochs, `batch_size` in 1/8/32/128, 10 seeds each, fixed `learning_rate`, fork-based
@@ -246,3 +249,52 @@ robustness edge over Adam itself that would justify promoting it to a named, sep
 option. Adam stays the recommended choice for batch-size robustness; RMSprop remains available as
 a zero-code special case (`beta1=0.0`) for anyone who wants to isolate the second-moment term
 specifically, not as a distinct sibling this codebase steers users toward.
+
+## an array-based (Rust-matmul-backed) Adam sibling: the wall-clock win the accuracy result was missing
+
+Stage 5's real-MNIST-ensemble result (above) found Adam's batch-size robustness held at production
+scale but wasn't yet a wall-clock win on its own - mini-batching alone only changes *when* the
+weight write happens, not whether forward/backward gets vectorized across the batch.
+`AdamArrayLayer`/`AdamVectorizedMultiClassBackpropClassifierNetwork` (numpy) and
+`AdamRustArrayLayer`/`AdamRustArrayMultiClassBackpropClassifierNetwork` (Rust-matmul-backed) close
+that gap - the same algorithm, proven correct above, ported to a genuinely vectorized substrate.
+
+**Part A - wall-clock**, one mini-batch training step (`dimension=784, hidden=10`, three backends,
+median of 20-50 timed reps):
+
+| batch size | per-node (us/example) | numpy (us/example) | Rust (us/example) | per-node/numpy | per-node/Rust | Rust/numpy |
+|---|---|---|---|---|---|---|
+| 1 | 8542.49 | 121.91 | 84.09 | 70.1x | 101.6x | 0.69x - Rust faster |
+| 8 | 3693.14 | 16.62 | 16.61 | 222.2x | 222.3x | 1.00x - parity |
+| 32 | 2800.73 | 5.63 | 9.99 | 497.5x | 280.4x | 1.78x slower |
+| 128 | 2713.91 | 3.94 | 8.08 | 688.8x | 335.9x | 2.05x slower |
+| 512 | 2715.24 | 3.42 | 12.05 | 793.9x | 225.3x | 3.52x slower |
+
+**Both array-based backends are 70x-794x faster per example than the per-node path, widening with
+batch size** - mini-batching's accuracy robustness now comes with a wall-clock win too, once matmul
+is real. The Rust/numpy split above (parity at `batch_size<=8`, numpy pulling ahead from
+`batch_size=32` up) isn't Adam-specific: a same-run plain-SGD control showed an equally wide or
+wider gap - [the already-documented naive-matmul-vs-BLAS
+gap](research-rust-performance.md#the-rust-array-cores-65-335x-slower-than-numpy-finding-was-a-debug-build-artifact)
+reappearing here, not something this fused op introduced, and adoption of the Rust backend was
+already unconditional on that gap regardless.
+
+**Part B - does the batch-size-robustness result survive the array/Rust port?**
+(`AdamRustArrayMultiClassBackpropClassifierNetwork`, `[16]` hidden, fixed `learning_rate=0.01`, 10
+seeds, 5 epochs, the same proxy construction/scale stage 4 used):
+
+| batch_size | accuracy |
+|---|---|
+| 1 | 86.62% ± 1.87% |
+| 8 | 85.88% ± 2.05% |
+| 32 | 88.50% ± 1.29% |
+| 128 | 87.38% ± 0.40% |
+
+**Yes** - no collapse, no meaningful trend across two orders of magnitude of `batch_size`, stdev
+staying low throughout (0.40%-2.05%) rather than exploding the way sigmoid's did. Not
+bit-comparable to stage 4's own per-node numbers (a different network, different RNG stream - see
+[the Rust core](rust-array-core.md#the-rng-exception)) but the same qualitative flat-across-batch
+shape, confirming the algorithmic property survived the architectural port.
+
+**Decision: adopted.** Both array-based Adam backends are real, measured wins over the per-node
+path, and Adam's own batch-size-robustness result is confirmed to survive the port unchanged.

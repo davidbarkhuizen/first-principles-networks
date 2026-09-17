@@ -19,6 +19,7 @@ classifiers vs. a shared hidden layer) and which loss function each uses.
 - [binary cross-entropy for BackpropClassifierNetwork](research-multiclass-and-loss.md#binary-cross-entropy-for-backpropclassifiernetwork)
 - [the ensemble/real-MNIST investigation](research-multiclass-and-loss.md#the-ensemblereal-mnist-investigation)
 - [softmax on real full-scale MNIST](research-multiclass-and-loss.md#softmax-on-real-full-scale-mnist)
+- [an array-based softmax sibling](research-multiclass-and-loss.md#an-array-based-softmax-sibling-the-retune-the-per-node-investigation-declined-to-spend-on)
 
 ## [backprop sibling measurements](research-backprop-siblings.md)
 
@@ -34,6 +35,10 @@ layers.
 - [the learning-rate-vs-batch-size follow-up](research-backprop-siblings.md#the-learning-rate-vs-batch-size-follow-up-the-confound-was-real-and-momentum-still-doesnt-help)
 - [the batch_size=128 divergence, retested with warmup](research-backprop-siblings.md#the-batch_size128-divergence-retested-with-warmup)
 - [convolutional layers on UCI digits](research-backprop-siblings.md#convolutional-layers-on-uci-digits)
+- [an array-based L2 sibling](research-backprop-siblings.md#an-array-based-l2-sibling-the-reconfirmed-null-holds-at-far-higher-power)
+- [an array-based momentum sibling](research-backprop-siblings.md#an-array-based-momentum-sibling-unchanged-on-stronger-evidence)
+- [an array-based ReLU sibling](research-backprop-siblings.md#an-array-based-relu-sibling-a-genuine-scale-dependent-finding)
+- [an array-based dropout sibling](research-backprop-siblings.md#an-array-based-dropout-sibling-another-reconfirmed-null-now-at-real-power)
 
 ## [Rust core performance](research-rust-performance.md)
 
@@ -52,9 +57,11 @@ closing sequence (blocking, threading, SIMD).
 
 ## [Adam optimizer](research-adam-optimizer.md)
 
-The measurement results for [the Adam optimizer workplan](adam-optimizer.md).
+The measurement results for `AdamBackpropClassifierNetwork` (see
+[structure](structure.md#backprop-siblings) for its design).
 
 - [Adam: tuned-XOR measurement (stage 3)](research-adam-optimizer.md#adam-tuned-xor-measurement-stage-3-of-the-adam-optimizer-workplan)
 - [Adam under batch size: a much bigger, cleaner win (stage 4)](research-adam-optimizer.md#adam-under-batch-size-a-much-bigger-cleaner-win-stage-4-of-the-adam-optimizer-workplan)
 - [Adam at real-MNIST-ensemble scale: the proxy result holds (stage 5)](research-adam-optimizer.md#adam-at-real-mnist-ensemble-scale-the-proxy-result-holds-stage-5-of-the-adam-optimizer-workplan)
 - [RMSprop: the second-moment term alone accounts for Adam's batch-size win (stage 7)](research-adam-optimizer.md#rmsprop-the-second-moment-term-alone-accounts-for-adams-batch-size-win-stage-7-of-the-adam-optimizer-workplan)
+- [an array-based Adam sibling](research-adam-optimizer.md#an-array-based-rust-matmul-backed-adam-sibling-the-wall-clock-win-the-accuracy-result-was-missing)

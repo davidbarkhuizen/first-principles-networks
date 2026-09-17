@@ -200,3 +200,56 @@ tradeoff the binary cross-entropy investigation already declined to spend on) - 
 adequately answered. `MultiClassBackpropClassifierNetwork` remains the better full-scale
 one-network option at today's tuning; the ensemble remains the best of all three by a wide
 margin.
+
+## an array-based softmax sibling: the retune the per-node investigation declined to spend on
+
+The per-node softmax investigation above explicitly declined to retune `learning_rate` for softmax
+at real-MNIST scale, citing the cost of a ~30+-minute training run. `SoftmaxArrayLayer`/
+`SoftmaxVectorizedMultiClassBackpropClassifierNetwork` (numpy) and `SoftmaxRustArrayLayer`/
+`SoftmaxRustArrayMultiClassBackpropClassifierNetwork` (Rust-matmul-backed, output-layer-only - the
+Rust core's operation set needed a new row-wise max/sum-and-normalize primitive, `array_softmax`)
+remove that excuse: a sweep that was too expensive to run once becomes cheap to run many times.
+
+**Part A - wall-clock**, one mini-batch training step (output-layer shape `dimension=784,
+class_count=10`, per-node vs. numpy, median of 30 timed reps):
+
+| batch size | per-node (us/example) | numpy (us/example) | per-node/numpy |
+|---|---|---|---|
+| 1 | 4127.89 | 54.89 | 75.2x |
+| 8 | 2864.95 | 8.13 | 352.4x |
+| 32 | 2663.63 | 4.27 | 623.7x |
+| 128 | 2642.41 | 2.42 | 1089.7x |
+| 512 | 2634.65 | 3.06 | 862.1x |
+
+**75.2x-1089.7x faster per example than the per-node path.**
+
+**Part B - reproduce both existing results at array speed, then spend the now-cheap retune.** UCI
+digits (`[32]` hidden, `learning_rate=0.5`, 30 epochs) reproduces the per-node win:
+
+| | training accuracy | held-out test accuracy |
+|---|---|---|
+| one-vs-rest (numpy) | 99.58% | 96.66% |
+| softmax (numpy) | **100.00%** | **98.33%** |
+
+Real MNIST at the same untuned rate reproduces the per-node loss too (89.77%/90.16% vs.
+one-vs-rest's 93.71%/93.01%), confirming it isn't a per-node-path artifact before spending the
+retune. Sweeping `learning_rate` down for softmax alone finds a real peak around 0.01-0.05, not a
+monotonic trend run off the sweep's edge; confirmed at 5 seeds against the untuned baseline's own
+tuned rate:
+
+| | seed accuracies | mean | stdev |
+|---|---|---|---|
+| one-vs-rest @ 0.5 | 93.01%, 93.02%, 92.40%, 93.25%, 92.55% | 92.85% | 0.36% |
+| softmax @ 0.01 (retuned) | 94.17%, 94.10%, 93.67%, 93.70%, 93.61% | **93.85%** | 0.26% |
+
+**A real, decisive win at real-MNIST scale** - softmax's retuned margin (+1.00 point) exceeds
+either side's own seed-to-seed stdev, and every one of softmax's 5 seeds beats every one of the
+baseline's 5 seeds (non-overlapping ranges). This reverses the untuned per-node investigation's
+"remains the better full-scale one-network option" conclusion - scoped, as that entry always was,
+to *untuned* softmax at the quadratic-tuned rate, not softmax generally. The ensemble (96.01%)
+remains the best of all three real-MNIST options by a wide margin; this result is about the
+single-network comparison specifically.
+
+**Decision: adopted.** Softmax needs its own tuned learning rate at real-MNIST scale, never a
+drop-in replacement for one-vs-rest at existing hyperparameters - but once retuned, it's a genuine,
+decisive win at both scales checked.

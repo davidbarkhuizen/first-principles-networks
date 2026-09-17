@@ -3,8 +3,8 @@
 [← back to README](../README.md)
 
 **Status: proposed, not started.** Written up front as a design/measurement plan before any of
-it exists, per this repo's own practice (see [Adam optimizer](adam-optimizer.md), [an array-based
-Adam sibling](adam-array-layer.md) for precedent).
+it exists, per this repo's own established practice of writing a plan down before implementation,
+matching every other array-porting workplan in this codebase's history.
 
 ## why this, and why now
 
@@ -29,12 +29,12 @@ activation variant layered onto an already-array-based network; this is the firs
 ## scope: two real, separately-buildable pieces
 
 **Piece 1 - a single-output array-based network, which doesn't exist yet at all.** Every prior
-sibling in this round of workplans ([momentum](momentum-array-layer.md),
-[L2](l2-array-layer.md), [ReLU](relu-array-layer.md), [dropout](dropout-array-layer.md)) had to
-scope itself onto `MultiClassBackpropClassifierNetwork`'s existing array line because no
-single-output (`BackpropClassifierNetwork`-equivalent) array-based line exists - a gap [an
-array-based Adam sibling](adam-array-layer.md#risks-and-open-questions) already flagged and left
-unresolved. The ensemble is exactly the case that gap blocks directly: each ensemble
+array-ported sibling in this codebase's history (momentum, L2, ReLU, dropout - see [research and
+analysis](research-backprop-siblings.md)) had to scope itself onto
+`MultiClassBackpropClassifierNetwork`'s existing array line because no single-output
+(`BackpropClassifierNetwork`-equivalent) array-based line exists - a gap the array-based Adam
+sibling first flagged and left unresolved. The ensemble is exactly the case that gap blocks
+directly: each ensemble
 sub-network *is* a `BackpropClassifierNetwork` (via its `FanInAwareBackpropClassifierNetwork`
 sibling), not a multiclass network. This workplan is where building that single-output array
 network finally becomes necessary, not optional - see "design" below.
