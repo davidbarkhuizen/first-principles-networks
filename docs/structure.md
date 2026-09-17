@@ -146,9 +146,10 @@ indrajala_ml/
                                    area-weighted resampling -> center-of-mass placement into 28x28
                                    - see resize_area_weighted, scale_to_fit, center_of_mass,
                                    place_centered, preprocess_capture), plus a brush-stroke helper
-                                   for the 64x64 capture grid (independent of, not shared with,
-                                   digit_capture.py's - the two pipelines' grid sizes and
-                                   downstream processing differ enough to not be worth unifying)
+                                   for the 64x64 capture grid (the stamping itself is shared with
+                                   digit_capture.py's via capture_common.stamp_brush - only the
+                                   grid-size-specific validation differs, see capture_common.py's
+                                   own entry above)
   demos/
     menu.py                                      the . cli demo entrypoint: a text REPL that lists every demo
                                                  (from registry.py), lets you pick one by number, prints its
