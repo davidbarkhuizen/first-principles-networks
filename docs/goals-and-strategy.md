@@ -56,27 +56,9 @@ cases where relevant). Both jobs stay exactly as they are - this is not a propos
 per-node implementation or weaken parity checking.
 
 What the per-node path is *not* is a performance baseline worth re-measuring fresh for every new
-sibling. [Vectorization](vectorization.md)'s and [the Rust production cutover](rust-production-cutover.md)'s
-own numbers already established the order of magnitude once (per-node consistently 30-1000x+
-slower than numpy/Rust), and every array-based sibling measured since (Adam, L2, momentum, ReLU,
-softmax - see [structure](structure.md#possible-next-steps)) reconfirmed the same finding
-independently, never once contradicting it. Re-timing a fresh per-node benchmark for each new
-sibling spends real wall-clock (minutes per run) reconfirming something already known several
-times over, not learning something new - the opposite of this project's own "does it deepen
-understanding" test above.
-
-Going forward: a new sibling's wall-clock benchmarking compares **numpy against Rust directly**
-(the genuinely open question at this point in the codebase's history - closing or widening a
-specific gap, not re-establishing that per-node is slow) - once both exist; if only the numpy
-stage exists yet, benchmark numpy alone rather than pairing it against a fresh per-node timing
-run. Where a per-node figure is useful for context, cite an already-documented one (this
-project's own research-and-analysis trail almost always already has one for the relevant
-architecture/shape) rather than re-running it. Accuracy-at-scale measurement (learning-rate
-sweeps, seed-count studies, retuning) follows the same rule for the same reason: run those against
-the numpy/Rust backends, which make a real sweep affordable in the first place - that affordability
-is the entire reason this codebase's array-porting effort exists - and reproduce an *existing*
-per-node accuracy result by citing it, not by re-training the per-node network fresh to get a
-number this codebase already has.
+sibling - the concrete wall-clock/accuracy-at-scale measurement policy this drives has moved to
+[benchmarking](benchmarking.md#methodology), since it's the operational policy the benchmarking
+infrastructure exists to implement, not a strategy statement in its own right.
 
 ## strategy: what gets prioritized
 
