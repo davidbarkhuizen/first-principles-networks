@@ -121,9 +121,14 @@ class RustArrayBackpropClassifierNetwork:
         return [(layer.W.copy(), layer.b.copy()) for layer in self.layers]
 
     def restore(self, snapshot: list[tuple["pa.Array", "pa.Array"]]) -> None:
+        # tolerates plain nested lists as well as pa.Array (wrapping via pa.Array(...) when
+        # needed), the same pattern load() already uses - lets a snapshot cross a
+        # multiprocessing.Pool worker boundary as plain, picklable lists (see
+        # ensemble_train._picklable_snapshot) and land here without a separate reconstruction
+        # step at every call site.
         for layer, (W, b) in zip(self.layers, snapshot):
-            layer.W = W.copy()
-            layer.b = b.copy()
+            layer.W = W.copy() if isinstance(W, pa.Array) else pa.Array(W)
+            layer.b = b.copy() if isinstance(b, pa.Array) else pa.Array(b)
 
     def save(self, path: str) -> None:
         save_single_output_array_model_json(
