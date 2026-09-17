@@ -116,14 +116,112 @@ Fully deterministic given the same starting weights (no RNG in softmax's own mat
   [ReLU's own retune](research-backprop-siblings.md#relu-hidden-layer-activation-a-clean-win-once-retuned)
   already used at smaller scale. This directly closes the flagged, previously-too-expensive gap.
 
+## measurement plan and result (stage 4)
+
+**Part A - wall-clock, one mini-batch training step** (`forward`/`forward_batch` +
+`compute_output_delta`/`compute_output_delta_batch` + `accumulate_gradient`/
+`accumulate_gradient_batch` + `apply_accumulated_gradient`, output-layer shape `dimension=784,
+class_count=10`, per-node (`SoftmaxOutputLayer`) vs numpy (`SoftmaxArrayLayer`) - no Rust
+`SoftmaxRustArrayLayer` yet at measurement time, that's stage 6, independent of this measurement),
+median of 30 timed reps:
+
+| batch size | per-node (us/example) | numpy (us/example) | per-node/numpy |
+|---|---|---|---|
+| 1 | 4127.89 | 54.89 | 75.2x |
+| 8 | 2864.95 | 8.13 | 352.4x |
+| 32 | 2663.63 | 4.27 | 623.7x |
+| 128 | 2642.41 | 2.42 | 1089.7x |
+| 512 | 2634.65 | 3.06 | 862.1x |
+
+**Yes, decisively**: 75.2x-1089.7x faster per example than the per-node path - matches, and at
+several batch sizes exceeds, every other sibling in this round.
+
+**Part B - does the array/Rust-speed port reproduce both existing results honestly, and does the
+now-cheap retune close the previously-too-expensive gap?** Both real datasets, via
+`SoftmaxVectorizedMultiClassBackpropClassifierNetwork` vs the one-vs-rest baseline
+(`VectorizedMultiClassBackpropClassifierNetwork`), same architecture/hyperparameters as each
+original per-node measurement:
+
+**UCI digits** (`[32]` hidden, `learning_rate=0.5`, 30 epochs, single seed, the same architecture
+[softmax/cross-entropy re-alignment](research-multiclass-and-loss.md#softmaxcross-entropy-re-alignment)
+used):
+
+| | training accuracy | held-out test accuracy |
+|---|---|---|
+| one-vs-rest (numpy) | 99.58% | 96.66% |
+| softmax (numpy) | **100.00%** | **98.33%** |
+
+**The UCI-digits win reproduces at array speed** - softmax again reaches full training accuracy
+and generalizes better, the same qualitative shape the per-node measurement found (99.51%/95.54%
+vs. 100.00%/96.94%), not bit-identical (different RNG stream for `randomize()`, the same
+[RNG-exception](rust-array-core.md#the-rng-exception) caveat every array port carries) but the
+same direction and margin.
+
+**Real MNIST, untuned** (`[16]` hidden, `learning_rate=0.5`, 5 epochs, full 60000/10000, single
+seed, the identical setup [softmax on real full-scale
+MNIST](research-multiclass-and-loss.md#softmax-on-real-full-scale-mnist) used):
+
+| | training accuracy | held-out test accuracy |
+|---|---|---|
+| one-vs-rest (numpy) | 93.71% | 93.01% |
+| softmax @ 0.5, untuned (numpy) | 89.77% | 90.16% |
+
+**The real-MNIST loss reproduces too, at the same untuned rate** - confirming this isn't a
+per-node-path artifact, before spending the now-cheap retune below.
+
+**The retune, run for the first time**: sweeping `learning_rate` down for softmax alone (single
+seed, 5 epochs each):
+
+| learning_rate | training accuracy | test accuracy |
+|---|---|---|
+| 0.5 (untuned) | 89.77% | 90.16% |
+| 0.25 | 90.82% | 90.76% |
+| 0.1 | 93.16% | 92.44% |
+| 0.05 | 94.69% | 93.90% |
+| 0.025 | 94.73% | 93.95% |
+| 0.01 | 94.81% | **94.17%** |
+| 0.005 | 94.19% | 93.88% |
+| 0.0025 | 93.12% | 93.11% |
+| 0.001 | 91.23% | 91.34% |
+| 0.0005 | 88.92% | 89.16% |
+
+A real peak, not a monotonic trend run off the edge of the sweep: accuracy rises from 0.5 down to
+a plateau around 0.01-0.05, then falls again below 0.0025 - `learning_rate=0.01` is the best point
+found.
+
+**Confirmed at 5 seeds**, `learning_rate=0.01` against the untuned-baseline's own tuned rate
+(`0.5`), same architecture:
+
+| | seed accuracies | mean | stdev |
+|---|---|---|---|
+| one-vs-rest @ 0.5 | 93.01%, 93.02%, 92.40%, 93.25%, 92.55% | 92.85% | 0.36% |
+| softmax @ 0.01 (retuned) | 94.17%, 94.10%, 93.67%, 93.70%, 93.61% | **93.85%** | 0.26% |
+
+**A real, decisive win at real-MNIST scale, not just a tie or a modest signal** - softmax's
+retuned margin over the baseline (+1.00 point) is larger than either side's own seed-to-seed
+stdev, and every one of softmax's 5 seeds (93.61%-94.17%) beats every one of the baseline's 5
+seeds (92.40%-93.25%) - non-overlapping ranges, not just a favorable mean. This closes the gap
+[softmax on real full-scale MNIST](research-multiclass-and-loss.md#softmax-on-real-full-scale-mnist)
+explicitly declined to spend on: retuned, softmax is the better full-scale one-network option,
+reversing that entry's "`MultiClassBackpropClassifierNetwork` remains the better full-scale
+one-network option at today's tuning" conclusion, which was scoped to *untuned* softmax at the
+quadratic-tuned rate, not softmax generally.
+
+**Decision: adopted.** Softmax needs its own tuned learning rate at real-MNIST scale (never a
+drop-in replacement for one-vs-rest at existing hyperparameters, the same caveat binary
+cross-entropy and ReLU each carry) - but once retuned, it's a genuine, decisive win at both scales
+checked (UCI digits and real MNIST), not the scale-dependent split ReLU's own measurement found.
+The ensemble (96.01%) remains the best of all three real-MNIST options by a wide margin; this
+result is about the single-network comparison specifically.
+
 ## risks and open questions
 
-- **The Rust core's operation set needs extending** (row-wise max/sum-and-normalize) - same
-  category of real, small scope extension [the ReLU array workplan](relu-array-layer.md#risks-and-open-questions)
-  flags for its own primitive.
-- **The retune result could go either way** - flagged per the updated mandate behind this round:
-  worth running and reporting honestly, not a foregone conclusion that retuning will make softmax
-  win at MNIST scale.
+- ✅ **The Rust core's operation set needed extending** (row-wise max/sum-and-normalize) - resolved
+  in stage 2 (`array_softmax`), the same category of real, small scope extension [the ReLU array
+  workplan](relu-array-layer.md#risks-and-open-questions) needed for its own primitive.
+- ✅ **The retune result could have gone either way** - resolved, see "measurement plan and
+  result" above: it's a real, decisive win (+1.00 point, non-overlapping 5-seed ranges), not a
+  foregone conclusion that turned out true by luck.
 - **Sequential-only training persists in the array world too** - the per-node investigation noted
   softmax's joint output "can't be split across processes the way the ensemble's ten binary
   classifiers can"; the array/Rust port doesn't change that structurally (still one network, one
@@ -131,11 +229,16 @@ Fully deterministic given the same starting weights (no RNG in softmax's own mat
 
 ## delivery stages (each its own PR, per this repo's practice)
 
-1. This design document.
-2. The Rust core's row-wise softmax-normalization primitive + its own parity tests.
-3. `SoftmaxArrayLayer` + `SoftmaxVectorizedMultiClassBackpropClassifierNetwork` + the
+1. **Done.** This design document.
+2. **Done.** The Rust core's row-wise softmax-normalization primitive (`array_softmax`) + its own
+   parity tests.
+3. **Done.** `SoftmaxArrayLayer` + `SoftmaxVectorizedMultiClassBackpropClassifierNetwork` + the
    parity-check tests above (numpy only).
-4. The wall-clock/reproduction/retune measurement described above.
+4. **Done.** The wall-clock/reproduction/retune measurement - see "measurement plan and result"
+   above: 75.2x-1089.7x faster per example than the per-node path; the UCI-digits win reproduces
+   at array speed; the real-MNIST loss reproduces too at the untuned rate, but retuning
+   (`learning_rate=0.01`) turns it into a real, decisive win (+1.00 point, non-overlapping 5-seed
+   ranges) - closing the gap the per-node investigation explicitly declined to spend on.
 5. Docs closeout.
 6. `SoftmaxRustArrayLayer` + `SoftmaxRustArrayMultiClassBackpropClassifierNetwork` + parity-check
    tests at every tier, built on stage 2's primitive.
