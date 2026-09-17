@@ -139,10 +139,14 @@ the lossy extraction this note originally declined); this doc's own newly-added
 
 Also not in scope: running a real sweep with the new infrastructure. The first
 real usage is deferred to whatever the next genuine measurement need turns out to be (e.g.
-[convolutional layers](../proposals/conv-array-layer.md)'s real-MNIST validation, or [an array-based ensemble
-sibling](../proposals/ensemble-array-layer.md)'s own measurement) - validated here only against a toy worker
-function, not by re-running an already-closed sweep purely to reconfirm a result this codebase's
-own measurement discipline already says not to re-time.
+[convolutional layers](../proposals/conv-array-layer.md)'s real-MNIST validation) - validated here
+only against a toy worker function, not by re-running an already-closed sweep purely to reconfirm
+a result this codebase's own measurement discipline already says not to re-time. **Update:** [an
+array-based ensemble sibling](../design-docs/ensemble/ensemble-array-layer.md)'s own measurement
+landed first, but didn't end up needing this infrastructure - it compared a handful of named
+training-path configurations directly (parallel vs. serial, numpy vs. Rust) at real MNIST scale,
+not a config/seed grid sweep, so a one-shot timing script fit better than `run_parameter_sweep`.
+The first real sweep-shaped usage is still open.
 
 ## design
 

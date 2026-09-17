@@ -175,6 +175,75 @@ which is considered adequately answered (cross-entropy doesn't help at productio
 learning rate; retuning would cost its own real ~30-minute run for a gain no measurement here
 exceeded fan-in-aware quadratic's result).
 
+### step 4: an array/Rust-backed ensemble, and the parallel-vs-serial question
+
+**Step 4 - vectorizing the ensemble itself**, once every other multiclass sibling in this
+codebase's history had already been array/Rust-ported (see [backprop sibling
+measurements](research-backprop-siblings.md)) but the ensemble - this codebase's own
+best-performing, production-facing real-MNIST capability - still had no vectorized counterpart at
+all. `ArrayBackpropClassifierNetwork`/`RustArrayBackpropClassifierNetwork` (a new single-output
+array-backed network line, since every prior array port had only ever needed the existing
+`class_count`-wide multiclass line) and `EnsembleArrayBackpropClassifierNetwork`/
+`EnsembleRustArrayBackpropClassifierNetwork` (thin wrappers mirroring
+`EnsembleBackpropClassifierNetwork`'s own composition) were built and parity-tested against the
+per-node `FanInAwareBackpropClassifierNetwork` reference - see [an array-based ensemble
+sibling](../design-docs/ensemble/ensemble-array-layer.md) for the full design.
+
+The Rust port was built unconditionally, not gated behind the numpy stage's own wall-clock
+verdict - per [the Rust production cutover](../architecture/rust-production-cutover.md)'s own
+"unconditional production backend" precedent.
+
+**Per-classifier wall-clock** (fused single-output layer, `dimension=784, hidden=[16]`, numpy vs.
+Rust): a much smaller gap than every other sibling in this codebase's history (30-800x+) -
+Rust beats numpy by only 1.79x at `batch_size=1` (the ensemble's own training shape), and the two
+are roughly at parity by `batch_size=32` and beyond (0.81x-1.00x). A single-node output layer has
+very little real matmul work per call, so both backends' fixed per-call overhead (Python-level
+dispatch for numpy, the PyO3 call boundary for Rust) dominates the total cost far more than it
+does for a `class_count`-wide output layer - see [possible next
+steps](../project/structure.md#possible-next-steps) for concrete follow-ups this suggests.
+
+**The real question - does vectorizing change how this codebase should train the ensemble at
+all**, measured directly at real MNIST scale (`[16]` hidden, `learning_rate=0.5`, 5 epochs - the
+same configuration step 3's own documented baseline used), across every training-path
+combination this raised:
+
+| configuration | wall-clock | vs. documented baseline | test accuracy |
+|---|---|---|---|
+| per-node parallel (documented baseline, step 3) | 29.6 min | 1.0x | 96.01% |
+| **array/Rust, parallel** (`train_ensemble_parallel_from_indices`) | **21.4s** | **83.0x faster** | 96.07% |
+| array/numpy, parallel (`train_ensemble_parallel_from_indices`) | 49.8s | 35.7x faster | 96.39% |
+| array/Rust, serial (`train_ensemble_serial_from_indices`) | 69.1s | 25.7x faster | 95.96% |
+| array/numpy, serial (`train_ensemble_serial_from_indices`) | 113.8s | 15.6x faster | 96.05% |
+
+Every array/Rust configuration lands within seed-to-seed noise of the documented 96.01% accuracy
+(95.96%-96.39%), the usual RNG-stream caveat applying (numpy's and Rust's own draws are never
+seed-comparable to Python's `random`, or to each other - see [the RNG
+exception](../architecture/rust-array-core.md#the-rng-exception)).
+
+Two real findings, neither assumed going in:
+
+- **`indrajala_ml_array.Array` does not support pickling** (confirmed directly:
+  `pickle.dumps` raises `TypeError`) - initially a real blocker for a Rust-backed
+  `multiprocessing.Pool` worker returning its trained snapshot, closed by converting a worker's
+  return value to plain, always-picklable nested lists before it crosses the process boundary
+  (`ensemble_train._picklable_snapshot`), reconstructed back into `indrajala_ml_array.Array` on
+  the collecting side (`RustArrayBackpropClassifierNetwork.restore()`'s own tolerance for
+  receiving either representation). Once closed, the *existing*
+  `train_ensemble_parallel_from_indices` trains a Rust-backed ensemble unchanged - no new public
+  training function was needed for the parallel case.
+- **Multiprocessing is still worth keeping, even after vectorization** - the proposal's own
+  single most consequential open question. Serial (single-process) training is dramatically
+  faster than the old per-node path (15.6x-25.7x), but parallel dispatch still beats serial for
+  both backends (numpy: 2.3x faster parallel vs. serial; Rust: 3.2x faster parallel vs. serial) -
+  parallelism and vectorization compound rather than substitute. `ensemble_train.py`'s
+  `multiprocessing.Pool` machinery (the memory-aware worker-count capping, the index-based record
+  loading fix) remains worth its complexity.
+
+**Decision:** array/Rust-backed, parallel-trained (`train_ensemble_parallel_from_indices` with
+`classifier_cls=RustArrayBackpropClassifierNetwork`) is the new recommended path for this
+architecture - 83x faster than the documented per-node baseline, at statistically indistinguishable
+accuracy.
+
 ## softmax on real full-scale MNIST
 
 `SoftmaxMultiClassBackpropClassifierNetwork` had only been validated on small-scale UCI digits

@@ -2,11 +2,13 @@
 
 [← back to README](../../README.md)
 
-**Status: proposed, not started; depends on [an array-based ensemble
-sibling](ensemble-array-layer.md)'s own single-output array network.** Written up front as a
-design/measurement plan before any of it exists, per this repo's own established practice of
-writing a plan down before implementation, matching every other array-porting workplan in this
-codebase's history.
+**Status: proposed, not started.** Written up front as a design/measurement plan before any of it
+exists, per this repo's own established practice of writing a plan down before implementation,
+matching every other array-porting workplan in this codebase's history. **Update:** its own
+blocking dependency, [an array-based ensemble
+sibling](../design-docs/ensemble/ensemble-array-layer.md)'s single-output array network, is now
+done (`ArrayBackpropClassifierNetwork`/`RustArrayBackpropClassifierNetwork`) - this workplan is
+unblocked, but still not started.
 
 ## why this, and why now
 
@@ -43,7 +45,7 @@ analysis](../research/research-backprop-siblings.md#an-array-based-momentum-sibl
 is not the hard part - having a genuine single-output array
 network to attach it to, and compare against `BinaryCrossEntropyBackpropClassifierNetwork`
 itself, is. This workplan therefore depends on [an array-based ensemble
-sibling](ensemble-array-layer.md)'s own proposed single-output array network
+sibling](../design-docs/ensemble/ensemble-array-layer.md)'s own proposed single-output array network
 (`ArrayBackpropClassifierNetwork`) rather than duplicating that build here.
 
 ## design
@@ -62,7 +64,7 @@ class CrossEntropyArrayLayer(ArrayLayer):
 a single sigmoid output needs nothing from any sibling, the same point
 `CrossEntropyOutputNode`'s own docstring makes ("a single output node's activation needs nothing
 from any sibling - `forward()` is inherited completely unchanged"). Once [the single-output array
-network](ensemble-array-layer.md) exists, `CrossEntropyVectorizedArrayBackpropClassifierNetwork`
+network](../design-docs/ensemble/ensemble-array-layer.md) exists, `CrossEntropyVectorizedArrayBackpropClassifierNetwork`
 sets its `output_layer` to a `CrossEntropyArrayLayer` instead of a plain `ArrayLayer` - a single
 class-attribute-shaped override, mirroring `BinaryCrossEntropyBackpropClassifierNetwork`'s own
 "structurally this is a single class-attribute override" shape exactly.
@@ -84,7 +86,7 @@ formula):
   across a random sweep of activations/targets - a one-line formula, but still checked the same
   way every other sibling in this codebase's history has been, not assumed correct because it's
   short.
-- Once [the single-output array network](ensemble-array-layer.md) exists:
+- Once [the single-output array network](../design-docs/ensemble/ensemble-array-layer.md) exists:
   `test_binary_cross_entropy_vectorized_backprop_model.py`, whole-network parity against
   `BinaryCrossEntropyBackpropClassifierNetwork` itself directly (a genuine per-node reference
   already exists here) via a weight-injection helper in the same shape
@@ -102,7 +104,7 @@ formula):
   magnitude); expect a large win in line with every sibling in this round (this is the cheapest
   possible override, a single elementwise subtract).
 - **The retune the per-node investigation explicitly deferred**: once [the single-output array
-  network](ensemble-array-layer.md) and its ensemble wrapper exist, sweep `learning_rate` for
+  network](../design-docs/ensemble/ensemble-array-layer.md) and its ensemble wrapper exist, sweep `learning_rate` for
   `CrossEntropyArrayLayer`-based ensemble sub-networks on real MNIST, directly answering "does
   this toy-problem finding transfer to MNIST's scale" - the exact open question [binary
   cross-entropy for
@@ -111,9 +113,12 @@ formula):
 
 ## risks and open questions
 
-- **This workplan is blocked on [an array-based ensemble
-  sibling](ensemble-array-layer.md)'s single-output array network landing first** - a real
-  sequencing dependency, stated explicitly under "scope" above, not assumed away.
+- **This workplan was blocked on [an array-based ensemble
+  sibling](../design-docs/ensemble/ensemble-array-layer.md)'s single-output array network landing first** -
+  a real sequencing dependency, stated explicitly under "scope" above. **Update:** that dependency
+  landed (`ArrayBackpropClassifierNetwork`/`RustArrayBackpropClassifierNetwork`, both backends,
+  both unconditional) - stages 3 and 6 below are unblocked, though this workplan as a whole is
+  still not started.
 - **A reconfirmed "matches, doesn't beat" result is a legitimate outcome** - same framing as
   every sibling in this round; this workplan's main value is making the deferred real-MNIST
   retune investigation affordable, not a guaranteed new win.
@@ -124,10 +129,10 @@ formula):
 2. `CrossEntropyArrayLayer` (usable standalone against the existing multiclass array line
    immediately - see "design" above) + its own parity-check tests. Independent of stage 3-5's
    dependency on the ensemble workplan.
-3. **Blocked on [an array-based ensemble sibling](ensemble-array-layer.md)'s
+3. **Blocked on [an array-based ensemble sibling](../design-docs/ensemble/ensemble-array-layer.md)'s
    `ArrayBackpropClassifierNetwork` landing**: the single-output cross-entropy network + parity
    tests against `BinaryCrossEntropyBackpropClassifierNetwork`.
 4. The real-MNIST retune measurement described above.
 5. Docs closeout.
 6. The Rust-matmul-backed counterpart, once stage 3's numpy version and [the ensemble
-   workplan](ensemble-array-layer.md)'s own Rust stage both exist.
+   workplan](../design-docs/ensemble/ensemble-array-layer.md)'s own Rust stage both exist.
