@@ -5,6 +5,7 @@ import numpy as np
 import pytest
 
 from indrajala_ml.model.adam_layer import make_adam_layer_cls
+from indrajala_ml.model.dropout_layer import make_dropout_layer_cls
 from indrajala_ml.model.l2_regularization_layer import make_l2_layer_cls
 from indrajala_ml.model.linear_classifier_network import LinearClassifierNetwork
 from indrajala_ml.model.momentum_layer import make_momentum_layer_cls
@@ -347,6 +348,75 @@ def matching_relu_array_backprop_networks(
         layer_sizes, dimension, [(-bounds, bounds)] * dimension, class_count
     )
     array_network = array_network_cls(layer_sizes, dimension, class_count)
+
+    previous_size = dimension
+    for layer_index, size in enumerate([*layer_sizes, class_count]):
+        weights = [[rng.uniform(-2.0, 2.0) for _ in range(previous_size)] for _ in range(size)]
+        biases = [rng.uniform(-2.0, 2.0) for _ in range(size)]
+
+        node_layer = node_network.trainable_layers[layer_index]
+        for node, node_weights, bias in zip(node_layer.nodes, weights, biases):
+            node.update_input_weights(node_weights)
+            node.bias = bias
+
+        array_network.layers[layer_index].W = wrap(weights)
+        array_network.layers[layer_index].b = wrap(biases)
+
+        previous_size = size
+
+    return node_network, array_network
+
+
+class DropoutMultiClassBackpropClassifierNetwork(MultiClassBackpropClassifierNetwork):
+    """
+    Test-only per-node dropout reference: MultiClassBackpropClassifierNetwork with its
+    hidden_layer_cls extension point set to make_dropout_layer_cls(drop_probability)'s layer
+    class - the output layer stays the default plain BackpropLayer (sigmoid), matching
+    DropoutNode's hidden-layer-only convention. No genuine per-node
+    DropoutMultiClassBackpropClassifierNetwork sibling exists in this codebase
+    (DropoutBackpropClassifierNetwork is scoped to the single-output case only, see
+    docs/dropout.md's "scope"), so this exists purely to give
+    DropoutVectorizedMultiClassBackpropClassifierNetwork/
+    DropoutRustArrayMultiClassBackpropClassifierNetwork an eval-mode parity reference (dropout is
+    a deterministic no-op at eval mode - training defaults to False on both sides, and neither
+    predict_probabilities nor classify_state ever toggles it on), per
+    docs/dropout-array-layer.md's own "scope" caveat that a genuine training-time comparison
+    isn't achievable across two independent RNG streams.
+    """
+
+    def __init__(
+        self,
+        layer_sizes: list[int],
+        dimension: int,
+        input_bounds: list[tuple[float, float]],
+        class_count: int,
+        drop_probability: float,
+    ) -> None:
+        self.hidden_layer_cls = make_dropout_layer_cls(drop_probability)
+        super().__init__(layer_sizes, dimension, input_bounds, class_count)
+
+
+def matching_dropout_array_backprop_networks(
+    rng: random.Random,
+    array_network_cls,
+    wrap: Callable,
+    layer_sizes: list[int],
+    dimension: int,
+    class_count: int,
+    drop_probability: float,
+    bounds: float = 10.0,
+):
+    """
+    The dropout-sibling analogue of matching_array_backprop_networks above - see
+    matching_adam_array_backprop_networks's own docstring for the general shape this follows.
+    Only meaningful for eval-mode comparisons (predict_probabilities/classify_state): see
+    DropoutMultiClassBackpropClassifierNetwork's own docstring for why a training-mode/learn()
+    comparison isn't attempted here.
+    """
+    node_network = DropoutMultiClassBackpropClassifierNetwork(
+        layer_sizes, dimension, [(-bounds, bounds)] * dimension, class_count, drop_probability
+    )
+    array_network = array_network_cls(layer_sizes, dimension, class_count, drop_probability)
 
     previous_size = dimension
     for layer_index, size in enumerate([*layer_sizes, class_count]):

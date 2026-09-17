@@ -668,13 +668,15 @@ ranked.
   benchmark is a known, flagged gap, not a measured result: the overfitting-gap sweep was
   attempted (a real 50-run measurement, launched against an 8-way `multiprocessing.Pool`) and
   stopped before completion once it was observed running ~5x slower than serial calibration
-  predicted, on track for 40+ minutes - the only path this sibling has today is the per-node one
-  (no vectorized/Rust-matmul-backed counterpart exists, the same launch-scope precedent every
-  sibling except Adam follows). Closing this gap needs either tolerating that wall-clock cost
-  outright or building a vectorized dropout sibling first, mirroring [the array-based Adam
-  sibling](adam-array-layer.md)'s own precedent - neither committed to here. See
-  [dropout](dropout.md#the-measurement-gap---not-run-deliberately-not-silently-dropped) for the
-  full reasoning.
+  predicted, on track for 40+ minutes - the per-node path alone was too slow to afford it.
+  **Update:** [an array-based dropout sibling](dropout-array-layer.md) is now done, both stages -
+  `DropoutArrayLayer`/`DropoutVectorizedMultiClassBackpropClassifierNetwork` (numpy) and
+  `DropoutRustArrayLayer`/`DropoutRustArrayMultiClassBackpropClassifierNetwork`
+  (Rust-matmul-backed, including a new RNG primitive this crate didn't have before,
+  `bernoulli_mask`/`draw_bernoulli_mask`) - built together rather than gating the Rust stage on a
+  numpy-only wall-clock check first. The overfitting-gap sweep itself hasn't been re-run against
+  either backend yet - closing [dropout](dropout.md#the-measurement-gap---not-run-deliberately-not-silently-dropped)'s
+  own flagged gap is now affordable but still not done.
 - **Batch or layer normalization** - no normalization exists at all; likely the highest-value item
   in this group once hidden layers get deeper than 1-2, but also the biggest lift of anything
   here (running statistics, a train/eval-mode split - real complexity beyond the existing
@@ -754,7 +756,13 @@ concrete failure case motivates it yet.
   previously-too-expensive-to-run retune on real MNIST turns softmax's untuned loss into a
   decisive win (93.85% ± 0.26% vs the untuned baseline's 92.85% ± 0.36%, 5 seeds, every softmax
   seed beating every baseline seed) - still needing its own tuned learning rate, the same caveat
-  every retuned sibling in this round carries. The rest are still proposed, not started.
+  every retuned sibling in this round carries. [An array-based dropout
+  sibling](dropout-array-layer.md) is also done, both stages (numpy and Rust-matmul-backed,
+  including a new RNG primitive this crate didn't have before) - unlike the four above, this one
+  has no measurement result yet: it exists specifically to make [dropout's own abandoned
+  overfitting-gap sweep](dropout.md#the-measurement-gap---not-run-deliberately-not-silently-dropped)
+  affordable, and that sweep hasn't been re-run against it. Binary cross-entropy is still
+  proposed, not started (blocked on the next item's own single-output array network).
 - **An array-based ensemble sibling** - `EnsembleBackpropClassifierNetwork` (this codebase's own
   best-performing, production-facing real-MNIST capability, 96.01% held-out accuracy) has no
   array-based or Rust-matmul-backed counterpart at all, unlike every other capability this
