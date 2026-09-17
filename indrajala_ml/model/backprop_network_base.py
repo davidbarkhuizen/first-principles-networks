@@ -76,6 +76,16 @@ class BackpropNetworkBase:
             for own_index, node in enumerate(self.hidden_layers[layer_index].nodes):
                 node.compute_hidden_delta(next_layer.nodes, own_index)
 
+    def _set_training_mode(self, training: bool) -> None:
+        # call-scoped, not lifecycle-scoped: train.py's own training loops call
+        # classify_state()/predict_probability() on the same, mid-training student between
+        # (not just after) learn()/learn_batch() steps, so this must be toggled on for the
+        # duration of one training call and off again immediately after - never left on. A
+        # no-op for every layer except a training-aware sibling like DropoutLayer (see
+        # docs/dropout.md).
+        for layer in self.trainable_layers:
+            layer.set_training_mode(training)
+
     def _learn_batch(self, learning_rate: float, batch: Sequence[tuple[tuple[float, ...], Any]]) -> None:
         # the batch-shaped analogue of learn(): forward+backward+accumulate once per example,
         # then a single averaged weight update - batch_size=1 (a one-element batch) is required
@@ -86,11 +96,15 @@ class BackpropNetworkBase:
         # only in what a "target" is (a float reference value vs. an int category), which
         # _forward/_backward already abstract over.
         assert len(batch) >= 1, "batch must not be empty"
-        for state, target in batch:
-            self._forward(state)
-            self._backward(target)
-            self._accumulate_gradients()
-        self._apply_accumulated_gradients(learning_rate, len(batch))
+        self._set_training_mode(True)
+        try:
+            for state, target in batch:
+                self._forward(state)
+                self._backward(target)
+                self._accumulate_gradients()
+            self._apply_accumulated_gradients(learning_rate, len(batch))
+        finally:
+            self._set_training_mode(False)
 
     def _apply_gradients(self, learning_rate: float) -> None:
         for layer in self.trainable_layers:

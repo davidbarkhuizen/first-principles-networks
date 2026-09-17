@@ -33,6 +33,13 @@ class BackpropLayer:
         for node in self.nodes:
             node.forward()
 
+    def set_training_mode(self, training: bool) -> None:
+        # a no-op by default - every existing layer type is unaffected and needs no change at
+        # all. Only a sibling whose forward pass genuinely differs between training and
+        # inference (e.g. DropoutLayer - see docs/dropout.md) overrides this to propagate the
+        # flag to its own nodes.
+        pass
+
     # these five methods are BackpropNetworkBase's own per-node loops, extracted here so a
     # sibling layer with a different notion of "one weight-owning unit" than "one node" (e.g. a
     # convolutional layer sharing one kernel across many spatial-position nodes - see

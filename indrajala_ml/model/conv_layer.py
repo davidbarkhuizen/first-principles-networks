@@ -13,8 +13,8 @@ class ConvLayer:
     inheritance - see docs/convolutional-layers.md's "the architectural point that matters more
     than any single function"), but implements the same duck-typed surface
     BackpropNetworkBase's generic machinery relies on (forward/.nodes/accumulate_gradients/
-    apply_accumulated_gradients/apply_gradients/snapshot_state/restore_state - see
-    backprop_layer.py's own identical methods, extracted for exactly this purpose).
+    apply_accumulated_gradients/apply_gradients/snapshot_state/restore_state/set_training_mode -
+    see backprop_layer.py's own identical methods, extracted for exactly this purpose).
 
     v1 scope only (see docs/convolutional-layers.md's "scoping v1"): input_layer must be a
     plain StateLayer, not another ConvLayer - single input channel, no stacking, since stacking
@@ -83,6 +83,12 @@ class ConvLayer:
     def forward(self) -> None:
         for unit in self.nodes:
             unit.forward()
+
+    def set_training_mode(self, training: bool) -> None:
+        # a no-op - see BackpropLayer's own identical no-op default for why every layer needs
+        # this method now (BackpropNetworkBase._set_training_mode calls it unconditionally on
+        # every trainable_layer), and docs/dropout.md for the one sibling that isn't a no-op
+        pass
 
     def accumulate_gradients(self) -> None:
         for unit in self.nodes:
