@@ -724,7 +724,19 @@ measured results.
 
 ### infrastructure that protects the rigor
 
-No open items in this tier. The three that used to be here - matmul performance (see [research
-and analysis](research-rust-performance.md#simd-for-the-matvec-production-path-a-bigger-win-than-the-batch32-work-it-followed)),
+- **An audit of hand-rolled measurement scripts for reusable infrastructure** - every real-scale
+  measurement in this codebase's own history (Adam's batch-size sweeps, the
+  learning-rate-vs-batch-size follow-up, RMSprop's ablation, the warmup-step sweep, dropout's
+  overfitting-gap sweep, ...) hand-rolls its own uncommitted one-off script per this codebase's
+  own established practice - but several pieces recur near-identically every time: building a
+  fixed MNIST-digit-N proxy (200/200 balanced, 80/20 split), a fork-based `multiprocessing.Pool`
+  sweep over (config, seed) pairs with per-process reseeding, an epoch-count calibration probe,
+  and mean/stdev-into-a-markdown-table aggregation. Worth determining which of these are real,
+  tested, permanent fixtures worth building - versus which legitimately stay one-off, shaped by
+  each measurement's own specifics - rather than assuming either answer up front. Not yet started
+  - not even audited yet.
+
+The three items that used to be here - matmul performance (see [research and
+analysis](research-rust-performance.md#simd-for-the-matvec-production-path-a-bigger-win-than-the-batch32-work-it-followed)),
 CI (see [setup](setup.md#ci)), and Python packaging/pinning (see
 [setup](setup.md#dependencies)) - are all closed; follow those links for the detail.
