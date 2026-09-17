@@ -2,9 +2,18 @@
 
 [← back to README](../README.md)
 
-**Status: proposed, not started.** Written up front as a design/measurement plan before any of
-it exists, per this repo's own practice (see [Adam optimizer](adam-optimizer.md), [an array-based
-Adam sibling](adam-array-layer.md) for precedent).
+**Status: stages 2 and 5 (both array-based backends) done; the stage-1 overfitting-gap sweep
+(stage 3) not yet run.** Written up front as a design/measurement plan before any of it existed,
+per this repo's own practice (see [Adam optimizer](adam-optimizer.md), [an array-based Adam
+sibling](adam-array-layer.md) for precedent) - updated here with stage-by-stage status notes as
+it's executed. Both `DropoutArrayLayer`/`DropoutVectorizedMultiClassBackpropClassifierNetwork`
+(numpy) and `DropoutRustArrayLayer`/`DropoutRustArrayMultiClassBackpropClassifierNetwork`
+(Rust-matmul-backed) are built and correctness-tested - the Rust stage was **not** gated on
+stage 3's wall-clock finding the way "delivery stages" below originally proposed: both backends
+were built together, deliberately, since the point of this workplan is affording the sweep at
+all, not re-litigating whether it's worth affording. The sweep itself (closing
+[dropout's own flagged measurement gap](dropout.md#the-measurement-gap---not-run-deliberately-not-silently-dropped))
+remains a separate, not-yet-run follow-on - see "delivery stages" below.
 
 ## why this, and why now
 
@@ -113,14 +122,24 @@ test, not incidental to it:
   never against a live, unforced numpy RNG draw, since matching an *exact* mask across numpy's and
   Python's own `random` module RNG streams is neither possible nor the property being tested.
 - `test_dropout_vectorized_multiclass_backprop_model.py`: whole-network tests via the shared
-  `tests/helpers.py` convention - symmetry-breaking, snapshot/restore round-trip (no new
-  snapshot/restore surface: `_mask`/`_base_activation`/`training` are per-forward-pass-scoped,
-  the same category `_activation`/`delta` already are), plus the same
-  exactly-reproducible-at-inference test [dropout's own per-node
-  suite](dropout.md#correctness-validation) added.
-- `test_dropout_rust_array_layer.py` + `rust/indrajala_ml_array/tests/test_dropout_rng.py`: once
-  the Rust core's RNG primitive exists, parity-tested against numpy's own mask distribution
-  statistically (mean keep-rate over many draws within tolerance of `1 - drop_probability`, not a
+  `tests/helpers.py` convention - snapshot/restore round-trip (no new snapshot/restore surface:
+  `_mask`/`_base_activation`/`training` are per-forward-pass-scoped, the same category
+  `_activation`/`delta` already are), plus the same exactly-reproducible-at-inference test
+  [dropout's own per-node suite](dropout.md#correctness-validation) added. Not symmetry-breaking:
+  no array-backed sibling test file in this codebase has that test (`assert_randomize_breaks_symmetry`
+  is shaped around per-node `.nodes`, which array-backed layers don't have) - built instead was a
+  genuine cross-implementation parity check no other array sibling's test suite needed to add
+  separately, `matching_dropout_array_backprop_networks` (`tests/helpers.py`): dropout is a
+  deterministic no-op at eval mode on both sides (training defaults to `False`, and
+  `predict_probabilities`/`classify_state` never toggle it), so `predict_probabilities`/
+  `classify_state` are checked against a per-node reference
+  (`DropoutMultiClassBackpropClassifierNetwork`) across a random sweep, the same shape every
+  other array sibling's own eval-mode parity test uses - a `learn()`-step parity check isn't
+  attempted, for the same independent-RNG-streams reason noted above.
+- `test_dropout_rust_array_layer.py` + `rust/indrajala_ml_array/tests/test_dropout_rng.py` +
+  `rust/indrajala_ml_array/tests/test_dropout_fused_layer_ops.py`: the Rust core's RNG primitive,
+  parity-tested against numpy's own mask distribution statistically (mean keep-rate over many
+  draws within tolerance of `1 - drop_probability`, not a
   literal per-draw match) - a genuinely different validation shape than every other Rust parity
   test in this codebase, which are all bit-close deterministic checks; flagged explicitly rather
   than silently reusing a deterministic-parity test template that doesn't fit.
@@ -154,23 +173,36 @@ gap](dropout.md#the-measurement-gap---not-run-deliberately-not-silently-dropped)
   above; the qualitative shape (does any `drop_probability` improve held-out accuracy over the
   unregularized baseline) is the actual question, not exact numeric parity with a measurement
   that was never even completed on the per-node path to compare against.
-- **The Rust core needs a genuinely new category of primitive** (RNG) - flagged under "design"
-  above; this is not a mechanical fused-arithmetic port the way momentum/L2/Adam's Rust stages
-  were, and may be a reason to sequence the numpy stage well ahead of the Rust one, or to scope
-  the Rust stage out entirely if the numpy stage alone is fast enough to close the measurement
-  gap (worth checking before committing to building RNG support in Rust at all).
+- **The Rust core needed a genuinely new category of primitive** (RNG) - flagged under "design"
+  above, and confirmed not to be a mechanical fused-arithmetic port the way momentum/L2/Adam's
+  Rust stages were: `random.rs`'s `draw_bernoulli_mask`/`bernoulli_mask` (a hand-rolled
+  xorshift128+ draw, the same generator `uniform()` already uses, reused rather than a second
+  PRNG built from scratch) - resolved, built, and tested (`rust/indrajala_ml_array/tests/test_dropout_rng.py`).
+  Built unconditionally rather than gated on stage 3's wall-clock finding, per explicit
+  direction: the Rust stage's value (affording the sweep) doesn't depend on how slow the numpy
+  stage turns out to be.
 - **A reconfirmed null is a legitimate outcome** - same framing as every sibling in this round;
   the value is finally getting a real answer, not a guaranteed regularization win.
 
 ## delivery stages (each its own PR, per this repo's practice)
 
-1. This design document.
-2. `DropoutArrayLayer` + `DropoutVectorizedMultiClassBackpropClassifierNetwork` + the
-   parity-check tests above (numpy only).
-3. The wall-clock check, then the stage-1 (and conditionally stage-2) overfitting-gap sweep -
-   closing [dropout's own flagged gap](dropout.md#the-measurement-gap---not-run-deliberately-not-silently-dropped).
-4. Docs closeout: both this document's and [dropout.md](dropout.md)'s own status updated to
-   reflect the actual measurement result.
-5. **Conditional** on stage 3's wall-clock finding: `DropoutRustArrayLayer` +
-   `DropoutRustArrayMultiClassBackpropClassifierNetwork`, requiring the Rust core's new RNG
-   primitive first - not committed to up front, per "risks and open questions" above.
+1. ✅ This design document.
+2. ✅ `DropoutArrayLayer` + `DropoutVectorizedMultiClassBackpropClassifierNetwork` + the
+   parity-check tests above (numpy only) - `tests/test_dropout_array_layer.py` (12 tests),
+   `tests/test_dropout_vectorized_multiclass_backprop_model.py` (13 tests).
+3. **Not run yet** - the wall-clock check, then the stage-1 (and conditionally stage-2)
+   overfitting-gap sweep - closing [dropout's own flagged
+   gap](dropout.md#the-measurement-gap---not-run-deliberately-not-silently-dropped).
+4. **Not run yet** - docs closeout: both this document's and [dropout.md](dropout.md)'s own
+   status updated to reflect the actual measurement result once stage 3 runs.
+5. ✅ `DropoutRustArrayLayer` + `DropoutRustArrayMultiClassBackpropClassifierNetwork`, plus the
+   Rust core's new `bernoulli_mask`/`draw_bernoulli_mask` RNG primitive (`random.rs`) and fused
+   ops (`layer_dropout_forward`/`layer_dropout_forward_batch`/`layer_dropout_hidden_delta`/
+   `layer_dropout_hidden_delta_batch`, `fused.rs`) - `tests/test_dropout_rust_array_layer.py`
+   (9 tests), `tests/test_dropout_rust_array_multiclass_backprop_model.py` (13 tests),
+   `rust/indrajala_ml_array/tests/test_dropout_rng.py` (6 tests),
+   `rust/indrajala_ml_array/tests/test_dropout_fused_layer_ops.py` (153 tests, 5 seed-parametrized
+   functions x 30 seeds each plus 3 fixed cases). Built **unconditionally**, not gated on stage
+   3's wall-clock finding as originally
+   proposed here - explicit direction overrode the conditional framing, since affording the
+   sweep is this workplan's whole point regardless of how the numpy stage alone measures.

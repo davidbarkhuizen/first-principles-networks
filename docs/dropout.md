@@ -2,8 +2,12 @@
 
 [← back to README](../README.md)
 
-**Status: stage 2 (the capability) done; the overfitting-gap measurement (stages 3-4) deliberately
-not run.** Written up front as a design/measurement plan before any of it existed, per this repo's
+**Status: stage 2 (the per-node capability) done; the overfitting-gap measurement (stages 3-4)
+deliberately not run.** [An array-based dropout sibling](dropout-array-layer.md) (both numpy and
+Rust-matmul-backed) now exists specifically to make that measurement affordable - see this
+document's own "the measurement gap" below - but the sweep itself hasn't been re-run yet, so this
+document's own status is unchanged until it is. Written up front as a design/measurement plan
+before any of it existed, per this repo's
 own practice (see [Adam optimizer](adam-optimizer.md), [a learning-rate schedule](learning-rate-schedule.md)
 for precedent) - updated here with stage-by-stage status notes as it's executed.
 `DropoutBackpropClassifierNetwork` is built and correctness-tested, but its actual regularization
@@ -252,6 +256,12 @@ mirroring Adam's own precedent, to make a seeded sweep practical - neither commi
 Dropout's actual regularization effect on this codebase's own benchmark therefore remains
 genuinely unmeasured, not merely unmeasured-yet-assumed-fine: the "risks and open questions"
 section below carries this forward as an open item, not a resolved one.
+
+**Update**: path (b) is now done - [an array-based dropout sibling](dropout-array-layer.md)
+(`DropoutArrayLayer`/`DropoutVectorizedMultiClassBackpropClassifierNetwork` and
+`DropoutRustArrayLayer`/`DropoutRustArrayMultiClassBackpropClassifierNetwork`) exists and is
+correctness-tested. The sweep itself still hasn't been re-run against it - that document's own
+stage 3 remains the next, not-yet-taken step to actually close this gap.
 
 ## risks and open questions
 
