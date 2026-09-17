@@ -131,7 +131,9 @@ The whole point of this workplan - closing [dropout's own flagged measurement
 gap](dropout.md#the-measurement-gap---not-run-deliberately-not-silently-dropped):
 
 - **Wall-clock, first**: confirm the port is actually fast enough before re-running the sweep -
-  the same fused-layer-operation benchmark used throughout this round, plus a direct
+  the same fused-layer-operation benchmark used throughout this round, numpy vs. Rust (per
+  [goals and strategy](goals-and-strategy.md#measurement-discipline-the-per-node-paths-two-jobs-and-the-one-it-doesnt-have),
+  no fresh per-node timing run - the order of magnitude is already established), plus a direct
   apples-to-apples re-run of dropout's own abandoned 50-run sweep's *serial calibration probe*
   (the thing that predicted ~6 minutes for round one, then was blown through by ~5x) on the array
   path, to get a real, not estimated, expected total wall-clock before launching the full sweep.

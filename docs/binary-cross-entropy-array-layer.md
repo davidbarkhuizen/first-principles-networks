@@ -93,9 +93,11 @@ formula):
 
 ## measurement plan
 
-- **Wall-clock**: the standard fused-layer benchmark, output-layer shape - expect a large win in
-  line with every sibling in this round (this is the cheapest possible override, a single
-  elementwise subtract).
+- **Wall-clock**: the standard fused-layer benchmark, output-layer shape, numpy vs. Rust - per
+  [goals and strategy](goals-and-strategy.md#measurement-discipline-the-per-node-paths-two-jobs-and-the-one-it-doesnt-have),
+  no fresh per-node timing run needed (this round's own siblings already established the order of
+  magnitude); expect a large win in line with every sibling in this round (this is the cheapest
+  possible override, a single elementwise subtract).
 - **The retune the per-node investigation explicitly deferred**: once [the single-output array
   network](ensemble-array-layer.md) and its ensemble wrapper exist, sweep `learning_rate` for
   `CrossEntropyArrayLayer`-based ensemble sub-networks on real MNIST, directly answering "does

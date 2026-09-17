@@ -46,6 +46,38 @@ real framework would hide.
 - **The project stays a place someone could actually learn from** - by reading the code, or by
   reading the research-and-analysis trail of how a decision was reached.
 
+## measurement discipline: the per-node path's two jobs, and the one it doesn't have
+
+Every new capability is still built and proven first as a per-node class (a `BackpropNode`/
+`BackpropLayer` subclass) - the hand-derived "root" implementation every array/Rust sibling is
+ported from, and the correctness oracle every array/Rust port's parity tests check against (a
+random-sweep comparison against the per-node reference, tightened with numerically-adversarial
+cases where relevant). Both jobs stay exactly as they are - this is not a proposal to skip the
+per-node implementation or weaken parity checking.
+
+What the per-node path is *not* is a performance baseline worth re-measuring fresh for every new
+sibling. [Vectorization](vectorization.md)'s and [the Rust production cutover](rust-production-cutover.md)'s
+own numbers already established the order of magnitude once (per-node consistently 30-1000x+
+slower than numpy/Rust), and every array-based sibling measured since (Adam, L2, momentum, ReLU,
+softmax - see [structure](structure.md#possible-next-steps)) reconfirmed the same finding
+independently, never once contradicting it. Re-timing a fresh per-node benchmark for each new
+sibling spends real wall-clock (minutes per run) reconfirming something already known several
+times over, not learning something new - the opposite of this project's own "does it deepen
+understanding" test above.
+
+Going forward: a new sibling's wall-clock benchmarking compares **numpy against Rust directly**
+(the genuinely open question at this point in the codebase's history - closing or widening a
+specific gap, not re-establishing that per-node is slow) - once both exist; if only the numpy
+stage exists yet, benchmark numpy alone rather than pairing it against a fresh per-node timing
+run. Where a per-node figure is useful for context, cite an already-documented one (this
+project's own research-and-analysis trail almost always already has one for the relevant
+architecture/shape) rather than re-running it. Accuracy-at-scale measurement (learning-rate
+sweeps, seed-count studies, retuning) follows the same rule for the same reason: run those against
+the numpy/Rust backends, which make a real sweep affordable in the first place - that affordability
+is the entire reason this codebase's array-porting effort exists - and reproduce an *existing*
+per-node accuracy result by citing it, not by re-training the per-node network fresh to get a
+number this codebase already has.
+
 ## strategy: what gets prioritized
 
 Work that deepens the first-principles rigor this project already has, in roughly this order of

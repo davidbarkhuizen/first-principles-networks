@@ -147,7 +147,13 @@ itself has no RNG):
   (`kernel_size=3, channel_count=4` on 8x8 input) and real-MNIST shape (28x28 input, a
   comparable kernel/channel budget). If the numpy stage's own win is small (plausible, given the
   window-extraction loop), that's real information about whether the Rust primitive is worth
-  building at all, not assumed necessary up front.
+  building at all, not assumed necessary up front. This is a deliberate exception to [goals and
+  strategy](goals-and-strategy.md#measurement-discipline-the-per-node-paths-two-jobs-and-the-one-it-doesnt-have)'s
+  own "don't re-time per-node, the order of magnitude is already established" default: that
+  default holds for every other sibling because a whole-array numpy port's win over per-node is
+  already known and reconfirmed five times over, but conv's numpy stage is only *partially*
+  vectorized (the window-extraction loop stays Python-level), so whether it beats per-node at all
+  is a genuinely open question here, not a foregone one - no existing figure to cite instead.
 - **Reproduce the UCI-digits null, honestly**: confirm the array/Rust port's own dense-vs-conv
   comparison at the same comparable-parameter-budget setup lands within seed noise of the
   existing 96.69%/96.52% result, before trusting any new-scale finding built on top of it.
