@@ -775,9 +775,20 @@ concrete failure case motivates it yet.
   and unlike the four above, the result is a reconfirmed null rather than a genuine or
   scale-dependent win: no `drop_probability` improves held-out accuracy over the unregularized
   baseline, at either the original scale or a conditional escalation that (honestly flagged,
-  unlike L2's own) didn't even widen the train-test gap. Binary cross-entropy is still proposed,
-  not started - its own blocking dependency (the next item's single-output array network) is now
-  done, so it's unblocked but not yet picked up.
+  unlike L2's own) didn't even widen the train-test gap. [An array-based binary cross-entropy
+  sibling](../proposals/binary-cross-entropy-array-layer.md) is also done through its numpy stage
+  and real-MNIST retune measurement (`CrossEntropyArrayLayer`/
+  `CrossEntropyArrayBackpropClassifierNetwork`/`CrossEntropyVectorizedMultiClassBackpropClassifierNetwork`)
+  - unlike the reconfirmed-null siblings above, the deferred real-MNIST retune this workplan
+  existed to afford came back a genuine, if modest, win: at `learning_rate=0.1` cross-entropy beats
+  the ensemble's documented quadratic baseline by 0.37 points, every cross-entropy seed
+  outperforming every baseline seed - a different, more favorable outcome than the toy-XOR
+  "matches, doesn't beat" finding this workplan set out to check whether it transfers. See [an
+  array-based binary cross-entropy
+  sibling](../research/research-multiclass-and-loss.md#an-array-based-binary-cross-entropy-sibling-the-retune-the-per-node-investigation-deferred)
+  for the full measurement. Only its Rust-matmul-backed stage remains - checked directly to need no
+  new Rust primitive at all (its delta formula is algebraically identical to the existing
+  `pa.layer_softmax_output_delta`).
 - **An array-based ensemble sibling** - `EnsembleBackpropClassifierNetwork` (this codebase's own
   best-performing, production-facing real-MNIST capability) previously had no array-based or
   Rust-matmul-backed counterpart at all, unlike every other capability this codebase had measured
