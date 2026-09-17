@@ -56,6 +56,37 @@ re-confirming an already-established result. The sweep runner's worker contract 
 backend-agnostic (any `(config, seed) -> result` callable) rather than built around the per-node
 path specifically.
 
+## methodology
+
+The wall-clock/accuracy-at-scale measurement policy this infrastructure exists to implement -
+moved here from [goals and
+strategy](goals-and-strategy.md#measurement-discipline-the-per-node-paths-two-jobs-and-the-one-it-doesnt-have)
+(2026-09-17), since it's this module's own operational policy, not a general strategy statement:
+
+What the per-node path is *not* is a performance baseline worth re-measuring fresh for every new
+sibling. [Vectorization](vectorization.md)'s and [the Rust production
+cutover](rust-production-cutover.md)'s own numbers already established the order of magnitude once
+(per-node consistently 30-1000x+ slower than numpy/Rust), and every array-based sibling measured
+since (Adam, L2, momentum, ReLU, softmax - see [structure](structure.md#possible-next-steps))
+reconfirmed the same finding independently, never once contradicting it. Re-timing a fresh
+per-node benchmark for each new sibling spends real wall-clock (minutes per run) reconfirming
+something already known several times over, not learning something new - the opposite of this
+project's own "does it deepen understanding" test ([goals and
+strategy](goals-and-strategy.md#what-success-looks-like-here)).
+
+Going forward: a new sibling's wall-clock benchmarking compares **numpy against Rust directly**
+(the genuinely open question at this point in the codebase's history - closing or widening a
+specific gap, not re-establishing that per-node is slow) - once both exist; if only the numpy
+stage exists yet, benchmark numpy alone rather than pairing it against a fresh per-node timing
+run. Where a per-node figure is useful for context, cite an already-documented one (this project's
+own research-and-analysis trail almost always already has one for the relevant architecture/shape)
+rather than re-running it. Accuracy-at-scale measurement (learning-rate sweeps, seed-count
+studies, retuning) follows the same rule for the same reason: run those against the numpy/Rust
+backends, which make a real sweep affordable in the first place - that affordability is the entire
+reason this codebase's array-porting effort exists - and reproduce an *existing* per-node accuracy
+result by citing it, not by re-training the per-node network fresh to get a number this codebase
+already has.
+
 ## scope
 
 Two new modules, both reusing existing, already-tested building blocks rather than reimplementing
@@ -83,15 +114,26 @@ wall-clock, replacing the informal calibration step every sweep so far has done 
 `summarize_sweep_results(results)`, rendering mean/stdev per config as the same markdown table
 format already used everywhere.
 
-Not in scope: migrating the wall-clock tables and methodology notes already living in
-[goals and strategy](goals-and-strategy.md#measurement-discipline-the-per-node-paths-two-jobs-and-the-one-it-doesnt-have),
-[research and analysis](research-and-analysis.md), [research: Rust
-performance](research-rust-performance.md), [research: backprop
+**Update (2026-09-17):** the "migrate wall-clock tables and methodology notes" item above was
+revisited, not deferred indefinitely. Checking the actual content (not assuming the original
+audit's framing still held) found a real split: [goals and
+strategy](goals-and-strategy.md#measurement-discipline-the-per-node-paths-two-jobs-and-the-one-it-doesnt-have)'s
+own wall-clock/accuracy-sweep policy paragraph was genuinely general-purpose prose, unattached to
+any specific number, and has been moved into "methodology" above. Every actual wall-clock *table*
+in [research: Rust performance](research-rust-performance.md), [research: backprop
 siblings](research-backprop-siblings.md), and each array-layer sibling's own "measurement plan"
-section into this doc. That consolidation is a separate, not-yet-committed judgment call this
-audit's own item explicitly left open ("worth determining... rather than assuming either answer up
-front") - this workplan builds and documents the reusable infrastructure itself, it doesn't move
-existing content. Also not in scope: running a real sweep with the new infrastructure. The first
+section turned out **not** to be cleanly extractable the way the audit assumed: every one is
+interleaved with sentence-by-sentence interpretation of its own specific cell values (e.g.
+[momentum's array
+port](momentum-array-layer.md#measurement-plan-and-result-stage-3)'s "**Yes, decisively**: 30x-717x
+faster..." reads directly off the table two lines above it). Moving those tables out and leaving a
+pointer behind would orphan that interpretive prose from the numbers it describes - the opposite
+of [goals and strategy](goals-and-strategy.md#what-success-looks-like-here)'s own "a place someone
+could actually learn from" standard. **Decision: left in place**, deliberately, not by default -
+those tables stay where their own narrative already lives; this doc's own newly-added
+"methodology" section above is the one piece that genuinely generalized.
+
+Also not in scope: running a real sweep with the new infrastructure. The first
 real usage is deferred to whatever the next genuine measurement need turns out to be (e.g.
 [convolutional layers](conv-array-layer.md)'s real-MNIST validation, or [an array-based ensemble
 sibling](ensemble-array-layer.md)'s own measurement) - validated here only against a toy worker

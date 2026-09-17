@@ -808,10 +808,16 @@ measured results.
   via `run_in_background`/redirected to a file gets no interim progress output at all until it
   exits or its stdout buffer fills, since Python fully buffers stdout when it isn't a tty) is
   fixed in the new runner itself (`flush=True` on every progress print). Validated against a
-  toy worker function only, not a real sweep - migrating the wall-clock tables and methodology
-  notes already scattered across this codebase's other docs into
-  [benchmarking](benchmarking.md) remains a separate, not-yet-committed follow-on, and the new
-  infrastructure's first real usage is deferred to whatever the next genuine measurement need
+  toy worker function only, not a real sweep. **Update:** the "migrate wall-clock tables and
+  methodology notes" follow-on flagged above is resolved, not just deferred - checking the actual
+  content found the general-purpose policy note ([goals and
+  strategy](goals-and-strategy.md#measurement-discipline-the-per-node-paths-two-jobs-and-the-one-it-doesnt-have)'s
+  wall-clock/accuracy-sweep discipline) genuinely portable and moved it into
+  [benchmarking](benchmarking.md#methodology), while every actual wall-clock table in the research
+  docs and array-layer sibling "measurement plan" sections turned out to be narratively
+  inseparable from its own per-value interpretation and was deliberately left in place - see
+  [benchmarking](benchmarking.md#scope)'s own 2026-09-17 update for the full reasoning. The new
+  infrastructure's first real usage is still deferred to whatever the next genuine measurement need
   turns out to be.
 
 Matmul performance (see [research and
