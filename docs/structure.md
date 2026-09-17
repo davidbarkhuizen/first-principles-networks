@@ -796,20 +796,23 @@ measured results.
   own established practice - but several pieces recur near-identically every time: building a
   fixed MNIST-digit-N proxy (200/200 balanced, 80/20 split), a fork-based `multiprocessing.Pool`
   sweep over (config, seed) pairs with per-process reseeding, an epoch-count calibration probe,
-  and mean/stdev-into-a-markdown-table aggregation. Worth determining which of these are real,
-  tested, permanent fixtures worth building - versus which legitimately stay one-off, shaped by
-  each measurement's own specifics - rather than assuming either answer up front. Not yet started
-  - not even audited yet. **A concrete gap found while running [an array-based dropout
-  sibling](dropout-array-layer.md)'s own stage-3 sweep**: a long-running sweep launched via
-  `run_in_background`/redirected to a file gets no interim progress output at all until it
-  exits or its stdout buffer fills - Python fully buffers stdout when it isn't a tty, so a
-  per-config `print()` meant to show progress during a ~20+ minute run silently queues instead
-  of appearing. Worth fixing in any reusable sweep harness that comes out of this audit
-  (`python -u` / `PYTHONUNBUFFERED=1`, or explicit `flush=True` on the progress prints) rather
-  than re-discovering this each time a long sweep is launched in the background. See
-  [benchmarking](benchmarking.md) for where this kind of cross-cutting measurement information
-  (methodology notes, reusable infrastructure, findings that don't belong to one sibling's own
-  doc) is meant to accumulate going forward, once this audit actually happens.
+  and mean/stdev-into-a-markdown-table aggregation. **Update:** the audit is done and found
+  exactly that - the four recurring pieces above are real, worth building, while the actual
+  config grid, architecture/hyperparameters, and interpretation/decision write-up stay one-off,
+  shaped by each measurement's own specifics. [Benchmarking infrastructure](benchmarking.md) is
+  now built: `benchmark_data.build_mnist_digit_proxy` (both binary one-vs-rest and genuine
+  multiclass digit-subset proxies, reusing `ensemble_train.select_balanced_indices` for the
+  binary case) and `benchmark_sweep.run_parameter_sweep`/`estimate_sweep_wallclock`/
+  `summarize_sweep_results`. The stdout-buffering gap found while running [an array-based
+  dropout sibling](dropout-array-layer.md)'s own stage-3 sweep (a long-running sweep launched
+  via `run_in_background`/redirected to a file gets no interim progress output at all until it
+  exits or its stdout buffer fills, since Python fully buffers stdout when it isn't a tty) is
+  fixed in the new runner itself (`flush=True` on every progress print). Validated against a
+  toy worker function only, not a real sweep - migrating the wall-clock tables and methodology
+  notes already scattered across this codebase's other docs into
+  [benchmarking](benchmarking.md) remains a separate, not-yet-committed follow-on, and the new
+  infrastructure's first real usage is deferred to whatever the next genuine measurement need
+  turns out to be.
 
 Matmul performance (see [research and
 analysis](research-rust-performance.md#simd-for-the-matvec-production-path-a-bigger-win-than-the-batch32-work-it-followed)),
