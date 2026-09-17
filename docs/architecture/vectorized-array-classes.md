@@ -52,6 +52,17 @@ shares only the *external* contract every sibling network in this codebase alrea
 `save`/`load` - not any internal implementation. `indrajala_ml/model/backprop_node.py`/
 `backprop_layer.py`/`backprop_network_base.py` themselves are untouched.
 
+**2026-09-17 update:** that's still true relative to `BackpropNetworkBase` - but
+`VectorizedMultiClassBackpropClassifierNetwork` itself gained its own array-level base class,
+`ArrayNetworkBase` (`indrajala_ml/model/array_network_base.py`), once a DRY audit found every
+array-based sibling (momentum, L2, Adam, ReLU, softmax, dropout, cross-entropy) had been
+duplicating this class's own internal implementation wholesale instead of subclassing it, unlike
+the per-node siblings' own `hidden_layer_cls`/`output_layer_cls` extension points over
+`BackpropNetworkBase`. `ArrayNetworkBase` now plays that same role one level up:
+`VectorizedMultiClassBackpropClassifierNetwork` is a thin "multiclass shape" subclass of it, and
+every array-based sibling subclasses `VectorizedMultiClassBackpropClassifierNetwork` in turn - see
+`docs/design-docs/adam/adam-array-layer.md`'s own 2026-09-17 update for the full rationale.
+
 ## class design
 
 ### `ArrayLayer` - one layer's weights as one array, not `size` node objects

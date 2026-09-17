@@ -33,8 +33,14 @@ class CrossEntropyArrayLayer(ArrayLayer):
 `SoftmaxArrayLayer`, a single sigmoid-activated output needs nothing from any sibling node, the
 same point `CrossEntropyOutputNode`'s own docstring makes.
 
-Two hosts built on top of this layer, mirroring the same "wholly separate class, not a subclass
-swapping a layer_cls extension point" precedent every array-ported sibling in this codebase uses:
+Two hosts built on top of this layer - **2026-09-17 update:** both are now one-line
+`output_layer_cls` overrides of the relevant "shape" base class
+(`ArrayBackpropClassifierNetwork`/`RustArrayBackpropClassifierNetwork` for the single-output pair,
+`VectorizedMultiClassBackpropClassifierNetwork`/`RustArrayMultiClassBackpropClassifierNetwork` for
+the multiclass pair) rather than the "wholly separate class, not a subclass swapping a
+`layer_cls` extension point" duplication this section originally described - see
+`docs/design-docs/adam/adam-array-layer.md`'s own 2026-09-17 update for the full rationale behind that
+change:
 
 - **`CrossEntropyArrayBackpropClassifierNetwork`/`CrossEntropyRustArrayBackpropClassifierNetwork`**
   - the literal single-output array counterpart of `BinaryCrossEntropyBackpropClassifierNetwork`,
@@ -46,8 +52,8 @@ swapping a layer_cls extension point" precedent every array-ported sibling in th
   - `CrossEntropyArrayLayer` also works unchanged as a `class_count`-sized output on the existing
     multiclass array line (an independent per-node cross-entropy delta at each output - a
     one-vs-rest-with-cross-entropy-loss variant, distinct from softmax's jointly-normalized one),
-    mirroring `SoftmaxVectorizedMultiClassBackpropClassifierNetwork`'s own precedent even though it
-    isn't the literal counterpart of the single-output class above.
+    mirroring `SoftmaxVectorizedMultiClassBackpropClassifierNetwork`'s own `output_layer_cls`
+    override even though it isn't the literal counterpart of the single-output class above.
 
 **The Rust stage needed no new Rust primitive** - checked directly against the Rust source, not
 assumed: `SoftmaxArrayLayer.compute_output_delta`'s own formula (`self.a - reference`) is

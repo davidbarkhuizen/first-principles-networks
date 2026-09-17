@@ -9,18 +9,33 @@ Built and measured; see [research and
 analysis](../../research/research-adam-optimizer.md#an-array-based-rust-matmul-backed-adam-sibling-the-wall-clock-win-the-accuracy-result-was-missing)
 for the wall-clock/robustness measurement and decision.
 
-## design: mirrors `RustArrayMultiClassBackpropClassifierNetwork`'s own precedent - a new class, not a swap point
+## design: `hidden_layer_cls`/`output_layer_cls`-shaped over `ArrayNetworkBase`
 
-`VectorizedMultiClassBackpropClassifierNetwork.__init__` hardcodes `ArrayLayer(size,
-previous_size)` construction - there's no `layer_cls`-style extension point at this level the way
-`BackpropNetworkBase`'s `hidden_layer_cls`/`output_layer_cls` gives the per-node hierarchy.
-`RustArrayMultiClassBackpropClassifierNetwork` itself is not a subclass of
-`VectorizedMultiClassBackpropClassifierNetwork` with a swapped layer type - it's a wholly separate
-class duplicating the same external contract (`learn`/`learn_batch`/`classify_state`/
-`predict_probabilities`/`randomize`/`randomized`/`snapshot`/`restore`/`save`/`load`) against a
-different layer implementation. `AdamVectorizedMultiClassBackpropClassifierNetwork` follows that
-same precedent - a new, standalone class, not a modification to the existing one - consistent with
-every other sibling in this codebase being purely additive.
+**2026-09-17 update:** this section originally justified `AdamVectorizedMultiClassBackpropClassifierNetwork`
+as "a new, wholly separate class, not a subclass swapping a `layer_cls` extension point" - because
+at the time, `VectorizedMultiClassBackpropClassifierNetwork.__init__` hardcoded `ArrayLayer`
+construction with no such extension point, and the first array sibling
+(`RustArrayMultiClassBackpropClassifierNetwork`, swapping backends rather than a hyperparameter)
+had already been built that way, so every later sibling followed the same precedent rather than
+retrofitting one. A follow-up DRY audit found that precedent-following, not a reasoned decision -
+the per-node family already had exactly this extension point
+(`BackpropNetworkBase.hidden_layer_cls`/`output_layer_cls`) - and added the array-level
+equivalent: `ArrayNetworkBase`/`RustArrayNetworkBase` now expose `hidden_layer_cls`/
+`output_layer_cls`, and `VectorizedMultiClassBackpropClassifierNetwork`/
+`RustArrayMultiClassBackpropClassifierNetwork` are thin "shape" subclasses of them (multiclass
+argmax/one-hot-target/class_count handling), the same way `MultiClassBackpropClassifierNetwork`
+sits over `BackpropNetworkBase`.
+
+`AdamVectorizedMultiClassBackpropClassifierNetwork`/`AdamRustArrayMultiClassBackpropClassifierNetwork`
+are now thin subclasses of those shape classes: `__init__` sets `self.hidden_layer_cls =
+self.output_layer_cls` to a closure binding `beta1`/`beta2`/`epsilon` into `AdamArrayLayer`/
+`AdamRustArrayLayer` before calling `super().__init__(...)` - the same
+"instance-attribute-closure-before-`super().__init__()`" pattern `AdamBackpropClassifierNetwork`
+already used one layer down over `BackpropNetworkBase`. `save`/`load`'s hyperparameter round-trip
+goes through `_extra_state`/`_extra_init_kwargs` hooks on the base rather than a hand-written
+envelope. See `indrajala_ml/model/adam_vectorized_multiclass_backprop_classifier_network.py`
+directly for the current ~55-line result (down from the ~170-line duplicate this section
+originally described).
 
 `AdamArrayLayer(ArrayLayer)` overrides only `apply_accumulated_gradient`, mirroring
 `make_adam_node_cls`'s exact per-parameter formula but as whole-array numpy ops instead of a
