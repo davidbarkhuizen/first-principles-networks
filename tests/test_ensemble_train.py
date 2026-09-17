@@ -12,11 +12,16 @@ from indrajala_ml.ensemble_train import (
     select_balanced_indices,
     train_ensemble_parallel,
     train_ensemble_parallel_from_indices,
+    train_ensemble_serial_from_indices,
 )
 from indrajala_ml.geometry import square_bounds
 from indrajala_ml.model.array_backprop_classifier_network import ArrayBackpropClassifierNetwork
 from indrajala_ml.model.ensemble_array_backprop_classifier_network import EnsembleArrayBackpropClassifierNetwork
+from indrajala_ml.model.ensemble_rust_array_backprop_classifier_network import (
+    EnsembleRustArrayBackpropClassifierNetwork,
+)
 from indrajala_ml.model.fan_in_aware_backprop_classifier_network import FanInAwareBackpropClassifierNetwork
+from indrajala_ml.model.rust_array_backprop_classifier_network import RustArrayBackpropClassifierNetwork
 
 
 def _synthetic_dataset(counts: dict[int, int]) -> list[tuple[tuple[float, ...], int]]:
@@ -379,6 +384,100 @@ def test_train_ensemble_parallel_from_indices_matches_the_fully_decoded_path(tmp
     direct_ensemble, _ = _train_synthetic(dataset, bounds, epochs=3, seed=7)
 
     assert indexed_ensemble.snapshot() == direct_ensemble.snapshot()
+
+
+def test_train_ensemble_serial_from_indices_produces_a_working_ensemble(tmp_path):
+
+    dataset = _synthetic_multiclass_dataset()
+    labels = [label for _, label in dataset]
+    path = str(tmp_path / "records.pkl")
+    write_test_records(path, dataset)
+    bounds = square_bounds(10.0)
+
+    ensemble, diagnostics = train_ensemble_serial_from_indices(
+        path,
+        load_test_records_at_indices,
+        labels,
+        class_count=3,
+        layer_sizes=[4],
+        dimension=2,
+        input_bounds=bounds,
+        learning_rate=0.5,
+        epochs=5,
+        seed=0,
+    )
+
+    assert ensemble.class_count == 3
+    assert set(diagnostics.keys()) == {0, 1, 2}
+    assert ensemble.classify_state((-5.0, -5.0)) == 0
+    assert ensemble.classify_state((5.0, 5.0)) == 1
+    assert ensemble.classify_state((5.0, -5.0)) == 2
+
+
+def test_train_ensemble_serial_from_indices_matches_the_parallel_path(tmp_path):
+
+    # no multiprocessing.Pool at all, but select_balanced_indices' choices and per-class seeding
+    # are identical either way (both draw from one random.Random(seed) in class order) - so the
+    # serial path should train to exactly the same result as the parallel one
+    dataset = _synthetic_multiclass_dataset()
+    labels = [label for _, label in dataset]
+    path = str(tmp_path / "records.pkl")
+    write_test_records(path, dataset)
+    bounds = square_bounds(10.0)
+
+    serial_ensemble, _ = train_ensemble_serial_from_indices(
+        path,
+        load_test_records_at_indices,
+        labels,
+        class_count=3,
+        layer_sizes=[4],
+        dimension=2,
+        input_bounds=bounds,
+        learning_rate=0.5,
+        epochs=3,
+        seed=7,
+    )
+    parallel_ensemble, _ = _train_synthetic_from_indices(path, labels, bounds, epochs=3, seed=7)
+
+    assert serial_ensemble.snapshot() == parallel_ensemble.snapshot()
+
+
+def test_train_ensemble_serial_from_indices_accepts_array_and_rust_backed_classifier_cls(tmp_path):
+
+    # the whole reason this function exists: indrajala_ml_array.Array does not support pickling
+    # (confirmed directly), so RustArrayBackpropClassifierNetwork can never train through
+    # train_ensemble_parallel_from_indices's own multiprocessing.Pool boundary - this is its only
+    # training path. ArrayBackpropClassifierNetwork (numpy) works here too, as a second
+    # comparison point against its own parallel-path result.
+    dataset = _synthetic_multiclass_dataset()
+    labels = [label for _, label in dataset]
+    path = str(tmp_path / "records.pkl")
+    write_test_records(path, dataset)
+    bounds = square_bounds(10.0)
+
+    for classifier_cls, ensemble_cls in [
+        (ArrayBackpropClassifierNetwork, EnsembleArrayBackpropClassifierNetwork),
+        (RustArrayBackpropClassifierNetwork, EnsembleRustArrayBackpropClassifierNetwork),
+    ]:
+        result, diagnostics = train_ensemble_serial_from_indices(
+            path,
+            load_test_records_at_indices,
+            labels,
+            class_count=3,
+            layer_sizes=[4],
+            dimension=2,
+            input_bounds=bounds,
+            learning_rate=0.5,
+            epochs=5,
+            seed=0,
+            classifier_cls=classifier_cls,
+        )
+
+        assert set(diagnostics.keys()) == {0, 1, 2}
+        ensemble = ensemble_cls(result.classifiers)
+        assert ensemble.classify_state((-5.0, -5.0)) == 0
+        assert ensemble.classify_state((5.0, 5.0)) == 1
+        assert ensemble.classify_state((5.0, -5.0)) == 2
 
 
 def test_available_memory_bytes_returns_a_real_positive_value_on_linux():
