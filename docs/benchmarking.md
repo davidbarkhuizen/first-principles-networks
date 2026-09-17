@@ -2,9 +2,12 @@
 
 [← back to README](../README.md)
 
-**Status: proposed, not started.** Written up front as a design/workplan doc before any of it
-exists, per this repo's own practice (see [Adam optimizer](adam-optimizer.md), [an array-based
-Adam sibling](adam-array-layer.md) for precedent).
+**Status: all five stages done.** Written up front as a design/workplan doc before any of it
+existed, per this repo's own practice (see [Adam optimizer](adam-optimizer.md), [an array-based
+Adam sibling](adam-array-layer.md) for precedent). `benchmark_data.build_mnist_digit_proxy` and
+`benchmark_sweep.run_parameter_sweep`/`estimate_sweep_wallclock`/`summarize_sweep_results` are
+built and tested against a toy worker function (see "delivery stages" below) - not yet exercised
+by a real sweep, which is deferred to whatever the next genuine measurement need turns out to be.
 
 ## why this, and why now
 
@@ -137,11 +140,14 @@ worker; `summarize_sweep_results`'s markdown output format.
 
 ## delivery stages (each its own PR, per this repo's practice)
 
-1. This design document.
-2. `benchmark_data.py`'s binary one-vs-rest proxy builder (reusing `select_balanced_indices`) +
-   `tests/test_benchmark_data.py`'s binary-path tests.
-3. `benchmark_data.py`'s multiclass digit-subset extension + its own tests.
-4. `benchmark_sweep.py` (runner + calibration probe + aggregation, including the stdout-flush fix)
-   + `tests/test_benchmark_sweep.py` against the toy worker function.
-5. Docs closeout: [structure](structure.md#possible-next-steps)'s "audit of hand-rolled
+1. ✅ This design document.
+2. ✅ `benchmark_data.py`'s binary one-vs-rest proxy builder (reusing `select_balanced_indices`)
+   and its multiclass digit-subset extension, bundled into one PR since both share
+   `_stratified_split`/`_decode_split`/`BenchmarkProxy` - `tests/test_benchmark_data.py` covers
+   both paths. Full suite passes (1650 tests, up 6 from before this stage).
+3. (folded into stage 2 above.)
+4. ✅ `benchmark_sweep.py` (runner + calibration probe + aggregation, including the stdout-flush
+   fix) + `tests/test_benchmark_sweep.py` against the toy worker function. Full suite passes
+   (1654 tests, up 4 from before this stage).
+5. ✅ Docs closeout: [structure](structure.md#possible-next-steps)'s "audit of hand-rolled
    measurement scripts" entry updated to reflect the audit's finding and link here.
