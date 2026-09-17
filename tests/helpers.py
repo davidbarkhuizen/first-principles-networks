@@ -5,7 +5,10 @@ import numpy as np
 import pytest
 
 from indrajala_ml.model.adam_layer import make_adam_layer_cls
-from indrajala_ml.model.binary_cross_entropy_backprop_classifier_network import CrossEntropyOutputLayer
+from indrajala_ml.model.binary_cross_entropy_backprop_classifier_network import (
+    BinaryCrossEntropyBackpropClassifierNetwork,
+    CrossEntropyOutputLayer,
+)
 from indrajala_ml.model.dropout_layer import make_dropout_layer_cls
 from indrajala_ml.model.fan_in_aware_backprop_classifier_network import FanInAwareBackpropClassifierNetwork
 from indrajala_ml.model.l2_regularization_layer import make_l2_layer_cls
@@ -146,6 +149,45 @@ def matching_single_output_array_backprop_networks(
     randomize()" reasoning matching_array_backprop_networks's own docstring gives.
     """
     node_network = FanInAwareBackpropClassifierNetwork(layer_sizes, dimension, [(-bounds, bounds)] * dimension)
+    array_network = array_network_cls(layer_sizes, dimension)
+
+    previous_size = dimension
+    for layer_index, size in enumerate([*layer_sizes, 1]):
+        weights = [[rng.uniform(-2.0, 2.0) for _ in range(previous_size)] for _ in range(size)]
+        biases = [rng.uniform(-2.0, 2.0) for _ in range(size)]
+
+        node_layer = node_network.trainable_layers[layer_index]
+        for node, node_weights, bias in zip(node_layer.nodes, weights, biases):
+            node.update_input_weights(node_weights)
+            node.bias = bias
+
+        array_network.layers[layer_index].W = wrap(weights)
+        array_network.layers[layer_index].b = wrap(biases)
+
+        previous_size = size
+
+    return node_network, array_network
+
+
+def matching_cross_entropy_array_backprop_networks(
+    rng: random.Random,
+    array_network_cls,
+    wrap: Callable,
+    layer_sizes: list[int],
+    dimension: int,
+    bounds: float = 10.0,
+):
+    """
+    The cross-entropy analogue of matching_single_output_array_backprop_networks above, for
+    CrossEntropyArrayBackpropClassifierNetwork/CrossEntropyRustArrayBackpropClassifierNetwork:
+    builds a BinaryCrossEntropyBackpropClassifierNetwork per-node reference (the genuine per-node
+    counterpart, unlike matching_single_output_array_backprop_networks's own
+    FanInAwareBackpropClassifierNetwork, which only matches on init scheme, not loss function) and
+    a cross-entropy array-backed sibling with identical injected weights - the same "force
+    identical, never rely on randomize()" reasoning matching_array_backprop_networks's own
+    docstring gives.
+    """
+    node_network = BinaryCrossEntropyBackpropClassifierNetwork(layer_sizes, dimension, [(-bounds, bounds)] * dimension)
     array_network = array_network_cls(layer_sizes, dimension)
 
     previous_size = dimension
