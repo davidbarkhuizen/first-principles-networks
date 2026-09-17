@@ -662,10 +662,18 @@ ranked.
 
 ### new model primitives, measured the existing way
 
-- **Dropout** - no regularization beyond L2 exists (L2 itself a measured null - see "backprop
-  siblings"); dropout is structurally different (stochastic, applied at the activation, not a
-  gradient penalty), so it isn't assumed to land the same way. See [dropout](dropout.md) for the
-  design/measurement plan. Not yet started.
+- **Dropout** - `DropoutBackpropClassifierNetwork` is built and correctness-tested (see
+  [dropout](dropout.md)'s stage 2), but its actual regularization effect on this codebase's own
+  benchmark is a known, flagged gap, not a measured result: the overfitting-gap sweep was
+  attempted (a real 50-run measurement, launched against an 8-way `multiprocessing.Pool`) and
+  stopped before completion once it was observed running ~5x slower than serial calibration
+  predicted, on track for 40+ minutes - the only path this sibling has today is the per-node one
+  (no vectorized/Rust-matmul-backed counterpart exists, the same launch-scope precedent every
+  sibling except Adam follows). Closing this gap needs either tolerating that wall-clock cost
+  outright or building a vectorized dropout sibling first, mirroring [the array-based Adam
+  sibling](adam-array-layer.md)'s own precedent - neither committed to here. See
+  [dropout](dropout.md#the-measurement-gap---not-run-deliberately-not-silently-dropped) for the
+  full reasoning.
 - **Batch or layer normalization** - no normalization exists at all; likely the highest-value item
   in this group once hidden layers get deeper than 1-2, but also the biggest lift of anything
   here (running statistics, a train/eval-mode split - real complexity beyond the existing

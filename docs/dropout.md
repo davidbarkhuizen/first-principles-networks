@@ -2,10 +2,14 @@
 
 [← back to README](../README.md)
 
-**Status: stage 2 (the capability) done; stage 3 (the overfitting-gap measurement) not yet run.**
-Written up front as a design/measurement plan before any of it existed, per this repo's own
-practice (see [Adam optimizer](adam-optimizer.md), [a learning-rate schedule](learning-rate-schedule.md)
+**Status: stage 2 (the capability) done; the overfitting-gap measurement (stages 3-4) deliberately
+not run.** Written up front as a design/measurement plan before any of it existed, per this repo's
+own practice (see [Adam optimizer](adam-optimizer.md), [a learning-rate schedule](learning-rate-schedule.md)
 for precedent) - updated here with stage-by-stage status notes as it's executed.
+`DropoutBackpropClassifierNetwork` is built and correctness-tested, but its actual regularization
+effect on this codebase's own benchmark is a known, flagged gap, not a silently-dropped one - see
+"the measurement gap" at the end of "measurement plan" below for why, and what would need to be
+true to close it.
 
 ## why this, and why now
 
@@ -222,6 +226,33 @@ dropout there. Not committed to up front - only run if stage 1's result actually
 same conditional-escalation pattern [the Adam optimizer
 workplan](adam-optimizer.md#measurement-plan)'s own stage-3-gates-stage-4 structure used.
 
+### the measurement gap - not run, deliberately, not silently dropped
+
+Stage 1 was attempted, not skipped from the start: a real 50-run sweep (`drop_probability` in
+0.0/0.1/0.2/0.3/0.5, 10 seeds each, `epochs=20` - calibrated so the unregularized baseline reaches
+a comparable ~98% training accuracy to L2's own ~98.5%) was built and launched against an 8-way
+`multiprocessing.Pool`. Measured directly, not guessed: the first round (8 jobs, one per worker)
+took ~6 minutes wall-clock - roughly 5x slower than the serial calibration probe's own per-epoch
+timing predicted, evidently real contention from running 8 heavy per-node training processes
+concurrently. On track for 40+ minutes total, the run was stopped before completion rather than
+paid for.
+
+**Why this codebase has no cheaper path available today**: `DropoutBackpropClassifierNetwork` has
+only the per-node `BackpropNode`/`BackpropLayer` path (see "scope" above) - no vectorized numpy or
+Rust-matmul-backed counterpart exists. This isn't a dropout-specific gap: every sibling in this
+family except Adam launches per-node-only, and Adam's own array-based port
+([an array-based Adam sibling](adam-array-layer.md)) was a separate, later, independently-scoped
+5-stage workplan, built only *after* Adam's per-node measurements had already shown a real,
+substantial win worth chasing to production scale - not part of Adam's own initial launch either.
+
+**Decision: deliberately not run, and not immediately planned.** Reopening this measurement would
+need either (a) tolerating the wall-clock cost outright (a single overnight/background run, not
+attempted here), or (b) building a vectorized/Rust-matmul-backed `DropoutLayer` sibling first,
+mirroring Adam's own precedent, to make a seeded sweep practical - neither committed to here.
+Dropout's actual regularization effect on this codebase's own benchmark therefore remains
+genuinely unmeasured, not merely unmeasured-yet-assumed-fine: the "risks and open questions"
+section below carries this forward as an open item, not a resolved one.
+
 ## risks and open questions
 
 - **The train/eval-mode mechanism is a real, minimal exception to this sibling family's
@@ -231,10 +262,13 @@ workplan](adam-optimizer.md#measurement-plan)'s own stage-3-gates-stage-4 struct
   forward-time `_was_training` snapshot so backward never depends on how wide that bracket is).
   The mutable-flag approach is still a new kind of state for this class family, worth revisiting
   if a future sibling needs the same mechanism and it starts feeling brittle.
-- **Whether this scale overfits enough for any regularizer to show a win** - L2's own measurement
-  on this exact setup found it doesn't (no `l2_lambda` improved held-out accuracy above the
-  unregularized baseline); the same risk applies to dropout, not assumed away just because the
-  mechanism is structurally different - see the conditional stage 2 above.
+- **Whether dropout actually helps on this codebase's own benchmark at all** - unresolved, not
+  just unmeasured-and-assumed-fine: the stage-1 overfitting-gap sweep was attempted and stopped
+  before completion (see "the measurement gap" above) - too slow on the only path
+  `DropoutBackpropClassifierNetwork` has (per-node, no vectorized/Rust counterpart). L2's own
+  measurement on the identical setup found no `l2_lambda` improved held-out accuracy above the
+  unregularized baseline; whether dropout fares differently is exactly the open question this gap
+  leaves unanswered, not assumed away just because the mechanism is structurally different.
 - **Composability with other siblings** - explicitly out of scope; flagged, not chased.
 - **Hidden-layer-only scope** - a convention carried over from ReLU's own precedent, not a
   mathematical necessity for dropout specifically (unlike ReLU's genuine output-range mismatch);
@@ -254,9 +288,12 @@ workplan](adam-optimizer.md#measurement-plan)'s own stage-3-gates-stage-4 struct
    up from 362). Caught a real bug during implementation - see the "design" section's own
    "second subtlety" above (the backward-pass rescale needed a forward-time snapshot of
    `training`, not a live re-read of it).
-3. The stage-1 overfitting-gap measurement (same setup as L2's own, for direct comparability),
-   written up in [research and analysis](research-backprop-siblings.md).
-4. Conditional: the stage-2 more-overfitting-prone follow-up, only if stage 1's result calls for
-   it.
-5. Docs closeout: `structure.md`'s possible-next-steps entry updated to reflect the actual
+3. **Not run, deliberately** - the stage-1 overfitting-gap measurement (same setup as L2's own,
+   for direct comparability) was attempted (a real 50-run sweep, launched and observed running
+   ~5x slower than its own serial calibration predicted) and stopped before completion rather
+   than paid for - see "the measurement gap" above for the full reasoning. A flagged, open gap,
+   not a silently-skipped stage.
+4. **Not applicable** - the stage-2 conditional follow-up can't be evaluated without stage 1's
    result.
+5. ✅ Docs closeout (this update): `structure.md`'s possible-next-steps entry updated to reflect
+   the actual state - capability built, measurement gap flagged, not a completed result.
