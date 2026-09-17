@@ -134,5 +134,5 @@ bit-close parity check, the cleanest of this whole round:
    above (numpy only).
 4. The wall-clock/accuracy measurement described above.
 5. Docs closeout.
-6. `ReLURustArrayLayer` + `ReLURustArrayMultiClassBackpropClassifierNetwork` + parity-check tests
-   at every tier, built on stage 2's primitive.
+6. ✅ `ReLURustArrayLayer` + `ReLURustArrayMultiClassBackpropClassifierNetwork` + parity-check
+   tests at every tier, built on stage 2's primitive.
