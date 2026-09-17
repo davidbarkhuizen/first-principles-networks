@@ -743,10 +743,11 @@ concrete failure case motivates it yet.
   sibling](momentum-array-layer.md) is also done, every stage - 30x-717x faster per example, and
   a reconfirmed null (momentum still doesn't help once the learning-rate confound is controlled
   for, and `momentum=0.9` remains actively harmful) at 3x the original's seed count. [An
-  array-based ReLU sibling](relu-array-layer.md) is in progress (its own numpy-only array port
-  and the Rust core's `array_relu`/`array_relu_mask` primitives built; the accuracy-at-scale
-  measurement, docs closeout, and Rust-matmul-backed counterpart remain). The rest are still
-  proposed, not started.
+  array-based ReLU sibling](relu-array-layer.md) is also done, every stage - 41.6x-632.3x faster
+  per example, and a genuine, scale-dependent finding rather than a blanket win: ReLU's tuned-XOR
+  win doesn't transfer at UCI-digits scale (a tie), but does transfer, modestly, at real-MNIST
+  scale (94.16% ± 0.22% vs the sigmoid baseline's 93.72% ± 0.67%, 5 seeds), and it still needs
+  its own tuned learning rate at every scale checked. The rest are still proposed, not started.
 - **An array-based ensemble sibling** - `EnsembleBackpropClassifierNetwork` (this codebase's own
   best-performing, production-facing real-MNIST capability, 96.01% held-out accuracy) has no
   array-based or Rust-matmul-backed counterpart at all, unlike every other capability this

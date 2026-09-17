@@ -219,6 +219,6 @@ honestly, not collapsed into one blanket verdict.
 4. ✅ The wall-clock/accuracy measurement - see "measurement plan and result" above: 41.6x-632.3x
    faster per example than the per-node path; the toy-XOR win doesn't transfer at UCI-digits
    scale (a tie) but does, modestly, at real-MNIST scale.
-5. Docs closeout.
+5. ✅ Docs closeout - every stage of this workplan is now done.
 6. ✅ `ReLURustArrayLayer` + `ReLURustArrayMultiClassBackpropClassifierNetwork` + parity-check
    tests at every tier, built on stage 2's primitive.
