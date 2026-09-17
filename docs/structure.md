@@ -747,7 +747,14 @@ concrete failure case motivates it yet.
   per example, and a genuine, scale-dependent finding rather than a blanket win: ReLU's tuned-XOR
   win doesn't transfer at UCI-digits scale (a tie), but does transfer, modestly, at real-MNIST
   scale (94.16% ± 0.22% vs the sigmoid baseline's 93.72% ± 0.67%, 5 seeds), and it still needs
-  its own tuned learning rate at every scale checked. The rest are still proposed, not started.
+  its own tuned learning rate at every scale checked. [An array-based softmax
+  sibling](softmax-array-layer.md) is also done, every stage - 75.2x-1089.7x faster per example,
+  and unlike ReLU's scale-dependent split, a genuine win at *both* scales checked: the UCI-digits
+  win reproduces at array speed (100.00%/98.33% vs one-vs-rest's 99.58%/96.66%), and the
+  previously-too-expensive-to-run retune on real MNIST turns softmax's untuned loss into a
+  decisive win (93.85% ± 0.26% vs the untuned baseline's 92.85% ± 0.36%, 5 seeds, every softmax
+  seed beating every baseline seed) - still needing its own tuned learning rate, the same caveat
+  every retuned sibling in this round carries. The rest are still proposed, not started.
 - **An array-based ensemble sibling** - `EnsembleBackpropClassifierNetwork` (this codebase's own
   best-performing, production-facing real-MNIST capability, 96.01% held-out accuracy) has no
   array-based or Rust-matmul-backed counterpart at all, unlike every other capability this
