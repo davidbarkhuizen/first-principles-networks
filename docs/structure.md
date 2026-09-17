@@ -696,6 +696,11 @@ concrete failure case motivates it yet.
 
 ### deepening what's already here
 
+- **A `shape` property on the network base class(es)** - no built-in way currently to introspect a
+  network's structure (dimension, per-layer sizes, hidden-vs-output shape, which sibling
+  class/factory is in use) as a single, meaningfully-summarized data structure; every existing
+  demo/debugging use reaches into `hidden_layers`/`output_layer`/`trainable_layers` by hand. Not
+  yet started.
 - **A real-MNIST-scale convolutional layers validation**, now that the UCI-digits-scale result
   came back a flat null rather than a clear loss - real MNIST has meaningfully more spatial
   structure (28x28 vs. 8x8) for convolution's own advantages to potentially show up in, but a
