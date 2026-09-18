@@ -96,7 +96,13 @@ setup () {
 run_tests () {
 
     activate_venv
-    python3 -m pytest --verbose tests/
+    # tests/ (this package's own tests) and $rust_crate_root/tests/ (the Rust crate's own
+    # Python-facing parity/correctness tests, e.g. test_fused_layer_ops.py) are both real,
+    # committed test suites - pytest with no path argument happens to collect both when run
+    # from the repo root (no testpaths config restricts it), which is how some past PRs' own
+    # test-plan counts (~1650+) included both without anyone noticing only one was ever run
+    # here or in CI. Listed explicitly so both actually run every time, not by accident.
+    python3 -m pytest --verbose tests/ "$rust_crate_root/tests/"
     deactivate_venv
 }
 
