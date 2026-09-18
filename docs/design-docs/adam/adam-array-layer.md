@@ -34,8 +34,8 @@ self.output_layer_cls` to a closure binding `beta1`/`beta2`/`epsilon` into `Adam
 already used one layer down over `BackpropNetworkBase`. `save`/`load`'s hyperparameter round-trip
 goes through `_extra_state`/`_extra_init_kwargs` hooks on the base rather than a hand-written
 envelope. See `indrajala_ml/model/adam_vectorized_multiclass_backprop_classifier_network.py`
-directly for the current ~55-line result (down from the ~170-line duplicate this section
-originally described).
+directly for the current ~65-line result (58 for the Rust counterpart) - down from the ~170-line
+duplicate this section originally described.
 
 `AdamArrayLayer(ArrayLayer)` overrides only `apply_accumulated_gradient`, mirroring
 `make_adam_node_cls`'s exact per-parameter formula but as whole-array numpy ops instead of a
