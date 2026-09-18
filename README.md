@@ -1,12 +1,6 @@
 # indrajala-ml
 
-A small, dependency-light implementation of two classifier families, built from first
-principles. `LinearClassifierNetwork` composes state (input) nodes and association
-(weighted, thresholded) nodes/layers per Rosenblatt's perceptron (1958), trained with the
-classic perceptron learning rule (and a MADALINE-style minimum-disturbance rule once more
-than one hidden node is used). `BackpropClassifierNetwork` is a sigmoid, gradient-descent
-network of arbitrary depth, added alongside it - a genuinely different learning rule, not a
-retrofit - so it can represent targets (like XOR) the discrete model structurally can't.
+fast neural network classifiers from first-principles with no ML framework dependencies
 
 ## docs
 
