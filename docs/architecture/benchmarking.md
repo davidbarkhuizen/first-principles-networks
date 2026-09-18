@@ -105,11 +105,12 @@ one-vs-rest and doesn't generalize to this case. Both paths decode only the sele
 into a stratified train/test pair that preserves per-class balance in both halves.
 
 **`indrajala_ml/benchmark_sweep.py`** - `run_parameter_sweep(configs, seeds, worker_fn,
-worker_count=None)`, a `multiprocessing.Pool` dispatching one job per (config, seed) pair (each
-job handed its own fixed seed from `seeds`, with whichever RNG a `worker_fn` needs seeded left to
-that function itself, exactly as every existing sweep script already does by hand), small
-picklable results collected via `pool.imap`; `estimate_sweep_wallclock(worker_fn, sample_config,
-sample_seed, planned_run_count, worker_count)`, running one real job serially and projecting total
+shared_context=None, worker_count=None)`, a `multiprocessing.Pool` dispatching one job per
+(config, seed) pair (each job handed its own fixed seed from `seeds`, with whichever RNG a
+`worker_fn` needs seeded left to that function itself, exactly as every existing sweep script
+already does by hand), small picklable results collected via `pool.imap`;
+`estimate_sweep_wallclock(worker_fn, sample_config, sample_seed, planned_run_count,
+shared_context=None, worker_count=None)`, running one real job serially and projecting total
 wall-clock, replacing the informal calibration step every sweep so far has done by hand;
 `summarize_sweep_results(results)`, rendering mean/stdev per config as the same markdown table
 format already used everywhere.
@@ -159,14 +160,27 @@ code's actual job is narrow: cap an already-balanced index selection down to a f
 existing helper reaches, and produce a stratified train/test split - not reinventing dataset
 loading or class balancing.
 
-`run_parameter_sweep`'s `worker_fn` must be a module-level function, not a local closure or
-lambda - the same picklability constraint `ensemble_train.py`'s own worker functions already
-have, for the same reason: `Pool` workers receive tasks through a queue, which pickles whatever
-callable and arguments each task carries. Rather than re-pickling `worker_fn` on every one of
-potentially hundreds of (config, seed) tasks, it's pickled once per worker process via `Pool`'s
-own `initializer`/`initargs` - cheap even when `worker_fn` closes over a real, non-trivial shared
-context (typically one `BenchmarkProxy`, built once by the caller before this call). Only
-`configs` and `seeds` travel through `imap`'s own per-job queue.
+`run_parameter_sweep`'s `worker_fn(shared_context, config, seed)` must be a module-level
+function, not a local closure or lambda - the same picklability constraint `ensemble_train.py`'s
+own worker functions already have, for the same reason: `Pool` workers receive tasks through a
+queue, which pickles whatever callable and arguments each task carries. `shared_context` is
+whatever read-only context every job needs in common (typically one `BenchmarkProxy`, built once
+by the caller before this call, or `None` if a worker needs no shared context at all).
+
+**Update (2026-09-18):** this section originally said `worker_fn` could "close over" a shared
+context like a `BenchmarkProxy` - but a true module-level function *can't* close over a caller's
+local variable, which is exactly what makes it picklable in the first place. Caught by a review
+before this infrastructure's first real use: the only way that claim could have worked as
+originally written was the caller stashing the context in a module-level global for `worker_fn`
+to read, relying on `multiprocessing.Pool`'s **fork** start method (Linux's default) to inherit a
+copy of that already-populated global - silently broken under **spawn** (macOS/Windows' default),
+where a spawned child re-imports the module fresh with none of the parent's mutations. Fixed by
+adding an explicit `shared_context` parameter, passed through `Pool`'s own `initializer`/
+`initargs` alongside `worker_fn` itself (pickled once per worker process, not per job, the same
+as `worker_fn`) - matching `ensemble_train.py`'s own established "pass every worker's context
+through explicit task/init arguments, never a fork-inherited global" idiom, instead of
+introducing a new, less portable one. Only `configs` and `seeds` (each job's own fixed seed)
+travel through `imap`'s own per-job queue.
 
 Unlike `ensemble_train.py`'s own workers, `run_parameter_sweep` does not reseed any RNG itself -
 different `worker_fn`s may need to seed Python's `random`, numpy's RNG, or (for eval-mode-only
@@ -182,11 +196,13 @@ from the caller's `seeds` list.
 binary proxy shape/balance, multiclass proxy shape/balance across an arbitrary digit subset,
 train/test split balance, determinism under a fixed `seed`.
 
-`tests/test_benchmark_sweep.py`, against a cheap deterministic toy `worker_fn` (a pure function of
-`(config, seed)`, not real model training) - matches this workplan's own validation approach
-above. Covers: `run_parameter_sweep` dispatches every (config, seed) pair exactly once and
-aggregates correctly; `estimate_sweep_wallclock` returns a sane projection for a known-duration toy
-worker; `summarize_sweep_results`'s markdown output format.
+`tests/test_benchmark_sweep.py`, against cheap deterministic toy `worker_fn`s (pure functions of
+`(shared_context, config, seed)`, not real model training) - matches this workplan's own
+validation approach above. Covers: `run_parameter_sweep` dispatches every (config, seed) pair
+exactly once and aggregates correctly; `shared_context` actually reaches every worker process
+(the regression test for the 2026-09-18 fix above); `estimate_sweep_wallclock` returns a sane
+projection for a known-duration toy worker and doesn't drop `shared_context` either;
+`summarize_sweep_results`'s markdown output format.
 
 ## delivery stages (each its own PR, per this repo's practice)
 
